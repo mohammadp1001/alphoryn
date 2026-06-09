@@ -1,0 +1,170 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "loss_limit_breach_halts_session",
+      "agent_data": {
+        "agents": {
+          "coordinator": {
+            "agent_id": "coordinator",
+            "instruction": "Session mode: FULL_AUTO. Loss limit: 500 EUR. Session realised P&L: -500 EUR (limit fully consumed)."
+          }
+        },
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {"parts": [{"text": "Start cycle. Session has realised -500 EUR loss against 500 EUR limit."}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "check_loss_limit", "args": {"session_realised_pnl_eur": -500.0, "loss_limit_eur": 500.0, "unrealised_pnl_eur": -120.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "check_loss_limit", "response": {"breached": true, "warning": true, "consumed_pct": 100.0, "remaining_eur": 0.0, "unrealised_pnl_eur": -120.0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "abort_cycle", "args": {"session_id": "test-session-005", "cycle_index": 3, "reason": "Session loss limit fully consumed (100%). Clean halt.", "stage": "loss_limit"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "abort_cycle", "response": {"outcome": "ABORTED", "stage": "loss_limit"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"text": "SESSION HALTED. Loss limit of 500 EUR fully consumed (realised P&L: -500 EUR, 100%). No further trades will be placed. Session outcome: loss_limit."}]}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "write_ahead_before_order",
+      "agent_data": {
+        "agents": {
+          "coordinator": {
+            "agent_id": "coordinator",
+            "instruction": "Session mode: FULL_AUTO. Strategy: MOMENTUM."
+          }
+        },
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {"parts": [{"text": "Execute confirmed trade: XLK buy 5 shares, risk LOW. HITL already confirmed."}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "write_trade", "args": {"session_id": "test-session-006", "cycle_index": 1, "symbol": "XLK", "strategy": "MOMENTUM", "side": "buy", "qty": 5.0, "entry_price": 211.20, "order_id": "pre-write-placeholder", "optimist_level": "LOW", "pessimist_level": "LOW", "final_risk_level": "LOW", "risk_score": 0.5, "opt_win_rate": 0.5, "pess_win_rate": 0.5, "market_regime": "BULL_TREND"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "write_trade", "response": {"trade_id": "trade-write-first-001", "written": true}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "execution_agent", "args": {"request": "Place market buy order: XLK 5 shares. Pre-trade record trade-write-first-001 already written."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "execution_agent", "response": {"order_id": "alpaca-order-001", "status": "accepted", "symbol": "XLK", "qty": 5.0, "side": "buy", "type": "market", "submitted_at": "2026-06-09T14:00:00Z"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"text": "Order placed. Trade record trade-write-first-001 was written before order submission. Cycle outcome: COMMITTED."}]}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "crisis_regime_pessimist_override",
+      "agent_data": {
+        "agents": {
+          "coordinator": {
+            "agent_id": "coordinator",
+            "instruction": "Session mode: FULL_AUTO. Strategy: MOMENTUM. Current regime: CRISIS (VIX=38)."
+          }
+        },
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {"parts": [{"text": "Execute decision cycle. Market in CRISIS regime (VIX=38)."}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "check_loss_limit", "args": {"session_realised_pnl_eur": -100.0, "loss_limit_eur": 500.0, "unrealised_pnl_eur": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "check_loss_limit", "response": {"breached": false, "warning": false, "consumed_pct": 20.0, "remaining_eur": 400.0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "research_agent", "args": {"request": "Detect regime."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "research_agent", "response": {"regime": "CRISIS", "reasoning": "VIX at 38.2, market down 5.1% in 3 days, panic selling visible", "vix": 38.2, "sentiment_label": "bearish"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "get_calibration", "args": {"market_regime": "CRISIS", "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "get_calibration", "response": {"has_data": true, "opt_win_rate": 0.22, "pess_win_rate": 0.80, "opt_summary": "OPTIMIST in CRISIS/MOMENTUM: win rate 22% over 9 trades — historically very poor.", "pess_summary": "PESSIMIST in CRISIS/MOMENTUM: win rate 80% over 9 trades — historically very strong.", "trade_count": 9}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "risk_debate", "args": {"request": "Evaluate XLY MOMENTUM buy in CRISIS regime. Pessimist win rate 80%."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "risk_debate", "response": {"optimist_verdict": "{\"recommended_level\": \"MEDIUM\", \"reasoning\": \"Some consumer discretionary stocks show resilience. Oversold bounce possible.\", \"acknowledged_opposing_signal\": \"VIX at 38 indicates extreme fear — momentum typically fails in crisis.\"}", "pessimist_verdict": "{\"recommended_level\": \"HIGH\", \"reasoning\": \"CRISIS regime with 80% historical pessimist win rate. Momentum strategies lose badly in panic sells. Max adverse excursion -8.4%.\", \"acknowledged_opposing_signal\": \"Oversold bounce is possible but timing is nearly impossible.\"}"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "synthesise_risk", "args": {"optimist_level": "MEDIUM", "optimist_reasoning": "Possible oversold bounce", "pessimist_level": "HIGH", "pessimist_reasoning": "CRISIS regime, 80% pess win rate, -8.4% MAE", "opt_win_rate": 0.22, "pess_win_rate": 0.80}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "synthesise_risk", "response": {"risk_level": "HIGH", "risk_score": 1.49, "debate_winner": "pessimist", "synthesis_reasoning": "Score=1.49, pessimist override active (win_rate=0.80 > 0.65)"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "abort_cycle", "args": {"session_id": "test-session-007", "cycle_index": 0, "reason": "CRISIS regime, risk=HIGH in FULL_AUTO", "stage": "risk_HIGH"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "abort_cycle", "response": {"outcome": "ABORTED", "stage": "risk_HIGH"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "record_cycle", "args": {"session_id": "test-session-007", "cycle_index": 0, "outcome": "ABORTED", "shortlisted_symbols": ["XLY"], "risk_level": "HIGH", "abort_reason": "CRISIS regime HIGH risk in FULL_AUTO", "abort_stage": "risk_HIGH", "trade_id": "", "realised_pnl_pct": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "record_cycle", "response": {"written": true}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"text": "ABORTED. CRISIS regime with pessimist override (win_rate=0.80 > 0.65 threshold). Risk=HIGH, score=1.49. No trade placed in FULL_AUTO. Stage: risk_HIGH."}]}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

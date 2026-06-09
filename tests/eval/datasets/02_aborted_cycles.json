@@ -1,0 +1,274 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "full_auto_high_risk_abort",
+      "agent_data": {
+        "agents": {
+          "coordinator": {
+            "agent_id": "coordinator",
+            "instruction": "Session mode: FULL_AUTO. Strategy: MOMENTUM. Loss limit: 500 EUR. HITL only for HIGH risk or >80% limit consumed."
+          }
+        },
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {"parts": [{"text": "Start trading session. Strategy: MOMENTUM. Mode: FULL_AUTO. Execute decision cycle."}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "check_loss_limit", "args": {"session_realised_pnl_eur": -50.0, "loss_limit_eur": 500.0, "unrealised_pnl_eur": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "check_loss_limit", "response": {"breached": false, "warning": false, "consumed_pct": 10.0, "remaining_eur": 450.0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "research_agent", "args": {"request": "Detect current market regime."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "research_agent", "response": {"regime": "HIGH_VOL", "reasoning": "VIX at 24, elevated uncertainty, mixed signals", "vix": 24.3, "yield_10y": 4.5, "yield_2y": 4.8, "top_sector": "XLU", "bottom_sector": "XLK", "sentiment_label": "bearish"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "analysis_agent", "args": {"request": "Screen ETFs for MOMENTUM signals in HIGH_VOL regime."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "analysis_agent", "response": {"strategy": "MOMENTUM", "signals": [{"symbol": "XLE", "rank": 1, "combined_score": 0.41, "reasoning": "Modest momentum, high beta in volatile regime"}, {"symbol": "XLF", "rank": 2, "combined_score": 0.38, "reasoning": "Slightly positive but weak signal quality"}]}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "select_shortlist", "args": {"ranked_signals": [{"symbol": "XLE", "combined_score": 0.41}, {"symbol": "XLF", "combined_score": 0.38}], "shortlist_n": 2, "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "select_shortlist", "response": {"shortlisted": [{"symbol": "XLE", "combined_score": 0.41}, {"symbol": "XLF", "combined_score": 0.38}], "n": 2, "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "get_calibration", "args": {"market_regime": "HIGH_VOL", "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "get_calibration", "response": {"has_data": true, "opt_win_rate": 0.35, "pess_win_rate": 0.72, "opt_summary": "OPTIMIST in HIGH_VOL/MOMENTUM: win rate 35% over 20 trades.", "pess_summary": "PESSIMIST in HIGH_VOL/MOMENTUM: win rate 72% over 20 trades.", "trade_count": 20}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "risk_debate", "args": {"request": "Evaluate risk for XLE MOMENTUM buy in HIGH_VOL regime. Pessimist has 72% win rate here."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "risk_debate", "response": {"optimist_verdict": "{\"recommended_level\": \"MEDIUM\", \"reasoning\": \"Some momentum visible. Energy sector showing relative strength against volatile backdrop.\", \"acknowledged_opposing_signal\": \"VIX is elevated and signal quality is weak.\"}", "pessimist_verdict": "{\"recommended_level\": \"HIGH\", \"reasoning\": \"HIGH_VOL regime with weak signals is exactly when losses occur. Pessimist win rate 72% in this regime confirms caution. Max adverse excursion historically -4.2% for this setup.\", \"acknowledged_opposing_signal\": \"Energy sector does show relative strength.\"}"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "synthesise_risk", "args": {"optimist_level": "MEDIUM", "optimist_reasoning": "Some momentum, relative strength", "pessimist_level": "HIGH", "pessimist_reasoning": "HIGH_VOL regime, weak signals, pessimist 72% win rate", "opt_win_rate": 0.35, "pess_win_rate": 0.72}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "synthesise_risk", "response": {"risk_level": "HIGH", "risk_score": 1.42, "debate_winner": "pessimist", "synthesis_reasoning": "Score=1.42 (opt=1.0×0.35 + pess=1.5×0.72) → HIGH. Pessimist override: win_rate=0.72 > threshold 0.65."}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "abort_cycle", "args": {"session_id": "test-session-002", "cycle_index": 0, "reason": "Risk synthesis returned HIGH in FULL_AUTO mode without override condition", "stage": "risk_HIGH"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "abort_cycle", "response": {"outcome": "ABORTED", "reason": "Risk synthesis returned HIGH in FULL_AUTO mode", "stage": "risk_HIGH"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "record_cycle", "args": {"session_id": "test-session-002", "cycle_index": 0, "outcome": "ABORTED", "shortlisted_symbols": ["XLE", "XLF"], "risk_level": "HIGH", "abort_reason": "Risk synthesis returned HIGH in FULL_AUTO mode", "abort_stage": "risk_HIGH", "trade_id": "", "realised_pnl_pct": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "record_cycle", "response": {"written": true}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"text": "Decision cycle complete. Outcome: ABORTED. Risk assessment returned HIGH (score=1.42) in FULL_AUTO mode. No trade placed. Stage: risk_HIGH."}]}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "no_signals_abort",
+      "agent_data": {
+        "agents": {
+          "coordinator": {
+            "agent_id": "coordinator",
+            "instruction": "Session mode: SEMI_AUTO. Strategy: MEAN_REVERSION."
+          }
+        },
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {"parts": [{"text": "Start trading session. Strategy: MEAN_REVERSION. Mode: SEMI_AUTO."}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "check_loss_limit", "args": {"session_realised_pnl_eur": 0.0, "loss_limit_eur": 500.0, "unrealised_pnl_eur": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "check_loss_limit", "response": {"breached": false, "warning": false, "consumed_pct": 0.0, "remaining_eur": 500.0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "research_agent", "args": {"request": "Detect market regime."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "research_agent", "response": {"regime": "BULL_TREND", "vix": 13.2, "sentiment_label": "bullish"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "analysis_agent", "args": {"request": "Screen ETFs for MEAN_REVERSION signals — look for oversold RSI < 30 and price near lower Bollinger band."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "analysis_agent", "response": {"strategy": "MEAN_REVERSION", "signals": []}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "abort_cycle", "args": {"session_id": "test-session-003", "cycle_index": 0, "reason": "No MEAN_REVERSION signals found in current universe — no ETFs oversold enough", "stage": "no_signals"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "abort_cycle", "response": {"outcome": "ABORTED", "stage": "no_signals"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "record_cycle", "args": {"session_id": "test-session-003", "cycle_index": 0, "outcome": "ABORTED", "shortlisted_symbols": [], "risk_level": "", "abort_reason": "No MEAN_REVERSION signals found", "abort_stage": "no_signals", "trade_id": "", "realised_pnl_pct": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "record_cycle", "response": {"written": true}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"text": "Decision cycle complete. Outcome: ABORTED. No MEAN_REVERSION signals found in the ETF universe. All RSI values above 30. Stage: no_signals."}]}
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "eval_case_id": "hitl_timeout_abort",
+      "agent_data": {
+        "agents": {
+          "coordinator": {
+            "agent_id": "coordinator",
+            "instruction": "Session mode: SEMI_AUTO. HITL timeout action: abort."
+          }
+        },
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {"parts": [{"text": "Start session. SEMI_AUTO mode. Execute cycle."}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "check_loss_limit", "args": {"session_realised_pnl_eur": 0.0, "loss_limit_eur": 500.0, "unrealised_pnl_eur": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "check_loss_limit", "response": {"breached": false, "warning": false, "consumed_pct": 0.0, "remaining_eur": 500.0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "research_agent", "args": {"request": "Detect regime."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "research_agent", "response": {"regime": "BULL_TREND", "vix": 12.0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "analysis_agent", "args": {"request": "Screen for MOMENTUM signals."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "analysis_agent", "response": {"signals": [{"symbol": "XLK", "combined_score": 0.68}]}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "select_shortlist", "args": {"ranked_signals": [{"symbol": "XLK", "combined_score": 0.68}], "shortlist_n": 2, "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "select_shortlist", "response": {"shortlisted": [{"symbol": "XLK", "combined_score": 0.68}], "n": 1}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "get_calibration", "args": {"market_regime": "BULL_TREND", "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "get_calibration", "response": {"has_data": false, "opt_win_rate": 0.5, "pess_win_rate": 0.5}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "risk_debate", "args": {"request": "Evaluate XLK momentum risk."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "risk_debate", "response": {"optimist_verdict": "{\"recommended_level\": \"LOW\"}", "pessimist_verdict": "{\"recommended_level\": \"LOW\"}"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "synthesise_risk", "args": {"optimist_level": "LOW", "optimist_reasoning": "Strong signals", "pessimist_level": "LOW", "pessimist_reasoning": "Low risk setup", "opt_win_rate": 0.5, "pess_win_rate": 0.5}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "synthesise_risk", "response": {"risk_level": "LOW", "risk_score": 0.5, "debate_winner": "tie"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "request_hitl", "args": {"session_id": "test-session-004", "cycle_index": 0, "symbol": "XLK", "side": "buy", "qty": 5.0, "risk_level": "LOW", "risk_score": 0.5, "strategy": "MOMENTUM", "timeout_seconds": 60, "timeout_action": "abort"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "request_hitl", "response": {"action": "abort", "source": "timeout", "latency_ms": 60000}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "abort_cycle", "args": {"session_id": "test-session-004", "cycle_index": 0, "reason": "HITL timed out — operator did not confirm within 60s", "stage": "hitl_abort"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "abort_cycle", "response": {"outcome": "ABORTED", "stage": "hitl_abort"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "record_cycle", "args": {"session_id": "test-session-004", "cycle_index": 0, "outcome": "ABORTED", "shortlisted_symbols": ["XLK"], "risk_level": "LOW", "abort_reason": "HITL timeout", "abort_stage": "hitl_abort", "trade_id": "", "realised_pnl_pct": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "record_cycle", "response": {"written": true}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"text": "Decision cycle complete. Outcome: ABORTED. HITL confirmation timed out after 60 seconds. No order placed. Stage: hitl_abort."}]}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

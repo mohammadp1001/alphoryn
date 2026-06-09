@@ -1,0 +1,118 @@
+{
+  "eval_cases": [
+    {
+      "eval_case_id": "bull_trend_momentum_commit",
+      "agent_data": {
+        "agents": {
+          "coordinator": {
+            "agent_id": "coordinator",
+            "instruction": "Session mode: SEMI_AUTO. Strategy: MOMENTUM. Loss limit: 500 EUR. Shortlist N: 2."
+          }
+        },
+        "turns": [
+          {
+            "turn_index": 0,
+            "events": [
+              {
+                "author": "user",
+                "content": {"parts": [{"text": "Start trading session. Strategy: MOMENTUM. Mode: SEMI_AUTO. Loss limit: 500 EUR. Execute the decision cycle."}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "check_loss_limit", "args": {"session_realised_pnl_eur": 0.0, "loss_limit_eur": 500.0, "unrealised_pnl_eur": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "check_loss_limit", "response": {"breached": false, "warning": false, "consumed_pct": 0.0, "remaining_eur": 500.0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "research_agent", "args": {"request": "Detect current market regime and fetch macro data."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "research_agent", "response": {"regime": "BULL_TREND", "reasoning": "VIX at 12, SPY up 3.2% over 20 days, low volatility", "vix": 12.1, "yield_10y": 4.2, "yield_2y": 4.0, "top_sector": "XLK", "bottom_sector": "XLU", "sentiment_label": "bullish"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "analysis_agent", "args": {"request": "Screen ETFs for MOMENTUM signals in BULL_TREND regime. Return ranked signals."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "analysis_agent", "response": {"strategy": "MOMENTUM", "signals": [{"symbol": "XLK", "rank": 1, "combined_score": 0.72, "reasoning": "RSI 58, MACD bullish crossover, above 20-SMA"}, {"symbol": "QQQ", "rank": 2, "combined_score": 0.65, "reasoning": "RSI 55, strong volume trend, positive momentum"}]}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "select_shortlist", "args": {"ranked_signals": [{"symbol": "XLK", "combined_score": 0.72}, {"symbol": "QQQ", "combined_score": 0.65}], "shortlist_n": 2, "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "select_shortlist", "response": {"shortlisted": [{"symbol": "XLK", "combined_score": 0.72}, {"symbol": "QQQ", "combined_score": 0.65}], "n": 2, "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "get_calibration", "args": {"market_regime": "BULL_TREND", "strategy": "MOMENTUM"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "get_calibration", "response": {"has_data": false, "opt_win_rate": 0.5, "pess_win_rate": 0.5, "opt_summary": "No historical data yet. Starting at equal weight.", "pess_summary": "No historical data yet. Starting at equal weight.", "trade_count": 0}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "risk_debate", "args": {"request": "Evaluate risk for XLK MOMENTUM buy. RSI 58, MACD bullish crossover, BULL_TREND regime. Calibration: equal weight (cold start)."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "risk_debate", "response": {"optimist_verdict": "{\"recommended_level\": \"LOW\", \"reasoning\": \"RSI in healthy range 58, momentum confirmed by MACD crossover, BULL_TREND regime supports continuation, tight risk/reward.\", \"acknowledged_opposing_signal\": \"VIX could spike if macro data surprises.\"}", "pessimist_verdict": "{\"recommended_level\": \"MEDIUM\", \"reasoning\": \"Position near 52w high, limited upside buffer. BULL_TREND can reverse quickly. Signal lookback win rate only 52% for this setup.\", \"acknowledged_opposing_signal\": \"MACD crossover is a genuinely strong momentum signal.\"}"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "synthesise_risk", "args": {"optimist_level": "LOW", "optimist_reasoning": "RSI healthy, MACD crossover, BULL_TREND", "pessimist_level": "MEDIUM", "pessimist_reasoning": "Near 52w high, limited upside buffer", "opt_win_rate": 0.5, "pess_win_rate": 0.5}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "synthesise_risk", "response": {"risk_level": "LOW", "risk_score": 0.75, "debate_winner": "tie", "synthesis_reasoning": "Score=0.750 (opt=0.5×0.50 + pess=1.0×0.50) → LOW"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "request_hitl", "args": {"session_id": "test-session-001", "cycle_index": 0, "symbol": "XLK", "side": "buy", "qty": 5.0, "risk_level": "LOW", "risk_score": 0.75, "strategy": "MOMENTUM", "timeout_seconds": 60, "timeout_action": "abort"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "request_hitl", "response": {"action": "confirm", "source": "human", "latency_ms": 3200}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "write_trade", "args": {"session_id": "test-session-001", "cycle_index": 0, "symbol": "XLK", "strategy": "MOMENTUM", "side": "buy", "qty": 5.0, "entry_price": 210.50, "order_id": "placeholder-pre-order", "optimist_level": "LOW", "pessimist_level": "MEDIUM", "final_risk_level": "LOW", "risk_score": 0.75, "opt_win_rate": 0.5, "pess_win_rate": 0.5, "market_regime": "BULL_TREND"}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "write_trade", "response": {"trade_id": "trade-abc-123", "written": true}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "execution_agent", "args": {"request": "Place market buy order for XLK, qty 5 shares. Risk: LOW. Strategy: MOMENTUM."}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "execution_agent", "response": {"order_id": "alpaca-order-xyz", "status": "accepted", "symbol": "XLK", "qty": 5.0, "side": "buy", "type": "market", "limit_price": null, "submitted_at": "2026-06-09T10:30:00Z"}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"function_call": {"name": "record_cycle", "args": {"session_id": "test-session-001", "cycle_index": 0, "outcome": "COMMITTED", "shortlisted_symbols": ["XLK", "QQQ"], "risk_level": "LOW", "abort_reason": "", "abort_stage": "", "trade_id": "trade-abc-123", "realised_pnl_pct": 0.0}}}]}
+              },
+              {
+                "author": "tool",
+                "content": {"parts": [{"function_response": {"name": "record_cycle", "response": {"session_id": "test-session-001", "cycle_index": 0, "written": true}}}]}
+              },
+              {
+                "author": "coordinator",
+                "content": {"parts": [{"text": "Decision cycle complete. Outcome: COMMITTED. Placed market buy order for XLK (5 shares) at ~$210.50. Risk: LOW (score=0.750). Trade ID: trade-abc-123. Order confirmed by human operator."}]}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
