@@ -1,0 +1,38 @@
+name: SECTOR_ROTATION
+description: >
+  Rotate capital into the strongest-performing sectors or asset classes and out
+  of the weakest. Uses relative momentum across sectors, fund flow signals, and
+  benchmark excess return to identify which areas of the market are leading.
+  Works in most regimes by always being in the strongest relative performer.
+  In CRISIS, rotate into defensive sectors (Utilities, Consumer Staples, Fixed Income).
+
+preferred_regimes:
+  - BULL_TREND
+  - LOW_VOL_RANGE
+  - BEAR_TREND
+  - HIGH_VOL
+
+avoid_regimes: []
+
+asset_classes:
+  - etf
+
+entry_rules:
+  - Sector 1-month return in top quartile of universe
+  - Positive fund flows (inflow direction)
+  - Benchmark excess return positive over 20 days
+  - combined_score >= 0.35 for shortlist inclusion
+
+exit_rules:
+  - Sector drops from top to bottom quartile on rolling basis
+  - Fund flows turn to outflow for two consecutive periods
+  - Stop-loss: 3× ATR below entry
+
+order_type: market
+position_sizing:
+  default_buying_power_pct: 0.12
+  max_portfolio_pct: 0.20
+
+scoring_weights:
+  technical_score: 0.3
+  momentum_score: 0.7

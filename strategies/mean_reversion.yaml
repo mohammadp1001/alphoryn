@@ -1,0 +1,40 @@
+name: MEAN_REVERSION
+description: >
+  Profit from temporary dislocations by entering oversold or overbought assets
+  that are statistically likely to revert toward their mean. Prioritises extreme
+  RSI readings, price near Bollinger Band boundaries, and low ATR (quiet market).
+  Works best in LOW_VOL_RANGE and HIGH_VOL regimes. Avoid in BULL_TREND or
+  BEAR_TREND where trends can persist long past oversold/overbought readings.
+
+preferred_regimes:
+  - LOW_VOL_RANGE
+  - HIGH_VOL
+
+avoid_regimes:
+  - BULL_TREND
+  - BEAR_TREND
+
+asset_classes:
+  - etf
+  - forex
+
+entry_rules:
+  - RSI below 30 (oversold) for long entries
+  - RSI above 70 (overbought) for short entries
+  - Price at or below lower Bollinger Band (long) or upper band (short)
+  - ATR below 30-day average ATR (low volatility environment)
+  - combined_score >= 0.4 for shortlist inclusion
+
+exit_rules:
+  - RSI returns to 50 (mean)
+  - Price crosses back through Bollinger middle band
+  - Stop-loss: 1.5× ATR beyond entry band
+
+order_type: limit
+position_sizing:
+  default_buying_power_pct: 0.08
+  max_portfolio_pct: 0.15
+
+scoring_weights:
+  technical_score: 0.6
+  momentum_score: 0.4

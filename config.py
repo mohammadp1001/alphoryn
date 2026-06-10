@@ -60,6 +60,8 @@ DEFAULT_ETF_UNIVERSE: list[str] = ETF_UNIVERSES["US_SECTOR_ETFS"]
 # ── Session defaults ──────────────────────────────────────────────────────────
 DEFAULT_SHORTLIST_N: int = 2
 MAX_SHORTLIST_N: int = 5
+MAX_STRATEGY_CYCLES: int = 3          # max retries with different strategy before aborting session
+DEFAULT_MIN_SHORTLIST_SCORE: float = 0.3  # candidates below this threshold are excluded
 DEFAULT_HITL_TIMEOUT_SECONDS: int = 60
 DEFAULT_LOSS_LIMIT_EUR: float = 500.0
 

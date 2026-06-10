@@ -103,28 +103,45 @@ async def select_shortlist(
     ranked_signals: list[dict],
     shortlist_n: int,
     strategy: str,
+    min_score: float = 0.3,
 ) -> dict:
-    """Select the top-N candidate ETFs from ranked analysis signals.
+    """Select the top-N candidates that clear the minimum quality bar.
 
     Args:
-        ranked_signals: List of {symbol, combined_score, ...} from rank_by_momentum.
-        shortlist_n: Number of candidates to shortlist (default 2, max 5).
-        strategy: Active strategy (used for selection weighting).
+        ranked_signals: List of {symbol, combined_score, ...} dicts.
+        shortlist_n: Maximum candidates to return (capped at MAX_SHORTLIST_N).
+        strategy: Active strategy name.
+        min_score: Minimum combined_score threshold. Candidates below this are excluded.
+            Returns an empty shortlist if no candidates clear the bar — the coordinator
+            should treat this as a signal to retry with a different strategy.
 
     Returns:
-        dict with 'shortlisted' (list of {symbol, score}), 'n', 'strategy'.
+        dict with 'shortlisted' (list of {symbol, combined_score}), 'n', 'strategy',
+        'below_threshold_count' (how many were filtered out).
     """
-    logger.info("select_shortlist n_signals=%d shortlist_n=%d strategy=%s", len(ranked_signals), shortlist_n, strategy)
-    from config import MAX_SHORTLIST_N
+    logger.info(
+        "select_shortlist n_signals=%d shortlist_n=%d min_score=%s strategy=%s",
+        len(ranked_signals), shortlist_n, min_score, strategy,
+    )
+    from config import MAX_SHORTLIST_N, DEFAULT_MIN_SHORTLIST_SCORE
 
+    effective_min = min_score if min_score is not None else DEFAULT_MIN_SHORTLIST_SCORE
     n = min(shortlist_n, MAX_SHORTLIST_N)
-    top = sorted(ranked_signals, key=lambda x: x.get("combined_score", 0), reverse=True)[:n]
+
+    passing = [s for s in ranked_signals if s.get("combined_score", 0) >= effective_min]
+    below_count = len(ranked_signals) - len(passing)
+    top = sorted(passing, key=lambda x: x.get("combined_score", 0), reverse=True)[:n]
 
     shortlisted = [
         {"symbol": s["symbol"], "combined_score": s.get("combined_score", 0)}
         for s in top
     ]
-    return {"shortlisted": shortlisted, "n": len(shortlisted), "strategy": strategy}
+    return {
+        "shortlisted": shortlisted,
+        "n": len(shortlisted),
+        "strategy": strategy,
+        "below_threshold_count": below_count,
+    }
 
 
 async def synthesise_risk(

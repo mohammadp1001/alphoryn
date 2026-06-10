@@ -1,0 +1,39 @@
+name: MOMENTUM
+description: >
+  Ride strong directional trends by entering positions in assets showing sustained
+  price momentum. Prioritises high relative strength, rising volume, and bullish
+  technical crossovers. Works best in BULL_TREND and LOW_VOL_RANGE regimes.
+  Avoid in CRISIS or HIGH_VOL where momentum reversals are frequent and sharp.
+
+preferred_regimes:
+  - BULL_TREND
+  - LOW_VOL_RANGE
+
+avoid_regimes:
+  - CRISIS
+
+asset_classes:
+  - etf
+  - crypto
+
+entry_rules:
+  - RSI between 50 and 70 (trending, not overbought)
+  - MACD histogram positive and rising (bullish crossover preferred)
+  - Price above 20-day and 50-day SMA
+  - Volume above 30-day average (confirming move)
+  - combined_score >= 0.5 for shortlist inclusion
+
+exit_rules:
+  - RSI exceeds 80 (overbought)
+  - MACD histogram turns negative
+  - Price closes below 20-day SMA
+  - Stop-loss: 2× ATR below entry
+
+order_type: market
+position_sizing:
+  default_buying_power_pct: 0.10
+  max_portfolio_pct: 0.20
+
+scoring_weights:
+  technical_score: 0.4
+  momentum_score: 0.6
