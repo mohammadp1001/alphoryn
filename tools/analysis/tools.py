@@ -4,6 +4,12 @@ from __future__ import annotations
 import math
 
 from infra.observability import get_logger
+from tools.schemas import (
+    AtrResponse, BacktestResponse, BetaResponse, BollingerResponse,
+    CorrelationResponse, CrossoverResponse, MacdResponse, MaxDrawdownResponse,
+    MomentumResponse, RankByMomentumResponse, RsiResponse, SharpeResponse,
+    SupportResistanceResponse, TechnicalScoreResponse,
+)
 
 logger = get_logger("tools.analysis")
 
@@ -31,8 +37,8 @@ async def compute_rsi(symbol: str, closes: list[float], period: int) -> dict:
 
     values: list[float] = []
     if len(gains) < period:
-        return {"symbol": symbol, "period": period, "current": 50.0,
-                "values": [], "is_overbought": False, "is_oversold": False}
+        return RsiResponse(symbol=symbol, period=period, current=50.0,
+                           values=[], is_overbought=False, is_oversold=False).model_dump()
 
     avg_gain = float(np.mean(gains[:period]))
     avg_loss = float(np.mean(losses[:period]))
@@ -44,14 +50,10 @@ async def compute_rsi(symbol: str, closes: list[float], period: int) -> dict:
         values.append(round(100 - 100 / (1 + rs), 2))
 
     current = values[-1] if values else 50.0
-    return {
-        "symbol": symbol,
-        "period": period,
-        "current": current,
-        "values": values[-10:],
-        "is_overbought": current > 70,
-        "is_oversold": current < 30,
-    }
+    return RsiResponse(
+        symbol=symbol, period=period, current=current,
+        values=values[-10:], is_overbought=current > 70, is_oversold=current < 30,
+    ).model_dump()
 
 
 async def compute_macd(symbol: str, closes: list[float]) -> dict:
@@ -88,15 +90,15 @@ async def compute_macd(symbol: str, closes: list[float]) -> dict:
         hist = []
 
     n = min(10, len(hist))
-    return {
-        "symbol": symbol,
-        "macd_line": [round(v, 4) for v in macd_line[-n:]],
-        "signal_line": [round(v, 4) for v in signal_line[-n:]],
-        "histogram": [round(v, 4) for v in hist[-n:]],
-        "current_macd": round(macd_line[-1], 4) if macd_line else 0.0,
-        "current_signal": round(signal_line[-1], 4) if signal_line else 0.0,
-        "current_histogram": round(hist[-1], 4) if hist else 0.0,
-    }
+    return MacdResponse(
+        symbol=symbol,
+        macd_line=[round(v, 4) for v in macd_line[-n:]],
+        signal_line=[round(v, 4) for v in signal_line[-n:]],
+        histogram=[round(v, 4) for v in hist[-n:]],
+        current_macd=round(macd_line[-1], 4) if macd_line else 0.0,
+        current_signal=round(signal_line[-1], 4) if signal_line else 0.0,
+        current_histogram=round(hist[-1], 4) if hist else 0.0,
+    ).model_dump()
 
 
 async def compute_bollinger(symbol: str, closes: list[float], period: int) -> dict:
@@ -122,16 +124,12 @@ async def compute_bollinger(symbol: str, closes: list[float], period: int) -> di
     band_width = upper - lower
     pct_b = (price - lower) / band_width if band_width > 0 else 0.5
 
-    return {
-        "symbol": symbol,
-        "period": period,
-        "current_upper": round(upper, 4),
-        "current_middle": round(mid, 4),
-        "current_lower": round(lower, 4),
-        "current_price": round(price, 4),
-        "pct_b": round(pct_b, 4),
-        "bandwidth": round(band_width / mid if mid else 0, 4),
-    }
+    return BollingerResponse(
+        symbol=symbol, period=period,
+        current_upper=round(upper, 4), current_middle=round(mid, 4),
+        current_lower=round(lower, 4), current_price=round(price, 4),
+        pct_b=round(pct_b, 4), bandwidth=round(band_width / mid if mid else 0, 4),
+    ).model_dump()
 
 
 async def compute_atr(symbol: str, highs: list[float], lows: list[float], closes: list[float], period: int) -> dict:
@@ -156,7 +154,7 @@ async def compute_atr(symbol: str, highs: list[float], lows: list[float], closes
         tr_values.append(max(high_low, high_close, low_close))
 
     if len(tr_values) < period:
-        return {"symbol": symbol, "period": period, "current": 0.0, "values": []}
+        return AtrResponse(symbol=symbol, period=period, current=0.0, values=[]).model_dump()
 
     atr = sum(tr_values[:period]) / period
     atrs = [atr]
@@ -164,12 +162,10 @@ async def compute_atr(symbol: str, highs: list[float], lows: list[float], closes
         atr = (atr * (period - 1) + tr) / period
         atrs.append(atr)
 
-    return {
-        "symbol": symbol,
-        "period": period,
-        "current": round(atrs[-1], 4),
-        "values": [round(v, 4) for v in atrs[-5:]],
-    }
+    return AtrResponse(
+        symbol=symbol, period=period,
+        current=round(atrs[-1], 4), values=[round(v, 4) for v in atrs[-5:]],
+    ).model_dump()
 
 
 async def compute_beta(
@@ -195,19 +191,16 @@ async def compute_beta(
     x = np.array(benchmark_returns)
     y = np.array(symbol_returns)
     if len(x) < 2:
-        return {"symbol": symbol, "benchmark": benchmark, "beta": 1.0, "r_squared": 0.0, "period_days": len(x)}
+        return BetaResponse(symbol=symbol, benchmark=benchmark, beta=1.0, r_squared=0.0, period_days=len(x)).model_dump()
 
     cov = float(np.cov(x, y)[0][1])
     var = float(np.var(x, ddof=1))
     beta = cov / var if var != 0 else 1.0
     corr = float(np.corrcoef(x, y)[0][1])
-    return {
-        "symbol": symbol,
-        "benchmark": benchmark,
-        "beta": round(beta, 4),
-        "r_squared": round(corr ** 2, 4),
-        "period_days": len(x),
-    }
+    return BetaResponse(
+        symbol=symbol, benchmark=benchmark,
+        beta=round(beta, 4), r_squared=round(corr ** 2, 4), period_days=len(x),
+    ).model_dump()
 
 
 async def detect_momentum(symbol: str, closes: list[float], volumes: list[float]) -> dict:
@@ -223,9 +216,11 @@ async def detect_momentum(symbol: str, closes: list[float], volumes: list[float]
     """
     logger.info("detect_momentum symbol=%s n_closes=%d", symbol, len(closes))
     if len(closes) < 20:
-        return {"symbol": symbol, "momentum_score": 0.0, "rsi_contribution": 0.0,
-                "macd_contribution": 0.0, "price_vs_sma_contribution": 0.0,
-                "volume_trend_contribution": 0.0, "raw_rsi": 50.0, "raw_macd_histogram": 0.0}
+        return MomentumResponse(
+            symbol=symbol, momentum_score=0.0, rsi_contribution=0.0,
+            macd_contribution=0.0, price_vs_sma_contribution=0.0,
+            volume_trend_contribution=0.0, raw_rsi=50.0, raw_macd_histogram=0.0,
+        ).model_dump()
 
     import numpy as np  # type: ignore[import]
 
@@ -250,16 +245,13 @@ async def detect_momentum(symbol: str, closes: list[float], volumes: list[float]
     vol_score = max(-1.0, min(1.0, (vol_recent / vol_old - 1) * 2)) if vol_old > 0 else 0.0
 
     composite = (rsi_score * 0.3 + macd_score * 0.3 + price_sma_score * 0.25 + vol_score * 0.15)
-    return {
-        "symbol": symbol,
-        "momentum_score": round(composite, 4),
-        "rsi_contribution": round(rsi_score, 4),
-        "macd_contribution": round(macd_score, 4),
-        "price_vs_sma_contribution": round(price_sma_score, 4),
-        "volume_trend_contribution": round(vol_score, 4),
-        "raw_rsi": rsi,
-        "raw_macd_histogram": macd_hist,
-    }
+    return MomentumResponse(
+        symbol=symbol, momentum_score=round(composite, 4),
+        rsi_contribution=round(rsi_score, 4), macd_contribution=round(macd_score, 4),
+        price_vs_sma_contribution=round(price_sma_score, 4),
+        volume_trend_contribution=round(vol_score, 4),
+        raw_rsi=rsi, raw_macd_histogram=macd_hist,
+    ).model_dump()
 
 
 async def detect_crossover(symbol: str, macd_histogram: list[float]) -> dict:
@@ -274,7 +266,7 @@ async def detect_crossover(symbol: str, macd_histogram: list[float]) -> dict:
     """
     logger.info("detect_crossover symbol=%s", symbol)
     if len(macd_histogram) < 2:
-        return {"symbol": symbol, "crossover_type": "none", "bars_since_crossover": None, "strength": 0.0}
+        return CrossoverResponse(symbol=symbol, crossover_type="none", bars_since_crossover=None, strength=0.0).model_dump()
 
     current = macd_histogram[-1]
     prev = macd_histogram[-2]
@@ -289,12 +281,11 @@ async def detect_crossover(symbol: str, macd_histogram: list[float]) -> dict:
         crossover_type = "none"
         strength = 0.0
 
-    return {
-        "symbol": symbol,
-        "crossover_type": crossover_type,
-        "bars_since_crossover": 0 if crossover_type != "none" else None,
-        "strength": round(strength, 4),
-    }
+    return CrossoverResponse(
+        symbol=symbol, crossover_type=crossover_type,
+        bars_since_crossover=0 if crossover_type != "none" else None,
+        strength=round(strength, 4),
+    ).model_dump()
 
 
 async def detect_support_resistance(symbol: str, highs: list[float], lows: list[float], closes: list[float]) -> dict:
@@ -339,12 +330,11 @@ async def detect_support_resistance(symbol: str, highs: list[float], lows: list[
     support_levels = [l["price"] for l in levels if l["level_type"] == "support"]
     resistance_levels = [l["price"] for l in levels if l["level_type"] == "resistance"]
 
-    return {
-        "symbol": symbol,
-        "levels": levels[:10],
-        "nearest_support": max(support_levels) if support_levels else None,
-        "nearest_resistance": min(resistance_levels) if resistance_levels else None,
-    }
+    return SupportResistanceResponse(
+        symbol=symbol, levels=levels[:10],
+        nearest_support=max(support_levels) if support_levels else None,
+        nearest_resistance=min(resistance_levels) if resistance_levels else None,
+    ).model_dump()
 
 
 async def rank_by_momentum(momentum_scores: list[dict]) -> dict:
@@ -370,7 +360,7 @@ async def rank_by_momentum(momentum_scores: list[dict]) -> dict:
         }
         for i, r in enumerate(ranked)
     ]
-    return {"signals": signals, "screened_universe": universe}
+    return RankByMomentumResponse(signals=signals, screened_universe=universe).model_dump()
 
 
 async def run_backtest(symbol: str, strategy: str, closes: list[float], volumes: list[float]) -> dict:
@@ -393,12 +383,12 @@ async def run_backtest(symbol: str, strategy: str, closes: list[float], volumes:
     fwd = SIGNAL_FORWARD_RETURN_DAYS
     lookback = min(SIGNAL_LOOKBACK_BARS, len(closes) - fwd - 1)
     if lookback < 20:
-        return {
-            "symbol": symbol, "strategy": strategy, "signal_pattern": "insufficient_data",
-            "lookback_bars": lookback, "forward_return_days": fwd,
-            "match_count": 0, "avg_forward_return_pct": 0.0,
-            "win_rate_pct": 0.0, "max_adverse_excursion_pct": 0.0,
-        }
+        return BacktestResponse(
+            symbol=symbol, strategy=strategy, signal_pattern="insufficient_data",
+            lookback_bars=lookback, forward_return_days=fwd,
+            match_count=0, avg_forward_return_pct=0.0,
+            win_rate_pct=0.0, max_adverse_excursion_pct=0.0,
+        ).model_dump()
 
     current_momentum = await detect_momentum(symbol, closes[-20:], volumes[-20:])
     current_score = current_momentum["momentum_score"]
@@ -416,27 +406,26 @@ async def run_backtest(symbol: str, strategy: str, closes: list[float], volumes:
             matches.append({"bar_index": i, "signal_strength": hist_score, "forward_return_pct": fwd_return, "mae": mae})
 
     if not matches:
-        return {
-            "symbol": symbol, "strategy": strategy, "signal_pattern": f"{strategy.lower()}_no_matches",
-            "lookback_bars": lookback, "forward_return_days": fwd,
-            "match_count": 0, "avg_forward_return_pct": 0.0,
-            "win_rate_pct": 0.0, "max_adverse_excursion_pct": 0.0,
-        }
+        return BacktestResponse(
+            symbol=symbol, strategy=strategy, signal_pattern=f"{strategy.lower()}_no_matches",
+            lookback_bars=lookback, forward_return_days=fwd,
+            match_count=0, avg_forward_return_pct=0.0,
+            win_rate_pct=0.0, max_adverse_excursion_pct=0.0,
+        ).model_dump()
 
     forward_returns = [m["forward_return_pct"] for m in matches]
     avg_fwd = float(np.mean(forward_returns))
     win_rate = sum(1 for r in forward_returns if r > 0) / len(forward_returns) * 100
     max_mae = float(min(m["mae"] for m in matches))
 
-    return {
-        "symbol": symbol, "strategy": strategy,
-        "signal_pattern": f"{strategy.lower()}_momentum_score_{current_score:.2f}",
-        "lookback_bars": lookback, "forward_return_days": fwd,
-        "match_count": len(matches),
-        "avg_forward_return_pct": round(avg_fwd, 4),
-        "win_rate_pct": round(win_rate, 2),
-        "max_adverse_excursion_pct": round(max_mae, 4),
-    }
+    return BacktestResponse(
+        symbol=symbol, strategy=strategy,
+        signal_pattern=f"{strategy.lower()}_momentum_score_{current_score:.2f}",
+        lookback_bars=lookback, forward_return_days=fwd, match_count=len(matches),
+        avg_forward_return_pct=round(avg_fwd, 4),
+        win_rate_pct=round(win_rate, 2),
+        max_adverse_excursion_pct=round(max_mae, 4),
+    ).model_dump()
 
 
 async def calc_sharpe(symbol: str, daily_returns: list[float]) -> dict:
@@ -456,13 +445,12 @@ async def calc_sharpe(symbol: str, daily_returns: list[float]) -> dict:
     avg = float(np.mean(arr))
     std = float(np.std(arr, ddof=1))
     sharpe = (avg / std * math.sqrt(252)) if std > 1e-10 else 0.0
-    return {
-        "symbol": symbol,
-        "sharpe_ratio": round(sharpe, 4),
-        "annualised_return_pct": round(avg * 252, 2),
-        "annualised_volatility_pct": round(std * math.sqrt(252), 2),
-        "risk_free_rate": 0.0,
-    }
+    return SharpeResponse(
+        symbol=symbol, sharpe_ratio=round(sharpe, 4),
+        annualised_return_pct=round(avg * 252, 2),
+        annualised_volatility_pct=round(std * math.sqrt(252), 2),
+        risk_free_rate=0.0,
+    ).model_dump()
 
 
 async def calc_max_drawdown(symbol: str, closes: list[float]) -> dict:
@@ -493,13 +481,10 @@ async def calc_max_drawdown(symbol: str, closes: list[float]) -> dict:
             max_dd = dd
             trough = i
 
-    return {
-        "symbol": symbol,
-        "max_drawdown_pct": round(max_dd, 4),
-        "drawdown_start_bar": start,
-        "drawdown_end_bar": trough,
-        "recovery_bars": None,
-    }
+    return MaxDrawdownResponse(
+        symbol=symbol, max_drawdown_pct=round(max_dd, 4),
+        drawdown_start_bar=start, drawdown_end_bar=trough, recovery_bars=None,
+    ).model_dump()
 
 
 async def calc_correlation(symbols: list[str], closes_matrix: list[list[float]]) -> dict:
@@ -517,10 +502,10 @@ async def calc_correlation(symbols: list[str], closes_matrix: list[list[float]])
 
     arr = np.array(closes_matrix)
     corr = np.corrcoef(arr)
-    return {
-        "symbols": symbols,
-        "matrix": [[round(float(v), 4) for v in row] for row in corr],
-    }
+    return CorrelationResponse(
+        symbols=symbols,
+        matrix=[[round(float(v), 4) for v in row] for row in corr],
+    ).model_dump()
 
 
 async def score_technical(symbol: str, strategy: str, rsi_current: float, macd_histogram: float, pct_b: float) -> dict:
@@ -552,11 +537,8 @@ async def score_technical(symbol: str, strategy: str, rsi_current: float, macd_h
                "SECTOR_ROTATION": (0.30, 0.35, 0.35)}.get(strategy, (0.33, 0.33, 0.33))
 
     composite = rsi_score * weights[0] + macd_score * weights[1] + boll_score * weights[2]
-    return {
-        "symbol": symbol,
-        "composite_score": round(max(-1.0, min(1.0, composite)), 4),
-        "rsi_score": round(rsi_score, 4),
-        "macd_score": round(macd_score, 4),
-        "bollinger_score": round(boll_score, 4),
-        "strategy": strategy,
-    }
+    return TechnicalScoreResponse(
+        symbol=symbol, composite_score=round(max(-1.0, min(1.0, composite)), 4),
+        rsi_score=round(rsi_score, 4), macd_score=round(macd_score, 4),
+        bollinger_score=round(boll_score, 4), strategy=strategy,
+    ).model_dump()

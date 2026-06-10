@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from infra.observability import db_write_span, get_logger
+from tools.schemas import (
+    CalibrationResponse, RecordCycleResponse, ResolveTradeResponse,
+    SessionCyclesResponse, UnresolvedTradesResponse, WriteTradeResponse,
+)
 
 logger = get_logger("tools.memory")
 
@@ -76,7 +80,7 @@ async def write_trade(
     with db_write_span("trade_records", trade_id):
         write_trade_record(record)
 
-    return {"trade_id": trade_id, "written": True}
+    return WriteTradeResponse(trade_id=trade_id, written=True).model_dump()
 
 
 async def resolve_trade(trade_id: str, actual_pnl_pct: float) -> dict:
@@ -96,7 +100,7 @@ async def resolve_trade(trade_id: str, actual_pnl_pct: float) -> dict:
         result = resolve_outcome(trade_id, actual_pnl_pct)
 
     winner = result.debate_winner.value if result.debate_winner else "tie"
-    return {"trade_id": trade_id, "debate_winner": winner, "resolved": result.updated}
+    return ResolveTradeResponse(trade_id=trade_id, debate_winner=winner, resolved=result.updated).model_dump()
 
 
 async def get_calibration(market_regime: str, strategy: str) -> dict:
@@ -118,14 +122,14 @@ async def get_calibration(market_regime: str, strategy: str) -> dict:
     opt_cal = _get_cal("optimist", regime, strat)
     pess_cal = _get_cal("pessimist", regime, strat)
 
-    return {
-        "has_data": opt_cal.has_data or pess_cal.has_data,
-        "opt_win_rate": opt_cal.win_rate,
-        "pess_win_rate": pess_cal.win_rate,
-        "opt_summary": opt_cal.formatted_summary,
-        "pess_summary": pess_cal.formatted_summary,
-        "trade_count": opt_cal.wins + opt_cal.losses,
-    }
+    return CalibrationResponse(
+        has_data=opt_cal.has_data or pess_cal.has_data,
+        opt_win_rate=opt_cal.win_rate,
+        pess_win_rate=pess_cal.win_rate,
+        opt_summary=opt_cal.formatted_summary,
+        pess_summary=pess_cal.formatted_summary,
+        trade_count=opt_cal.wins + opt_cal.losses,
+    ).model_dump()
 
 
 async def get_session_cycles(session_id: str) -> dict:
@@ -164,7 +168,7 @@ async def get_session_cycles(session_id: str) -> dict:
         }
         for r in rows
     ]
-    return {"session_id": session_id, "cycles": cycles}
+    return SessionCyclesResponse(session_id=session_id, cycles=cycles).model_dump()
 
 
 async def get_unresolved_trades() -> dict:
@@ -177,19 +181,17 @@ async def get_unresolved_trades() -> dict:
     from db.schema import get_unresolved_trades as _get_unresolved
 
     trades = _get_unresolved()
-    return {
-        "trades": [
-            {
-                "trade_id": t.id,
-                "symbol": t.symbol,
-                "order_id": t.order_id,
-                "entry_price": t.entry_price,
-                "side": t.side,
-                "opened_at": t.executed_at.isoformat() if t.executed_at else None,
-            }
-            for t in trades
-        ]
-    }
+    return UnresolvedTradesResponse(trades=[
+        {
+            "trade_id": t.id,
+            "symbol": t.symbol,
+            "order_id": t.order_id,
+            "entry_price": t.entry_price,
+            "side": t.side,
+            "opened_at": t.executed_at.isoformat() if t.executed_at else None,
+        }
+        for t in trades
+    ]).model_dump()
 
 
 async def record_cycle(
@@ -239,4 +241,4 @@ async def record_cycle(
             ),
         )
 
-    return {"session_id": session_id, "cycle_index": cycle_index, "written": True}
+    return RecordCycleResponse(session_id=session_id, cycle_index=cycle_index, written=True).model_dump()

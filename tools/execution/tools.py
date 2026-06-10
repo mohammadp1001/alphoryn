@@ -14,6 +14,10 @@ import os
 from infra.observability import api_call_span, get_logger
 from infra.rate_limiter import acquire_alpaca_trading
 from infra.retry import with_retry
+from tools.schemas import (
+    AccountStatusResponse, CancelOrderResponse, LimitOrderResponse,
+    OrderResponse, OrderStatusResponse, PortfolioResponse, PositionResponse,
+)
 
 logger = get_logger("tools.execution")
 
@@ -53,13 +57,13 @@ async def get_portfolio() -> dict:
         }
         for p in positions
     ]
-    return {
-        "positions": pos_list,
-        "cash_usd": float(account.cash),
-        "portfolio_value": float(account.portfolio_value),
-        "buying_power": float(account.buying_power),
-        "is_paper": True,
-    }
+    return PortfolioResponse(
+        positions=pos_list,
+        cash_usd=float(account.cash),
+        portfolio_value=float(account.portfolio_value),
+        buying_power=float(account.buying_power),
+        is_paper=True,
+    ).model_dump()
 
 
 @with_retry
@@ -78,18 +82,16 @@ async def get_position(symbol: str) -> dict:
         client = _trading_client()
         try:
             p = client.get_open_position(symbol)
-            return {
-                "symbol": p.symbol,
-                "has_position": True,
-                "qty": float(p.qty),
-                "side": str(p.side).lower(),
-                "avg_entry_price": float(p.avg_entry_price),
-                "market_value": float(p.market_value),
-                "unrealised_pnl": float(p.unrealized_pl),
-                "unrealised_pnl_pct": float(p.unrealized_plpc) * 100,
-            }
+            return PositionResponse(
+                symbol=p.symbol, has_position=True,
+                qty=float(p.qty), side=str(p.side).lower(),
+                avg_entry_price=float(p.avg_entry_price),
+                market_value=float(p.market_value),
+                unrealised_pnl=float(p.unrealized_pl),
+                unrealised_pnl_pct=float(p.unrealized_plpc) * 100,
+            ).model_dump()
         except Exception:
-            return {"symbol": symbol, "has_position": False}
+            return PositionResponse(symbol=symbol, has_position=False).model_dump()
 
 
 async def place_market_order(symbol: str, qty: float, side: str) -> dict:
@@ -121,15 +123,11 @@ async def place_market_order(symbol: str, qty: float, side: str) -> dict:
             )
         )
 
-    return {
-        "order_id": str(order.id),
-        "status": str(order.status),
-        "symbol": order.symbol,
-        "qty": float(order.qty or 0),
-        "side": str(order.side).lower(),
-        "type": "market",
-        "submitted_at": order.submitted_at.isoformat() if order.submitted_at else None,
-    }
+    return OrderResponse(
+        order_id=str(order.id), status=str(order.status), symbol=order.symbol,
+        qty=float(order.qty or 0), side=str(order.side).lower(), type="market",
+        submitted_at=order.submitted_at.isoformat() if order.submitted_at else None,
+    ).model_dump()
 
 
 async def place_limit_order(symbol: str, qty: float, side: str, limit_price: float) -> dict:
@@ -163,16 +161,12 @@ async def place_limit_order(symbol: str, qty: float, side: str, limit_price: flo
             )
         )
 
-    return {
-        "order_id": str(order.id),
-        "status": str(order.status),
-        "symbol": order.symbol,
-        "qty": float(order.qty or 0),
-        "side": str(order.side).lower(),
-        "type": "limit",
-        "limit_price": limit_price,
-        "submitted_at": order.submitted_at.isoformat() if order.submitted_at else None,
-    }
+    return LimitOrderResponse(
+        order_id=str(order.id), status=str(order.status), symbol=order.symbol,
+        qty=float(order.qty or 0), side=str(order.side).lower(), type="limit",
+        limit_price=limit_price,
+        submitted_at=order.submitted_at.isoformat() if order.submitted_at else None,
+    ).model_dump()
 
 
 @with_retry
@@ -191,9 +185,9 @@ async def cancel_order(order_id: str) -> dict:
         client = _trading_client()
         try:
             client.cancel_order_by_id(order_id)
-            return {"order_id": order_id, "cancelled": True, "message": "Order cancelled"}
+            return CancelOrderResponse(order_id=order_id, cancelled=True, message="Order cancelled").model_dump()
         except Exception as exc:
-            return {"order_id": order_id, "cancelled": False, "message": str(exc)}
+            return CancelOrderResponse(order_id=order_id, cancelled=False, message=str(exc)).model_dump()
 
 
 @with_retry
@@ -212,13 +206,12 @@ async def get_order_status(order_id: str) -> dict:
         client = _trading_client()
         order = client.get_order_by_id(order_id)
 
-    return {
-        "order_id": str(order.id),
-        "status": str(order.status),
-        "filled_qty": float(order.filled_qty or 0),
-        "filled_avg_price": float(order.filled_avg_price or 0),
-        "updated_at": order.updated_at.isoformat() if order.updated_at else None,
-    }
+    return OrderStatusResponse(
+        order_id=str(order.id), status=str(order.status),
+        filled_qty=float(order.filled_qty or 0),
+        filled_avg_price=float(order.filled_avg_price or 0),
+        updated_at=order.updated_at.isoformat() if order.updated_at else None,
+    ).model_dump()
 
 
 @with_retry
@@ -234,12 +227,10 @@ async def get_account_status() -> dict:
     with api_call_span("alpaca_trading", "get_account"):
         account = _trading_client().get_account()
 
-    return {
-        "is_paper": True,
-        "status": str(account.status),
-        "buying_power": float(account.buying_power),
-        "cash": float(account.cash),
-        "portfolio_value": float(account.portfolio_value),
-        "daytrade_count": int(account.daytrade_count or 0),
-        "pattern_day_trader": bool(account.pattern_day_trader),
-    }
+    return AccountStatusResponse(
+        is_paper=True, status=str(account.status),
+        buying_power=float(account.buying_power), cash=float(account.cash),
+        portfolio_value=float(account.portfolio_value),
+        daytrade_count=int(account.daytrade_count or 0),
+        pattern_day_trader=bool(account.pattern_day_trader),
+    ).model_dump()
