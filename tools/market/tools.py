@@ -1,12 +1,15 @@
 """market.* tools — 12 tools, analysis agent scope."""
 from __future__ import annotations
 
+import math
 import os
 from datetime import datetime, timedelta
 
-from infra.observability import api_call_span
+from infra.observability import api_call_span, get_logger
 from infra.rate_limiter import acquire_alpaca_data, acquire_yfinance
 from infra.retry import with_retry
+
+logger = get_logger("tools.market")
 
 
 def _data_client():
@@ -32,6 +35,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     from alpaca.data.requests import StockBarsRequest  # type: ignore[import]
     from alpaca.data.timeframe import TimeFrame, TimeFrameUnit  # type: ignore[import]
 
+    logger.info("get_ohlcv symbol=%s timeframe=%s bars=%d", symbol, timeframe, bars)
     tf_map = {"1Day": TimeFrame.Day, "1Hour": TimeFrame.Hour, "4Hour": TimeFrame(4, TimeFrameUnit.Hour)}
     tf = tf_map.get(timeframe, TimeFrame.Day)
 
@@ -39,7 +43,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     start = end - timedelta(days=bars * 2)  # over-fetch, trim to bars
 
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
+    with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
         resp = _data_client().get_stock_bars(
             StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end)
         )
@@ -71,8 +75,9 @@ async def get_quote(symbol: str) -> dict:
     """
     from alpaca.data.requests import StockLatestQuoteRequest  # type: ignore[import]
 
+    logger.info("get_quote symbol=%s", symbol)
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
+    with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
         resp = _data_client().get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol))
 
     q = resp[symbol]
@@ -96,6 +101,7 @@ async def get_spread(symbol: str) -> dict:
     Returns:
         dict with 'symbol', 'spread_abs', 'spread_pct', 'timestamp'.
     """
+    logger.info("get_spread symbol=%s", symbol)
     quote = await get_quote(symbol)
     mid = (quote["bid"] + quote["ask"]) / 2
     spread_abs = quote["ask"] - quote["bid"]
@@ -121,8 +127,9 @@ async def get_order_book(symbol: str, depth: int) -> dict:
     """
     from alpaca.data.requests import StockLatestOrderbookRequest  # type: ignore[import]
 
+    logger.info("get_order_book symbol=%s depth=%d", symbol, depth)
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_order_book", symbol=symbol):
+    with api_call_span("alpaca_data", "get_order_book", symbol=symbol):
         resp = _data_client().get_stock_latest_orderbook(
             StockLatestOrderbookRequest(symbol_or_symbols=symbol)
         )
@@ -146,6 +153,7 @@ async def screen_etfs(min_avg_volume: float, min_price: float) -> dict:
     Returns:
         dict with 'results' — list of {symbol, price, avg_volume_30d, ytd_return_pct, sector}.
     """
+    logger.info("screen_etfs min_avg_volume=%s min_price=%s", min_avg_volume, min_price)
     from config import DEFAULT_ETF_UNIVERSE
 
     results = []
@@ -180,6 +188,7 @@ async def get_etf_holdings(symbol: str) -> dict:
     Returns:
         dict with 'symbol' and 'top_holdings' (list of {ticker, weight_pct, name}).
     """
+    logger.info("get_etf_holdings symbol=%s", symbol)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -204,6 +213,7 @@ async def get_sector_map() -> dict:
     Returns:
         dict with 'etf_to_sector' and 'sector_to_etfs' mappings.
     """
+    logger.info("get_sector_map")
     etf_to_sector = {
         "XLK": "Technology", "XLE": "Energy", "XLF": "Financials",
         "XLV": "Healthcare", "XLY": "Consumer Discretionary", "XLP": "Consumer Staples",
@@ -228,6 +238,7 @@ async def get_52w_range(symbol: str) -> dict:
     Returns:
         dict with 'symbol', 'high_52w', 'low_52w', 'current_price', 'pct_from_high', 'pct_from_low'.
     """
+    logger.info("get_52w_range symbol=%s", symbol)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -256,6 +267,7 @@ async def get_volume_profile(symbol: str, days: int) -> dict:
     Returns:
         dict with 'symbol', 'buckets' (list of {price_level, volume}), 'point_of_control', 'days'.
     """
+    logger.info("get_volume_profile symbol=%s days=%d", symbol, days)
     ohlcv = await get_ohlcv(symbol, "1Day", days)
     import numpy as np  # type: ignore[import]
 
@@ -289,6 +301,7 @@ async def get_benchmark_return(symbol: str, period: str) -> dict:
     Returns:
         dict with 'symbol', 'benchmark', 'period', 'symbol_return_pct', 'benchmark_return_pct', 'excess_return_pct'.
     """
+    logger.info("get_benchmark_return symbol=%s period=%s", symbol, period)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -296,8 +309,8 @@ async def get_benchmark_return(symbol: str, period: str) -> dict:
     if hist.empty:
         return {"symbol": symbol, "benchmark": "SPY", "period": period,
                 "symbol_return_pct": 0.0, "benchmark_return_pct": 0.0, "excess_return_pct": 0.0}
-    sym_ret = float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100)
-    spy_ret = float((hist["SPY"].iloc[-1] / hist["SPY"].iloc[0] - 1) * 100)
+    sym_ret = _safe_float(float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100))
+    spy_ret = _safe_float(float((hist["SPY"].iloc[-1] / hist["SPY"].iloc[0] - 1) * 100))
     return {
         "symbol": symbol, "benchmark": "SPY", "period": period,
         "symbol_return_pct": round(sym_ret, 2),
@@ -317,6 +330,7 @@ async def get_intraday_bars(symbol: str, resolution: str) -> dict:
     Returns:
         dict with 'symbol', 'timeframe', and 'bars' (list of OHLCV dicts).
     """
+    logger.info("get_intraday_bars symbol=%s resolution=%s", symbol, resolution)
     return await get_ohlcv(symbol, resolution, 100)
 
 
@@ -326,6 +340,7 @@ async def get_market_status() -> dict:
     Returns:
         dict with 'is_open', 'next_open', 'next_close', 'timestamp'.
     """
+    logger.info("get_market_status")
     from alpaca.trading.client import TradingClient  # type: ignore[import]
 
     api_key = os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY")

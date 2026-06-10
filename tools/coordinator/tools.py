@@ -4,6 +4,10 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 
+from infra.observability import get_logger
+
+logger = get_logger("tools.coordinator")
+
 
 async def request_hitl(
     session_id: str,
@@ -34,6 +38,7 @@ async def request_hitl(
     Returns:
         dict with 'action' ('confirm'|'abort'), 'source' ('human'|'timeout'), 'latency_ms'.
     """
+    logger.info("request_hitl session_id=%s cycle=%d symbol=%s side=%s qty=%s risk=%s", session_id, cycle_index, symbol, side, qty, risk_level)
     from infra.observability import hitl_span
 
     start = datetime.utcnow()
@@ -47,7 +52,7 @@ async def request_hitl(
         f"Type 'confirm' to proceed or 'abort' to skip [{timeout_action} in {timeout_seconds}s]: "
     )
 
-    async with hitl_span(session_id, cycle_index, risk_level):
+    with hitl_span(f"{side.upper()} {qty} {symbol}"):
         try:
             loop = asyncio.get_event_loop()
             user_input = await asyncio.wait_for(
@@ -80,6 +85,7 @@ async def check_loss_limit(
     Returns:
         dict with 'breached', 'warning', 'consumed_pct', 'remaining_eur'.
     """
+    logger.info("check_loss_limit realised_pnl=%s limit=%s", session_realised_pnl_eur, loss_limit_eur)
     consumed = -session_realised_pnl_eur  # positive = we have consumed some loss budget
     consumed_pct = consumed / loss_limit_eur * 100 if loss_limit_eur > 0 else 0.0
     remaining = loss_limit_eur - consumed
@@ -108,6 +114,7 @@ async def select_shortlist(
     Returns:
         dict with 'shortlisted' (list of {symbol, score}), 'n', 'strategy'.
     """
+    logger.info("select_shortlist n_signals=%d shortlist_n=%d strategy=%s", len(ranked_signals), shortlist_n, strategy)
     from config import MAX_SHORTLIST_N
 
     n = min(shortlist_n, MAX_SHORTLIST_N)
@@ -141,6 +148,7 @@ async def synthesise_risk(
     Returns:
         dict with 'risk_level', 'risk_score', 'debate_winner', 'synthesis_reasoning'.
     """
+    logger.info("synthesise_risk opt=%s pess=%s opt_win_rate=%s pess_win_rate=%s", optimist_level, pessimist_level, opt_win_rate, pess_win_rate)
     from models.enums import RiskLevel, DebateWinner
     from models.risk import AgentVerdict
     from config import (PESSIMIST_OVERRIDE_WIN_RATE, RISK_HIGH_THRESHOLD, RISK_LOW_THRESHOLD,
@@ -195,6 +203,7 @@ async def resolve_unresolved_trades() -> dict:
     Returns:
         dict with 'resolved_count', 'failed_count', 'details'.
     """
+    logger.info("resolve_unresolved_trades")
     import os
     from db.schema import get_unresolved_trades, resolve_outcome
 
@@ -256,6 +265,7 @@ async def update_plan_state(
     Returns:
         dict with 'session_id', 'field', 'updated'.
     """
+    logger.info("update_plan_state session_id=%s field=%s", session_id, field)
     # PlanState is carried in ADK session state — this tool signals intent
     # The coordinator reads this and applies it via callback_context.state
     return {"session_id": session_id, "field": field, "value": value, "updated": True}
@@ -271,6 +281,7 @@ async def get_session_summary(session_id: str) -> dict:
         dict with 'session_id', 'cycle_count', 'committed_count', 'aborted_count',
                   'session_realised_pnl_eur', 'loss_limit_consumed_pct'.
     """
+    logger.info("get_session_summary session_id=%s", session_id)
     from db.schema import _connect  # type: ignore[attr-defined]
 
     with _connect() as conn:
@@ -310,5 +321,6 @@ async def abort_cycle(
     Returns:
         dict with 'outcome' ('ABORTED'), 'reason', 'stage'.
     """
+    logger.info("abort_cycle session_id=%s cycle=%d stage=%s reason=%s", session_id, cycle_index, stage, reason)
     return {"outcome": "ABORTED", "reason": reason, "stage": stage,
             "session_id": session_id, "cycle_index": cycle_index}
