@@ -19,13 +19,107 @@ EXECUTION_TOOLS is kept separate; only the execution BaseAgent receives it.
 """
 from __future__ import annotations
 
-import functools
 from collections.abc import Callable
 from typing import Any
 
 from google.adk.tools import FunctionTool  # type: ignore[import]
 
 from infra.tool_logger import log_io
+from tools.analysis.tools import (
+    calc_correlation,
+    calc_max_drawdown,
+    calc_sharpe,
+    compute_atr,
+    compute_beta,
+    compute_bollinger,
+    compute_macd,
+    compute_rsi,
+    detect_crossover,
+    detect_momentum,
+    detect_support_resistance,
+    rank_by_momentum,
+    run_backtest,
+    score_technical,
+)
+
+# ── coordinator.* ────────────────────────────────────────────────────────────
+from tools.coordinator.tools import (
+    abort_cycle,
+    check_loss_limit,
+    get_session_summary,
+    request_hitl,
+    resolve_unresolved_trades,
+    select_shortlist,
+    synthesise_risk,
+    update_plan_state,
+)
+
+# ── execution.* ──────────────────────────────────────────────────────────────
+from tools.execution.tools import (
+    cancel_order,
+    get_account_status,
+    get_order_status,
+    get_portfolio,
+    get_position,
+    place_limit_order,
+    place_market_order,
+)
+
+# ── forex.* ──────────────────────────────────────────────────────────────────
+from tools.forex.tools import (
+    get_forex_account,
+    get_forex_instruments,
+    get_forex_positions,
+    get_forex_prices,
+)
+from tools.market.tools import (
+    get_52w_range,
+    get_benchmark_return,
+    get_etf_holdings,
+    get_intraday_bars,
+    get_market_status,
+    get_ohlcv,
+    get_order_book,
+    get_quote,
+    get_sector_map,
+    get_spread,
+    get_volume_profile,
+    screen_etfs,
+)
+
+# ── memory.* ─────────────────────────────────────────────────────────────────
+from tools.memory.tools import (
+    get_calibration,
+    get_session_cycles,
+    get_unresolved_trades,
+    record_cycle,
+    resolve_trade,
+    write_trade,
+)
+
+# ── research.* ───────────────────────────────────────────────────────────────
+from tools.research.tools import (
+    compare_etfs,
+    detect_market_regime,
+    get_analyst_ratings,
+    get_dividend_history,
+    get_earnings_calendar,
+    get_economic_calendar,
+    get_etf_metrics,
+    get_expense_ratios,
+    get_fund_flows,
+    get_macro_data,
+    get_news,
+    get_sector_performance,
+    get_sentiment,
+)
+
+# ── strategy.* ───────────────────────────────────────────────────────────────
+from tools.strategy.tools import (
+    describe_tool,
+    get_strategy,
+    list_strategies,
+)
 
 
 def _tool(fn: Callable[..., Any], namespace: str) -> FunctionTool:
@@ -38,105 +132,6 @@ def _tool(fn: Callable[..., Any], namespace: str) -> FunctionTool:
     wrapped.__qualname__ = namespaced_name
     return FunctionTool(func=wrapped)
 
-
-# ── market.* ─────────────────────────────────────────────────────────────────
-from tools.market.tools import (
-    get_ohlcv,
-    get_quote,
-    get_spread,
-    get_order_book,
-    screen_etfs,
-    get_etf_holdings,
-    get_sector_map,
-    get_52w_range,
-    get_volume_profile,
-    get_benchmark_return,
-    get_intraday_bars,
-    get_market_status,
-)
-
-# ── analysis.* ───────────────────────────────────────────────────────────────
-from tools.analysis.tools import (
-    compute_rsi,
-    compute_macd,
-    compute_bollinger,
-    compute_atr,
-    compute_beta,
-    detect_momentum,
-    detect_crossover,
-    detect_support_resistance,
-    rank_by_momentum,
-    run_backtest,
-    calc_sharpe,
-    calc_max_drawdown,
-    calc_correlation,
-    score_technical,
-)
-
-# ── research.* ───────────────────────────────────────────────────────────────
-from tools.research.tools import (
-    get_news,
-    get_sentiment,
-    get_earnings_calendar,
-    get_macro_data,
-    get_fund_flows,
-    get_etf_metrics,
-    compare_etfs,
-    get_expense_ratios,
-    get_sector_performance,
-    get_dividend_history,
-    get_economic_calendar,
-    detect_market_regime,
-    get_analyst_ratings,
-)
-
-# ── execution.* ──────────────────────────────────────────────────────────────
-from tools.execution.tools import (
-    get_portfolio,
-    get_position,
-    place_market_order,
-    place_limit_order,
-    cancel_order,
-    get_order_status,
-    get_account_status,
-)
-
-# ── memory.* ─────────────────────────────────────────────────────────────────
-from tools.memory.tools import (
-    write_trade,
-    resolve_trade,
-    get_calibration,
-    get_session_cycles,
-    get_unresolved_trades,
-    record_cycle,
-)
-
-# ── coordinator.* ────────────────────────────────────────────────────────────
-from tools.coordinator.tools import (
-    request_hitl,
-    check_loss_limit,
-    select_shortlist,
-    synthesise_risk,
-    resolve_unresolved_trades,
-    update_plan_state,
-    get_session_summary,
-    abort_cycle,
-)
-
-# ── strategy.* ───────────────────────────────────────────────────────────────
-from tools.strategy.tools import (
-    list_strategies,
-    get_strategy,
-    describe_tool,
-)
-
-# ── forex.* ──────────────────────────────────────────────────────────────────
-from tools.forex.tools import (
-    get_forex_account,
-    get_forex_positions,
-    get_forex_prices,
-    get_forex_instruments,
-)
 
 # ── Wrapped FunctionTools ─────────────────────────────────────────────────────
 

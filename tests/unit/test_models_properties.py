@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-
 # ── models.analysis ───────────────────────────────────────────────────────────
 
 def test_rsi_result_is_overbought():
@@ -119,8 +118,8 @@ def test_ohlcv_data_volumes_property():
 # ── models.memory ─────────────────────────────────────────────────────────────
 
 def test_agent_pairwise_win_rate_with_data():
-    from models.memory import AgentPairwise
     from models.enums import MarketRegime, Strategy
+    from models.memory import AgentPairwise
     pw = AgentPairwise(
         agent="optimist",
         market_regime=MarketRegime.BULL_TREND,
@@ -133,8 +132,8 @@ def test_agent_pairwise_win_rate_with_data():
 
 
 def test_agent_pairwise_win_rate_no_data():
-    from models.memory import AgentPairwise
     from models.enums import MarketRegime, Strategy
+    from models.memory import AgentPairwise
     pw = AgentPairwise(
         agent="pessimist",
         market_regime=MarketRegime.HIGH_VOL,

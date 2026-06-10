@@ -1,9 +1,6 @@
 """Unit tests for agent.prompts — all prompt templates must be valid Python format strings."""
 from __future__ import annotations
 
-import pytest
-
-
 # ── Risk preamble ─────────────────────────────────────────────────────────────
 
 def test_risk_preamble_formats_without_key_error():
@@ -196,7 +193,7 @@ def test_coordinator_asset_class_field():
 # ── Execution agent (BaseAgent — no LLM prompt) ───────────────────────────────
 
 def test_execution_agent_module_importable():
-    from agent.execution_agent import create_execution_agent, ExecutionAgent
+    from agent.execution_agent import ExecutionAgent, create_execution_agent
     assert create_execution_agent is not None
     assert ExecutionAgent is not None
 
@@ -204,7 +201,7 @@ def test_execution_agent_module_importable():
 # ── Strategy tools ────────────────────────────────────────────────────────────
 
 def test_strategy_tools_importable():
-    from tools.strategy.tools import list_strategies, get_strategy, describe_tool
+    from tools.strategy.tools import describe_tool, get_strategy, list_strategies
     assert list_strategies is not None
     assert get_strategy is not None
     assert describe_tool is not None

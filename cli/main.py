@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from pathlib import Path
 
 import typer
 from dotenv import load_dotenv
@@ -23,6 +22,7 @@ from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
 from infra.log_setup import configure_console_logging
+from models.session import SessionParams
 
 load_dotenv()
 
@@ -45,7 +45,7 @@ def setup_cmd() -> None:
 
     project = os.environ.get("GOOGLE_CLOUD_PROJECT") or Prompt.ask("GCP Project ID")
     alpaca_key = Prompt.ask("Alpaca API key (paper trading)", password=True)
-    alpaca_secret = Prompt.ask("Alpaca API secret (paper trading)", password=True)
+    _ = Prompt.ask("Alpaca API secret (paper trading)", password=True)
 
     config = {
         "gcp_project": project,
@@ -150,7 +150,7 @@ def run_cmd(
     asyncio.run(_run_session(params))
 
 
-async def _run_session(params: "SessionParams") -> None:
+async def _run_session(params: SessionParams) -> None:
     configure_console_logging()
 
     from agent.coordinator import build_app
@@ -209,7 +209,6 @@ async def _run_session(params: "SessionParams") -> None:
     )
 
     try:
-        from google.adk.runners import Runner  # type: ignore[import]
         from google.genai.types import Content, Part  # type: ignore[import]
 
         content = Content(role="user", parts=[Part(text=initial_message)])
@@ -416,7 +415,7 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
     return ", ".join(parts) if parts else "(ok)"
 
 
-def _print_session_params(params: "SessionParams") -> None:
+def _print_session_params(params: SessionParams) -> None:
     table = Table(title="Session Parameters", show_header=False)
     table.add_column("", style="bold")
     table.add_column("")

@@ -3,17 +3,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import pytest
-
 from models.enums import (
     CycleOutcome,
-    MarketRegime,
     OperatingMode,
     Strategy,
 )
 from models.memory import CycleRecord
 from models.session import PlanState, SessionParams
-
 
 # ── SessionParams ─────────────────────────────────────────────────────────────
 

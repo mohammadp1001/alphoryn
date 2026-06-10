@@ -4,8 +4,6 @@ from __future__ import annotations
 import asyncio
 import time
 
-import pytest
-
 
 def test_token_bucket_acquire_does_not_block_within_burst() -> None:
     from infra.rate_limiter import TokenBucket

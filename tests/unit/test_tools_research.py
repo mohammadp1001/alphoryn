@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 
 def _mock_acquire():
@@ -15,7 +13,7 @@ def _mock_acquire():
 # ── get_news ──────────────────────────────────────────────────────────────────
 
 def test_get_news_returns_items():
-    ts = int(datetime.now(timezone.utc).timestamp())
+    ts = int(datetime.now(UTC).timestamp())
     mock_news = [
         {"title": "XLK surges on AI news", "publisher": "Reuters",
          "providerPublishTime": ts, "link": "http://example.com"},
@@ -26,10 +24,9 @@ def test_get_news_returns_items():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_news
-            result = asyncio.run(get_news("XLK", 7))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_news
+        result = asyncio.run(get_news("XLK", 7))
 
     assert result["symbol"] == "XLK"
     assert len(result["items"]) == 1
@@ -47,10 +44,9 @@ def test_get_news_filters_old_items():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_news
-            result = asyncio.run(get_news("XLK", 7))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_news
+        result = asyncio.run(get_news("XLK", 7))
 
     assert result["items"] == []
 
@@ -62,10 +58,9 @@ def test_get_news_empty_news():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_news
-            result = asyncio.run(get_news("SPY", 3))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_news
+        result = asyncio.run(get_news("SPY", 3))
 
     assert result["symbol"] == "SPY"
     assert result["items"] == []
@@ -78,10 +73,9 @@ def test_get_news_exception_returns_empty():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_news
-            result = asyncio.run(get_news("GLD", 5))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_news
+        result = asyncio.run(get_news("GLD", 5))
 
     assert result["symbol"] == "GLD"
     assert result["items"] == []
@@ -92,7 +86,7 @@ def test_get_news_loop_exception_triggers_except_pass():
     A news item that causes an exception inside the for-loop body
     triggers the `except Exception: pass` block (lines 39-40).
     """
-    ts = int(datetime.now(timezone.utc).timestamp())
+    int(datetime.now(UTC).timestamp())
     # providerPublishTime is a string that int() rejects → triggers utcfromtimestamp error
     bad_news = [
         {"title": "Bad item", "publisher": "X",
@@ -104,10 +98,9 @@ def test_get_news_loop_exception_triggers_except_pass():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_news
-            result = asyncio.run(get_news("VIX", 7))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_news
+        result = asyncio.run(get_news("VIX", 7))
 
     assert result["symbol"] == "VIX"
     assert result["items"] == []  # exception swallowed → empty
@@ -180,7 +173,7 @@ def _make_mock_cal_row(future_date: datetime):
 
 
 def test_get_earnings_calendar_with_future_event():
-    future_date = datetime.now(timezone.utc) + timedelta(days=5)
+    future_date = datetime.now(UTC) + timedelta(days=5)
     mock_cal = _make_mock_cal_row(future_date)
 
     mock_ticker = MagicMock()
@@ -189,10 +182,9 @@ def test_get_earnings_calendar_with_future_event():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_earnings_calendar
-            result = asyncio.run(get_earnings_calendar("AAPL", 30))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_earnings_calendar
+        result = asyncio.run(get_earnings_calendar("AAPL", 30))
 
     assert result["symbol"] == "AAPL"
     assert len(result["events"]) == 1
@@ -205,10 +197,9 @@ def test_get_earnings_calendar_no_data():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_earnings_calendar
-            result = asyncio.run(get_earnings_calendar("XLK", 7))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_earnings_calendar
+        result = asyncio.run(get_earnings_calendar("XLK", 7))
 
     assert result["events"] == []
 
@@ -221,10 +212,9 @@ def test_get_earnings_calendar_exception_returns_empty():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_earnings_calendar
-            result = asyncio.run(get_earnings_calendar("SPY", 7))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_earnings_calendar
+        result = asyncio.run(get_earnings_calendar("SPY", 7))
 
     assert result["events"] == []
 
@@ -238,10 +228,9 @@ def test_get_macro_data_returns_all_fields():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_macro_data
-            result = asyncio.run(get_macro_data())
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_macro_data
+        result = asyncio.run(get_macro_data())
 
     assert "vix" in result
     assert "yield_10y" in result
@@ -254,10 +243,9 @@ def test_get_macro_data_exception_returns_zero():
     mock_yf = MagicMock()
     mock_yf.Ticker.side_effect = Exception("network error")
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_macro_data
-            result = asyncio.run(get_macro_data())
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_macro_data
+        result = asyncio.run(get_macro_data())
 
     assert result["vix"] == 0.0
 
@@ -292,10 +280,9 @@ def test_get_fund_flows_inflow():
     mock_yf = MagicMock()
     mock_yf.download.return_value = mock_hist
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_fund_flows
-            result = asyncio.run(get_fund_flows("XLK"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_fund_flows
+        result = asyncio.run(get_fund_flows("XLK"))
 
     assert result["symbol"] == "XLK"
     assert result["flow_direction"] == "inflow"
@@ -306,10 +293,9 @@ def test_get_fund_flows_outflow():
     mock_yf = MagicMock()
     mock_yf.download.return_value = mock_hist
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_fund_flows
-            result = asyncio.run(get_fund_flows("SPY"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_fund_flows
+        result = asyncio.run(get_fund_flows("SPY"))
 
     assert result["flow_direction"] == "outflow"
 
@@ -321,10 +307,9 @@ def test_get_fund_flows_empty_data():
     mock_yf = MagicMock()
     mock_yf.download.return_value = mock_hist
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_fund_flows
-            result = asyncio.run(get_fund_flows("XYZ"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_fund_flows
+        result = asyncio.run(get_fund_flows("XYZ"))
 
     assert result["flow_direction"] == "neutral"
     assert result["estimated_flow_usd"] == 0.0
@@ -335,10 +320,9 @@ def test_get_fund_flows_single_row():
     mock_yf = MagicMock()
     mock_yf.download.return_value = mock_hist
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_fund_flows
-            result = asyncio.run(get_fund_flows("X"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_fund_flows
+        result = asyncio.run(get_fund_flows("X"))
 
     assert result["flow_direction"] == "neutral"
 
@@ -356,10 +340,9 @@ def test_get_etf_metrics_returns_fields():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_etf_metrics
-            result = asyncio.run(get_etf_metrics("XLK"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_etf_metrics
+        result = asyncio.run(get_etf_metrics("XLK"))
 
     assert result["symbol"] == "XLK"
     assert result["aum_usd"] > 0
@@ -380,10 +363,9 @@ def test_compare_etfs_returns_all_symbols():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import compare_etfs
-            result = asyncio.run(compare_etfs(["XLK", "SPY"]))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import compare_etfs
+        result = asyncio.run(compare_etfs(["XLK", "SPY"]))
 
     assert len(result["comparisons"]) == 2
     symbols = {c["symbol"] for c in result["comparisons"]}
@@ -397,10 +379,9 @@ def test_compare_etfs_caps_at_5():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import compare_etfs
-            result = asyncio.run(compare_etfs(["A", "B", "C", "D", "E", "F", "G"]))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import compare_etfs
+        result = asyncio.run(compare_etfs(["A", "B", "C", "D", "E", "F", "G"]))
 
     assert len(result["comparisons"]) <= 5
 
@@ -409,10 +390,9 @@ def test_compare_etfs_exception_still_includes_symbol():
     mock_yf = MagicMock()
     mock_yf.Ticker.side_effect = Exception("network error")
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import compare_etfs
-            result = asyncio.run(compare_etfs(["XLK"]))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import compare_etfs
+        result = asyncio.run(compare_etfs(["XLK"]))
 
     assert len(result["comparisons"]) == 1
     assert result["comparisons"][0]["symbol"] == "XLK"
@@ -427,10 +407,9 @@ def test_get_expense_ratios_returns_all():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_expense_ratios
-            result = asyncio.run(get_expense_ratios(["XLK", "SPY"]))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_expense_ratios
+        result = asyncio.run(get_expense_ratios(["XLK", "SPY"]))
 
     assert len(result["ratios"]) == 2
 
@@ -439,10 +418,9 @@ def test_get_expense_ratios_exception_returns_zero():
     mock_yf = MagicMock()
     mock_yf.Ticker.side_effect = Exception("error")
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_expense_ratios
-            result = asyncio.run(get_expense_ratios(["FAIL"]))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_expense_ratios
+        result = asyncio.run(get_expense_ratios(["FAIL"]))
 
     assert result["ratios"][0]["expense_ratio"] == 0.0
 
@@ -466,10 +444,9 @@ def test_get_sector_performance_returns_sorted():
     mock_yf = MagicMock()
     mock_yf.download.return_value = _make_mock_sector_hist(100.0, 103.0)
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_sector_performance
-            result = asyncio.run(get_sector_performance("1mo"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_sector_performance
+        result = asyncio.run(get_sector_performance("1mo"))
 
     assert "timeframe" in result
     assert result["timeframe"] == "1mo"
@@ -481,10 +458,9 @@ def test_get_sector_performance_exception_skips_sector():
     mock_yf = MagicMock()
     mock_yf.download.side_effect = Exception("network error")
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_sector_performance
-            result = asyncio.run(get_sector_performance("3mo"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_sector_performance
+        result = asyncio.run(get_sector_performance("3mo"))
 
     assert result["returns"] == []
 
@@ -525,10 +501,9 @@ def test_get_dividend_history_returns_dividends():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_dividend_history
-            result = asyncio.run(get_dividend_history("XLK"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_dividend_history
+        result = asyncio.run(get_dividend_history("XLK"))
 
     assert result["symbol"] == "XLK"
     assert len(result["dividends"]) == 2
@@ -543,10 +518,9 @@ def test_get_dividend_history_empty():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_dividend_history
-            result = asyncio.run(get_dividend_history("GLD"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_dividend_history
+        result = asyncio.run(get_dividend_history("GLD"))
 
     assert result["dividends"] == []
 
@@ -560,10 +534,9 @@ def test_get_dividend_history_exception_returns_empty():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_dividend_history
-            result = asyncio.run(get_dividend_history("XLE"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_dividend_history
+        result = asyncio.run(get_dividend_history("XLE"))
 
     assert result["dividends"] == []
 
@@ -660,10 +633,9 @@ def test_get_analyst_ratings_with_data():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_analyst_ratings
-            result = asyncio.run(get_analyst_ratings("XLK"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_analyst_ratings
+        result = asyncio.run(get_analyst_ratings("XLK"))
 
     assert result["symbol"] == "XLK"
     assert len(result["ratings"]) == 1
@@ -677,10 +649,9 @@ def test_get_analyst_ratings_no_data():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_analyst_ratings
-            result = asyncio.run(get_analyst_ratings("SPY"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_analyst_ratings
+        result = asyncio.run(get_analyst_ratings("SPY"))
 
     assert result["ratings"] == []
 
@@ -694,9 +665,8 @@ def test_get_analyst_ratings_exception_returns_empty():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.research.tools import get_analyst_ratings
-            result = asyncio.run(get_analyst_ratings("QQQ"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_analyst_ratings
+        result = asyncio.run(get_analyst_ratings("QQQ"))
 
     assert result["ratings"] == []

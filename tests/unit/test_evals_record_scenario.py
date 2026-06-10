@@ -3,11 +3,9 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ── _ts ───────────────────────────────────────────────────────────────────────
 
@@ -207,7 +205,7 @@ def test_record_from_runner_writes_output_file(tmp_path):
     mock_runner.app_name = "alphoryn"
 
     out_file = tmp_path / "fixture.json"
-    result = record_from_runner(
+    record_from_runner(
         runner=mock_runner,
         session_id="sess-file",
         case_id="file_case",

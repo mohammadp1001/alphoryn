@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── get_secret ────────────────────────────────────────────────────────────────
 
 def test_get_secret_raises_if_no_project(monkeypatch):
@@ -41,12 +40,15 @@ def test_get_secret_success(monkeypatch):
     mock_sm = MagicMock()
     mock_sm.SecretManagerServiceClient.return_value = mock_client
 
-    with patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)):
-        with patch("infra.secrets.acquire_secret_manager", new=AsyncMock()):
-            import importlib
-            import infra.secrets as secrets_mod
-            importlib.reload(secrets_mod)
-            result = asyncio.run(secrets_mod.get_secret("alpaca-api-key"))
+    with (
+        patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)),
+        patch("infra.secrets.acquire_secret_manager", new=AsyncMock()),
+    ):
+        import importlib
+
+        import infra.secrets as secrets_mod
+        importlib.reload(secrets_mod)
+        result = asyncio.run(secrets_mod.get_secret("alpaca-api-key"))
 
     assert result == "super-secret-value"
     mock_client.access_secret_version.assert_called_once()
@@ -71,12 +73,15 @@ def test_get_secret_uses_correct_resource_name(monkeypatch):
     mock_sm = MagicMock()
     mock_sm.SecretManagerServiceClient.return_value = mock_client
 
-    with patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)):
-        with patch("infra.secrets.acquire_secret_manager", new=AsyncMock()):
-            import importlib
-            import infra.secrets as secrets_mod
-            importlib.reload(secrets_mod)
-            asyncio.run(secrets_mod.get_secret("my-secret", version="3"))
+    with (
+        patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)),
+        patch("infra.secrets.acquire_secret_manager", new=AsyncMock()),
+    ):
+        import importlib
+
+        import infra.secrets as secrets_mod
+        importlib.reload(secrets_mod)
+        asyncio.run(secrets_mod.get_secret("my-secret", version="3"))
 
     assert captured["name"] == "projects/my-project/secrets/my-secret/versions/3"
 
@@ -100,12 +105,15 @@ def test_get_secret_default_version_is_latest(monkeypatch):
     mock_sm = MagicMock()
     mock_sm.SecretManagerServiceClient.return_value = mock_client
 
-    with patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)):
-        with patch("infra.secrets.acquire_secret_manager", new=AsyncMock()):
-            import importlib
-            import infra.secrets as secrets_mod
-            importlib.reload(secrets_mod)
-            asyncio.run(secrets_mod.get_secret("my-secret"))
+    with (
+        patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)),
+        patch("infra.secrets.acquire_secret_manager", new=AsyncMock()),
+    ):
+        import importlib
+
+        import infra.secrets as secrets_mod
+        importlib.reload(secrets_mod)
+        asyncio.run(secrets_mod.get_secret("my-secret"))
 
     assert captured["name"].endswith("/versions/latest")
 

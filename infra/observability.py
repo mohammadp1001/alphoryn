@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator
+from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
@@ -44,7 +45,9 @@ def setup_observability(session_id: str) -> None:
 
 def _setup_cloud_trace(resource: Resource, project_id: str, session_id: str) -> None:
     try:
-        from opentelemetry.exporter.cloud_trace import CloudTraceSpanExporter  # type: ignore[import]
+        from opentelemetry.exporter.cloud_trace import (
+            CloudTraceSpanExporter,  # type: ignore[import]
+        )
 
         provider = TracerProvider(resource=resource)
         exporter = CloudTraceSpanExporter(project_id=project_id)

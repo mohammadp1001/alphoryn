@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import json
 import runpy
-from pathlib import Path
 from unittest.mock import patch
-
 
 # ── load_dataset ──────────────────────────────────────────────────────────────
 
@@ -114,13 +112,16 @@ def test_validate_all_datasets_passes_valid(tmp_path):
 
 def test_validate_all_datasets_raises_on_error(tmp_path):
     """Lines 66-67: AssertionError raised with helpful message."""
-    from evals import harness
     import pytest
+
+    from evals import harness
     bad = {"eval_cases": [{"eval_case_id": "bad_case"}]}  # missing prompt/agent_data
     (tmp_path / "bad.json").write_text(json.dumps(bad))
-    with patch.object(harness, "DATASETS_DIR", tmp_path):
-        with pytest.raises(AssertionError, match="structural errors"):
-            harness.validate_all_datasets()
+    with (
+        patch.object(harness, "DATASETS_DIR", tmp_path),
+        pytest.raises(AssertionError, match="structural errors"),
+    ):
+        harness.validate_all_datasets()
 
 
 # ── extract_tool_call_sequence ────────────────────────────────────────────────
@@ -252,8 +253,10 @@ def test_main_block_validates_and_prints(tmp_path, capsys):
         }]
     }
     (tmp_path / "main.json").write_text(json.dumps(data))
-    with patch.object(harness, "DATASETS_DIR", tmp_path):
-        with patch.object(harness, "EVAL_CONFIG", tmp_path / "eval_config.yaml"):
-            runpy.run_module("evals.harness", run_name="__main__", alter_sys=False)
+    with (
+        patch.object(harness, "DATASETS_DIR", tmp_path),
+        patch.object(harness, "EVAL_CONFIG", tmp_path / "eval_config.yaml"),
+    ):
+        runpy.run_module("evals.harness", run_name="__main__", alter_sys=False)
     out = capsys.readouterr().out
     assert "valid" in out.lower() or "main_case" in out

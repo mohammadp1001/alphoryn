@@ -3,8 +3,12 @@ from __future__ import annotations
 
 from infra.observability import db_write_span, get_logger
 from tools.schemas import (
-    CalibrationResponse, RecordCycleResponse, ResolveTradeResponse,
-    SessionCyclesResponse, UnresolvedTradesResponse, WriteTradeResponse,
+    CalibrationResponse,
+    RecordCycleResponse,
+    ResolveTradeResponse,
+    SessionCyclesResponse,
+    UnresolvedTradesResponse,
+    WriteTradeResponse,
 )
 
 logger = get_logger("tools.memory")
@@ -52,6 +56,7 @@ async def write_trade(
     logger.info("write_trade session_id=%s cycle=%d symbol=%s side=%s qty=%s", session_id, cycle_index, symbol, side, qty)
     import uuid
     from datetime import datetime
+
     from db.schema import write_trade_record
     from models.enums import MarketRegime, Strategy
     from models.memory import TradeRecord

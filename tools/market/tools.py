@@ -8,9 +8,17 @@ from infra.observability import api_call_span, get_logger
 from infra.rate_limiter import acquire_alpaca_data, acquire_yfinance
 from infra.retry import with_retry
 from tools.schemas import (
-    BenchmarkReturnResponse, EtfHoldingsResponse, IntradayBarsResponse,
-    MarketStatusResponse, OhlcvResponse, OrderBookResponse, QuoteResponse,
-    Range52wResponse, ScreenEtfsResponse, SectorMapResponse, SpreadResponse,
+    BenchmarkReturnResponse,
+    EtfHoldingsResponse,
+    IntradayBarsResponse,
+    MarketStatusResponse,
+    OhlcvResponse,
+    OrderBookResponse,
+    QuoteResponse,
+    Range52wResponse,
+    ScreenEtfsResponse,
+    SectorMapResponse,
+    SpreadResponse,
     VolumeProfileResponse,
 )
 
@@ -57,7 +65,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
             StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
         )
 
-    bar_list = resp[symbol] if symbol in resp else []
+    bar_list = resp.get(symbol, [])
     result = [
         {
             "timestamp": b.timestamp.isoformat(),
@@ -347,7 +355,7 @@ async def get_volume_profile(symbol: str, days: int) -> dict:
 
     bins = np.linspace(min(closes), max(closes), 20)
     bucket_vols = [0.0] * (len(bins) - 1)
-    for c, v in zip(closes, volumes):
+    for c, v in zip(closes, volumes, strict=False):
         idx = min(int(np.searchsorted(bins, c)), len(bucket_vols) - 1)
         bucket_vols[idx] += v
 

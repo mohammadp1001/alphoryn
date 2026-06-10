@@ -3,14 +3,12 @@ import hashlib
 import hmac
 import json
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from models.memory import DebateWinner, MarketRegime, Strategy, TradeRecord
 from webhook.main import _compute_pnl_pct, _debate_winner, _verify_signature, app
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -183,7 +181,7 @@ def test_fill_resolves_trade(client):
     assert body["trade_id"] == "trade-001"
     assert body["winner"] == "optimist"
     mock_resolve.assert_called_once()
-    _, kwargs = mock_resolve.call_args[0], mock_resolve.call_args[1]
+    _, _kwargs = mock_resolve.call_args[0], mock_resolve.call_args[1]
     call_kwargs = mock_resolve.call_args.kwargs
     assert call_kwargs["timed_out"] is False
 

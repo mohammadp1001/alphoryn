@@ -15,8 +15,13 @@ from infra.observability import api_call_span, get_logger
 from infra.rate_limiter import acquire_alpaca_trading
 from infra.retry import with_retry
 from tools.schemas import (
-    AccountStatusResponse, CancelOrderResponse, LimitOrderResponse,
-    OrderResponse, OrderStatusResponse, PortfolioResponse, PositionResponse,
+    AccountStatusResponse,
+    CancelOrderResponse,
+    LimitOrderResponse,
+    OrderResponse,
+    OrderStatusResponse,
+    PortfolioResponse,
+    PositionResponse,
 )
 
 logger = get_logger("tools.execution")
@@ -106,8 +111,8 @@ async def place_market_order(symbol: str, qty: float, side: str) -> dict:
         dict with 'order_id', 'status', 'symbol', 'qty', 'side', 'type', 'submitted_at'.
     """
     logger.info("place_market_order symbol=%s qty=%s side=%s", symbol, qty, side)
-    from alpaca.trading.requests import MarketOrderRequest  # type: ignore[import]
     from alpaca.trading.enums import OrderSide, TimeInForce  # type: ignore[import]
+    from alpaca.trading.requests import MarketOrderRequest  # type: ignore[import]
 
     order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
 
@@ -143,8 +148,8 @@ async def place_limit_order(symbol: str, qty: float, side: str, limit_price: flo
         dict with 'order_id', 'status', 'symbol', 'qty', 'side', 'type', 'limit_price', 'submitted_at'.
     """
     logger.info("place_limit_order symbol=%s qty=%s side=%s limit_price=%s", symbol, qty, side, limit_price)
-    from alpaca.trading.requests import LimitOrderRequest  # type: ignore[import]
     from alpaca.trading.enums import OrderSide, TimeInForce  # type: ignore[import]
+    from alpaca.trading.requests import LimitOrderRequest  # type: ignore[import]
 
     order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
 

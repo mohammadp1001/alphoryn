@@ -37,7 +37,7 @@ async def get_oanda_credentials() -> tuple[str, str]:
     Called by coordinator harness at execution-agent spawn time only.
     Values must not be logged, stored on PlanState, or passed to other agents.
     """
-    from config import OANDA_API_TOKEN_SECRET, OANDA_ACCOUNT_ID_SECRET
+    from config import OANDA_ACCOUNT_ID_SECRET, OANDA_API_TOKEN_SECRET
 
     api_token = await get_secret(OANDA_API_TOKEN_SECRET)
     account_id = await get_secret(OANDA_ACCOUNT_ID_SECRET)

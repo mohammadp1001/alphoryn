@@ -1,16 +1,12 @@
 """Unit tests for models.risk — RiskAssessment.synthesise and supporting models."""
 from __future__ import annotations
 
-import pytest
-
-from models.enums import RiskLevel, Strategy, MarketRegime
+from models.enums import MarketRegime, RiskLevel, Strategy
 from models.risk import (
     AgentCalibration,
     AgentVerdict,
-    CandidateShortlist,
     RiskAssessment,
 )
-
 
 # ── AgentVerdict ──────────────────────────────────────────────────────────────
 

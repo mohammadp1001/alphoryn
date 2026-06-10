@@ -5,16 +5,13 @@ import asyncio
 import json
 import os
 import sqlite3
-import tempfile
 from contextlib import contextmanager
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
 from cli.main import app
-
 
 runner = CliRunner()
 
@@ -153,7 +150,7 @@ def test_history_cmd_empty_db(tmp_db):
 
 
 def test_history_cmd_with_sessions(tmp_db):
-    from db.schema import upsert_session, close_session
+    from db.schema import close_session, upsert_session
     upsert_session("sess-hist-1", "MOMENTUM", "SEMI_AUTO")
     close_session("sess-hist-1", "clean", 50.0, 3)
 
@@ -223,9 +220,9 @@ def test_load_alpaca_credentials_from_secret_manager(monkeypatch):
 # ── _print_session_params (helper) ───────────────────────────────────────────
 
 def test_print_session_params_does_not_raise():
-    from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
     from cli.main import _print_session_params
+    from models.enums import OperatingMode, Strategy
+    from models.session import SessionParams
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -247,8 +244,8 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -271,15 +268,17 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
 
     mock_session_service = AsyncMock()
 
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "mock-session-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})):
-                    from cli.main import _run_session
-                    with pytest.raises(RuntimeError):
-                        asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "mock-session-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        pytest.raises(RuntimeError),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))
 
     # Credentials must be cleared
     assert os.environ.get("ALPACA_API_KEY") is None
@@ -291,8 +290,8 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -319,17 +318,19 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
 
     mock_session_service = AsyncMock()
 
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "run-session-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(return_value={
-                               "positions": [{"symbol": "XLK"}],
-                               "portfolio_value": 10000.0,
-                           })):
-                    from cli.main import _run_session
-                    asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "run-session-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={
+                  "positions": [{"symbol": "XLK"}],
+                  "portfolio_value": 10000.0,
+              })),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))
 
     # If we get here without raising, the portfolio load success path ran
 
@@ -339,8 +340,8 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -362,14 +363,16 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     # Should NOT raise — KeyboardInterrupt is caught internally
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "ki-session-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})):
-                    from cli.main import _run_session
-                    asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "ki-session-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))
 
 
 def test_run_cmd_confirms_and_runs(tmp_db, monkeypatch):
@@ -429,8 +432,8 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -452,15 +455,17 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
 
     mock_session_service = AsyncMock()
 
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "exc-sess-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(side_effect=RuntimeError("connection refused"))):
-                    from cli.main import _run_session
-                    # Should NOT raise — the portfolio exception is caught internally
-                    asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "exc-sess-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(side_effect=RuntimeError("connection refused"))),
+    ):
+        from cli.main import _run_session
+        # Should NOT raise — the portfolio exception is caught internally
+        asyncio.run(_run_session(params))
 
 
 def test_cli_main_entrypoint_calls_app():

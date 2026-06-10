@@ -26,7 +26,7 @@ from google.adk.tools import AgentTool  # type: ignore[import]
 from agent.execution_agent import create_execution_agent
 from agent.prompts import COORDINATOR_INSTRUCTION
 from agent.risk_agents import create_risk_debate
-from models.session import SessionParams, PlanState
+from models.session import PlanState, SessionParams
 from tools.registry import ALL_COORDINATOR_TOOLS
 
 logger = logging.getLogger("agent.coordinator")
@@ -51,7 +51,7 @@ def create_coordinator(
     )
     execution_tool = AgentTool(agent=create_execution_agent())
 
-    from config import ETF_UNIVERSES, DEFAULT_ETF_UNIVERSE
+    from config import DEFAULT_ETF_UNIVERSE, ETF_UNIVERSES
     universe_symbols = ETF_UNIVERSES.get(params.universe, DEFAULT_ETF_UNIVERSE)
     symbols_str = ", ".join(universe_symbols)
 
@@ -112,6 +112,7 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
         if api_key and api_secret:
             try:
                 from alpaca.trading.client import TradingClient  # type: ignore[import]
+
                 from infra.rate_limiter import acquire_alpaca_trading
                 await acquire_alpaca_trading()
                 client = TradingClient(api_key=api_key, secret_key=api_secret, paper=True)
@@ -165,6 +166,7 @@ def build_app(params: SessionParams) -> Any:
     Caller must await session_service.create_session(...) before run_async().
     """
     import uuid
+
     from google.adk.runners import Runner  # type: ignore[import]
     from google.adk.sessions import InMemorySessionService  # type: ignore[import]
 

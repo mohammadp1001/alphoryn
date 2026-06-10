@@ -25,7 +25,7 @@ def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return db
 
 
-def _insert_session(conn: "sqlite3.Connection", session_id: str) -> None:
+def _insert_session(conn: sqlite3.Connection, session_id: str) -> None:
     conn.execute(
         "INSERT INTO sessions (id, started_at, strategy, mode) VALUES (?, ?, ?, ?)",
         (session_id, datetime.utcnow().isoformat(), "MOMENTUM", "SEMI_AUTO"),
@@ -290,8 +290,7 @@ def test_connect_rollback_reraises_exception(tmp_db: Path) -> None:
     """_connect must rollback and re-raise the exception."""
     from db.schema import _connect
 
-    with pytest.raises(RuntimeError, match="deliberate"):
-        with _connect(tmp_db) as conn:
-            # Any valid SQL statement first, then raise
-            conn.execute("SELECT 1")
-            raise RuntimeError("deliberate")
+    with pytest.raises(RuntimeError, match="deliberate"), _connect(tmp_db) as conn:
+        # Any valid SQL statement first, then raise
+        conn.execute("SELECT 1")
+        raise RuntimeError("deliberate")

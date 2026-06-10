@@ -5,10 +5,20 @@ import math
 
 from infra.observability import get_logger
 from tools.schemas import (
-    AtrResponse, BacktestResponse, BetaResponse, BollingerResponse,
-    CorrelationResponse, CrossoverResponse, MacdResponse, MaxDrawdownResponse,
-    MomentumResponse, RankByMomentumResponse, RsiResponse, SharpeResponse,
-    SupportResistanceResponse, TechnicalScoreResponse,
+    AtrResponse,
+    BacktestResponse,
+    BetaResponse,
+    BollingerResponse,
+    CorrelationResponse,
+    CrossoverResponse,
+    MacdResponse,
+    MaxDrawdownResponse,
+    MomentumResponse,
+    RankByMomentumResponse,
+    RsiResponse,
+    SharpeResponse,
+    SupportResistanceResponse,
+    TechnicalScoreResponse,
 )
 
 logger = get_logger("tools.analysis")
@@ -67,7 +77,6 @@ async def compute_macd(symbol: str, closes: list[float]) -> dict:
         dict with 'symbol', 'current_macd', 'current_signal', 'current_histogram'.
     """
     logger.info("compute_macd symbol=%s n_closes=%d", symbol, len(closes))
-    import numpy as np  # type: ignore[import]
 
     def ema(data: list[float], span: int) -> list[float]:
         k = 2 / (span + 1)
@@ -79,12 +88,12 @@ async def compute_macd(symbol: str, closes: list[float]) -> dict:
     arr = closes[:]
     ema12 = ema(arr, 12)
     ema26 = ema(arr, 26)
-    macd_line = [m - s for m, s in zip(ema12, ema26)]
+    macd_line = [m - s for m, s in zip(ema12, ema26, strict=False)]
 
     # signal starts after 26 bars; guard against insufficient data
     if len(macd_line) > 25:
         signal_line = ema(macd_line[25:], 9)
-        hist = [m - s for m, s in zip(macd_line[25 + 8:], signal_line[8:])]
+        hist = [m - s for m, s in zip(macd_line[25 + 8:], signal_line[8:], strict=False)]
     else:
         signal_line = []
         hist = []
@@ -301,7 +310,6 @@ async def detect_support_resistance(symbol: str, highs: list[float], lows: list[
         dict with 'symbol', 'levels', 'nearest_support', 'nearest_resistance'.
     """
     logger.info("detect_support_resistance symbol=%s n_bars=%d", symbol, len(closes))
-    import numpy as np  # type: ignore[import]
 
     price = closes[-1]
     all_levels = highs + lows
@@ -316,8 +324,8 @@ async def detect_support_resistance(symbol: str, highs: list[float], lows: list[
     levels = []
     for level in clusters:
         touch_count = sum(
-            1 for h, l in zip(highs, lows)
-            if l <= level * 1.005 and h >= level * 0.995
+            1 for hi, lo in zip(highs, lows, strict=False)
+            if lo <= level * 1.005 and hi >= level * 0.995
         )
         level_type = "resistance" if level > price else "support"
         if touch_count >= 2:
@@ -327,8 +335,8 @@ async def detect_support_resistance(symbol: str, highs: list[float], lows: list[
                 "strength": round(min(1.0, touch_count / 5), 2),
             })
 
-    support_levels = [l["price"] for l in levels if l["level_type"] == "support"]
-    resistance_levels = [l["price"] for l in levels if l["level_type"] == "resistance"]
+    support_levels = [item["price"] for item in levels if item["level_type"] == "support"]
+    resistance_levels = [item["price"] for item in levels if item["level_type"] == "resistance"]
 
     return SupportResistanceResponse(
         symbol=symbol, levels=levels[:10],
@@ -376,9 +384,9 @@ async def run_backtest(symbol: str, strategy: str, closes: list[float], volumes:
         dict with signal pattern stats: 'avg_forward_return_pct', 'win_rate_pct', 'match_count', etc.
     """
     logger.info("run_backtest symbol=%s strategy=%s n_closes=%d", symbol, strategy, len(closes))
-    from config import SIGNAL_FORWARD_RETURN_DAYS, SIGNAL_LOOKBACK_BARS
-
     import numpy as np  # type: ignore[import]
+
+    from config import SIGNAL_FORWARD_RETURN_DAYS, SIGNAL_LOOKBACK_BARS
 
     fwd = SIGNAL_FORWARD_RETURN_DAYS
     lookback = min(SIGNAL_LOOKBACK_BARS, len(closes) - fwd - 1)
@@ -528,10 +536,7 @@ async def score_technical(symbol: str, strategy: str, rsi_current: float, macd_h
     macd_score = max(-1.0, min(1.0, macd_histogram * 100))
 
     # Bollinger score: mean-reversion vs momentum
-    if strategy == "MEAN_REVERSION":
-        boll_score = (0.5 - pct_b) * 2  # positive when price near lower band
-    else:
-        boll_score = (pct_b - 0.5) * 2  # positive when price near upper band
+    boll_score = (0.5 - pct_b) * 2 if strategy == "MEAN_REVERSION" else (pct_b - 0.5) * 2
 
     weights = {"MOMENTUM": (0.35, 0.40, 0.25), "MEAN_REVERSION": (0.25, 0.25, 0.50),
                "SECTOR_ROTATION": (0.30, 0.35, 0.35)}.get(strategy, (0.33, 0.33, 0.33))

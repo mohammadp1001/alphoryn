@@ -4,11 +4,9 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 from contextlib import contextmanager
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -128,8 +126,8 @@ def test_select_shortlist_picks_top_n():
 
 def test_select_shortlist_caps_at_max_shortlist_n():
     signals = [{"symbol": f"ETF{i}", "combined_score": float(i)} for i in range(10)]
-    from tools.coordinator.tools import select_shortlist
     from config import MAX_SHORTLIST_N
+    from tools.coordinator.tools import select_shortlist
     result = asyncio.run(select_shortlist(signals, shortlist_n=99, strategy="MOMENTUM"))
 
     assert result["n"] <= MAX_SHORTLIST_N
@@ -264,10 +262,11 @@ def test_resolve_unresolved_trades_with_pending_buy_trade(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from db.schema import upsert_session, write_trade_record
-    from models.memory import TradeRecord
-    from models.enums import Strategy, MarketRegime
     from datetime import datetime
+
+    from db.schema import upsert_session, write_trade_record
+    from models.enums import MarketRegime, Strategy
+    from models.memory import TradeRecord
 
     upsert_session("sess-res-buy", "MOMENTUM", "SEMI_AUTO")
 
@@ -298,10 +297,12 @@ def test_resolve_unresolved_trades_with_pending_buy_trade(tmp_db, monkeypatch):
     mock_client_cls = MagicMock()
     mock_client_cls.return_value.get_order_by_id.return_value = mock_order
 
-    with patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()):
-        with patch("alpaca.trading.client.TradingClient", mock_client_cls):
-            from tools.coordinator.tools import resolve_unresolved_trades
-            result = asyncio.run(resolve_unresolved_trades())
+    with (
+        patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()),
+        patch("alpaca.trading.client.TradingClient", mock_client_cls),
+    ):
+        from tools.coordinator.tools import resolve_unresolved_trades
+        result = asyncio.run(resolve_unresolved_trades())
 
     assert result["resolved_count"] == 1
     assert result["failed_count"] == 0
@@ -312,10 +313,11 @@ def test_resolve_unresolved_trades_with_pending_sell_trade(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from db.schema import upsert_session, write_trade_record
-    from models.memory import TradeRecord
-    from models.enums import Strategy, MarketRegime
     from datetime import datetime
+
+    from db.schema import upsert_session, write_trade_record
+    from models.enums import MarketRegime, Strategy
+    from models.memory import TradeRecord
 
     upsert_session("sess-res-sell", "MOMENTUM", "SEMI_AUTO")
 
@@ -346,10 +348,12 @@ def test_resolve_unresolved_trades_with_pending_sell_trade(tmp_db, monkeypatch):
     mock_client_cls = MagicMock()
     mock_client_cls.return_value.get_order_by_id.return_value = mock_order
 
-    with patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()):
-        with patch("alpaca.trading.client.TradingClient", mock_client_cls):
-            from tools.coordinator.tools import resolve_unresolved_trades
-            result = asyncio.run(resolve_unresolved_trades())
+    with (
+        patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()),
+        patch("alpaca.trading.client.TradingClient", mock_client_cls),
+    ):
+        from tools.coordinator.tools import resolve_unresolved_trades
+        result = asyncio.run(resolve_unresolved_trades())
 
     assert result["resolved_count"] == 1
 
@@ -359,10 +363,11 @@ def test_resolve_unresolved_trades_no_fill_price(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from db.schema import upsert_session, write_trade_record
-    from models.memory import TradeRecord
-    from models.enums import Strategy, MarketRegime
     from datetime import datetime
+
+    from db.schema import upsert_session, write_trade_record
+    from models.enums import MarketRegime, Strategy
+    from models.memory import TradeRecord
 
     upsert_session("sess-res-nofill", "MOMENTUM", "SEMI_AUTO")
 
@@ -393,10 +398,12 @@ def test_resolve_unresolved_trades_no_fill_price(tmp_db, monkeypatch):
     mock_client_cls = MagicMock()
     mock_client_cls.return_value.get_order_by_id.return_value = mock_order
 
-    with patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()):
-        with patch("alpaca.trading.client.TradingClient", mock_client_cls):
-            from tools.coordinator.tools import resolve_unresolved_trades
-            result = asyncio.run(resolve_unresolved_trades())
+    with (
+        patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()),
+        patch("alpaca.trading.client.TradingClient", mock_client_cls),
+    ):
+        from tools.coordinator.tools import resolve_unresolved_trades
+        result = asyncio.run(resolve_unresolved_trades())
 
     assert result["failed_count"] == 1
     assert result["details"][0]["status"] == "unresolvable"
@@ -407,10 +414,11 @@ def test_resolve_unresolved_trades_api_exception(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from db.schema import upsert_session, write_trade_record
-    from models.memory import TradeRecord
-    from models.enums import Strategy, MarketRegime
     from datetime import datetime
+
+    from db.schema import upsert_session, write_trade_record
+    from models.enums import MarketRegime, Strategy
+    from models.memory import TradeRecord
 
     upsert_session("sess-res-exc", "MOMENTUM", "SEMI_AUTO")
 
@@ -438,10 +446,12 @@ def test_resolve_unresolved_trades_api_exception(tmp_db, monkeypatch):
     mock_client_cls = MagicMock()
     mock_client_cls.return_value.get_order_by_id.side_effect = Exception("API timeout")
 
-    with patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()):
-        with patch("alpaca.trading.client.TradingClient", mock_client_cls):
-            from tools.coordinator.tools import resolve_unresolved_trades
-            result = asyncio.run(resolve_unresolved_trades())
+    with (
+        patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()),
+        patch("alpaca.trading.client.TradingClient", mock_client_cls),
+    ):
+        from tools.coordinator.tools import resolve_unresolved_trades
+        result = asyncio.run(resolve_unresolved_trades())
 
     assert result["failed_count"] == 1
     assert result["details"][0]["status"] == "error"
@@ -488,8 +498,7 @@ def test_request_hitl_timeout_applies_action():
     from tools.coordinator.tools import request_hitl
 
     async def fake_wait_for(coro, timeout):
-        import asyncio as _asyncio
-        raise _asyncio.TimeoutError()
+        raise TimeoutError()
 
     with patch("asyncio.wait_for", side_effect=fake_wait_for):
         result = asyncio.run(request_hitl(
@@ -506,8 +515,7 @@ def test_request_hitl_timeout_abort_action():
     from tools.coordinator.tools import request_hitl
 
     async def fake_wait_for(coro, timeout):
-        import asyncio as _asyncio
-        raise _asyncio.TimeoutError()
+        raise TimeoutError()
 
     with patch("asyncio.wait_for", side_effect=fake_wait_for):
         result = asyncio.run(request_hitl(

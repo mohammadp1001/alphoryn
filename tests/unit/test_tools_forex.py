@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-
 # ── Schema tests (no I/O) ─────────────────────────────────────────────────────
 
 def test_forex_account_status_schema():
@@ -59,8 +58,8 @@ def test_forex_order_result_schema():
 
 
 def test_forex_order_result_finite_float_guards_nan():
+
     from tools.schemas import ForexOrderResult
-    import math
     result = ForexOrderResult(
         order_id="x",
         status="FILLED",
@@ -104,9 +103,9 @@ def test_forex_prices_response_schema():
 def test_forex_tools_importable():
     from tools.forex.tools import (
         get_forex_account,
+        get_forex_instruments,
         get_forex_positions,
         get_forex_prices,
-        get_forex_instruments,
     )
     assert get_forex_account is not None
     assert get_forex_positions is not None
@@ -116,11 +115,12 @@ def test_forex_tools_importable():
 
 def test_forex_tools_are_coroutines():
     import asyncio
+
     from tools.forex.tools import (
         get_forex_account,
+        get_forex_instruments,
         get_forex_positions,
         get_forex_prices,
-        get_forex_instruments,
     )
     assert asyncio.iscoroutinefunction(get_forex_account)
     assert asyncio.iscoroutinefunction(get_forex_positions)
@@ -141,6 +141,7 @@ def _make_oanda_mock(response: dict):
 
 def test_get_forex_account_returns_expected_fields(monkeypatch):
     import asyncio
+
     from tools.forex import tools as forex_module
 
     fake_resp = {
@@ -161,9 +162,11 @@ def test_get_forex_account_returns_expected_fields(monkeypatch):
     monkeypatch.setenv("OANDA_API_TOKEN", "test-token")
     monkeypatch.setenv("OANDA_ACCOUNT_ID", "001-001-9999999-001")
 
-    with patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")):
-        with patch("tools.forex.tools.acquire_oanda", return_value=None):
-            result = asyncio.run(forex_module.get_forex_account())
+    with (
+        patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")),
+        patch("tools.forex.tools.acquire_oanda", return_value=None),
+    ):
+        result = asyncio.run(forex_module.get_forex_account())
 
     assert result["account_id"] == "001-001-9999999-001"
     assert result["currency"] == "EUR"
@@ -173,6 +176,7 @@ def test_get_forex_account_returns_expected_fields(monkeypatch):
 
 def test_get_forex_positions_empty(monkeypatch):
     import asyncio
+
     from tools.forex import tools as forex_module
 
     fake_resp = {"positions": []}
@@ -181,9 +185,11 @@ def test_get_forex_positions_empty(monkeypatch):
     monkeypatch.setenv("OANDA_API_TOKEN", "test-token")
     monkeypatch.setenv("OANDA_ACCOUNT_ID", "001-001-9999999-001")
 
-    with patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")):
-        with patch("tools.forex.tools.acquire_oanda", return_value=None):
-            result = asyncio.run(forex_module.get_forex_positions())
+    with (
+        patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")),
+        patch("tools.forex.tools.acquire_oanda", return_value=None),
+    ):
+        result = asyncio.run(forex_module.get_forex_positions())
 
     assert result["positions"] == []
     assert result["account_id"] == "001-001-9999999-001"
@@ -191,6 +197,7 @@ def test_get_forex_positions_empty(monkeypatch):
 
 def test_get_forex_positions_with_long_position(monkeypatch):
     import asyncio
+
     from tools.forex import tools as forex_module
 
     fake_resp = {
@@ -208,9 +215,11 @@ def test_get_forex_positions_with_long_position(monkeypatch):
     monkeypatch.setenv("OANDA_API_TOKEN", "test-token")
     monkeypatch.setenv("OANDA_ACCOUNT_ID", "001-001-9999999-001")
 
-    with patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")):
-        with patch("tools.forex.tools.acquire_oanda", return_value=None):
-            result = asyncio.run(forex_module.get_forex_positions())
+    with (
+        patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")),
+        patch("tools.forex.tools.acquire_oanda", return_value=None),
+    ):
+        result = asyncio.run(forex_module.get_forex_positions())
 
     assert len(result["positions"]) == 1
     pos = result["positions"][0]
@@ -220,6 +229,7 @@ def test_get_forex_positions_with_long_position(monkeypatch):
 
 def test_get_forex_prices_returns_bid_ask(monkeypatch):
     import asyncio
+
     from tools.forex import tools as forex_module
 
     fake_resp = {
@@ -237,9 +247,11 @@ def test_get_forex_prices_returns_bid_ask(monkeypatch):
     monkeypatch.setenv("OANDA_API_TOKEN", "test-token")
     monkeypatch.setenv("OANDA_ACCOUNT_ID", "001-001-9999999-001")
 
-    with patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")):
-        with patch("tools.forex.tools.acquire_oanda", return_value=None):
-            result = asyncio.run(forex_module.get_forex_prices(["EUR_USD"]))
+    with (
+        patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")),
+        patch("tools.forex.tools.acquire_oanda", return_value=None),
+    ):
+        result = asyncio.run(forex_module.get_forex_prices(["EUR_USD"]))
 
     assert len(result["prices"]) == 1
     price = result["prices"][0]
@@ -250,6 +262,7 @@ def test_get_forex_prices_returns_bid_ask(monkeypatch):
 
 def test_get_forex_instruments_returns_list(monkeypatch):
     import asyncio
+
     from tools.forex import tools as forex_module
 
     fake_resp = {
@@ -273,9 +286,11 @@ def test_get_forex_instruments_returns_list(monkeypatch):
     monkeypatch.setenv("OANDA_API_TOKEN", "test-token")
     monkeypatch.setenv("OANDA_ACCOUNT_ID", "001-001-9999999-001")
 
-    with patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")):
-        with patch("tools.forex.tools.acquire_oanda", return_value=None):
-            result = asyncio.run(forex_module.get_forex_instruments())
+    with (
+        patch("tools.forex.tools._oanda_client", return_value=(mock_client, "001-001-9999999-001")),
+        patch("tools.forex.tools.acquire_oanda", return_value=None),
+    ):
+        result = asyncio.run(forex_module.get_forex_instruments())
 
     assert len(result["instruments"]) == 2
     assert result["instruments"][0]["name"] == "EUR_USD"
