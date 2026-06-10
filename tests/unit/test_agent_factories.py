@@ -1,17 +1,8 @@
-"""Unit tests for agent factory functions — create_*_agent, build_app, risk agents."""
+"""Unit tests for agent factory functions."""
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-
-
-# ── analysis_agent ────────────────────────────────────────────────────────────
-
-def test_create_analysis_agent_returns_agent():
-    from agent.analysis_agent import create_analysis_agent
-    agent = create_analysis_agent()
-    assert agent is not None
-    assert agent.name == "analysis_agent"
+from unittest.mock import MagicMock, patch
 
 
 # ── execution_agent ───────────────────────────────────────────────────────────
@@ -23,13 +14,17 @@ def test_create_execution_agent_returns_agent():
     assert agent.name == "execution_agent"
 
 
-# ── research_agent ────────────────────────────────────────────────────────────
+def test_execution_agent_is_base_agent():
+    from google.adk.agents import BaseAgent  # type: ignore[import]
+    from agent.execution_agent import create_execution_agent
+    agent = create_execution_agent()
+    assert isinstance(agent, BaseAgent)
 
-def test_create_research_agent_returns_agent():
-    from agent.research_agent import create_research_agent
-    agent = create_research_agent()
+
+def test_execution_agent_model_param_accepted():
+    from agent.execution_agent import create_execution_agent
+    agent = create_execution_agent(model="gemini-2.5-flash")
     assert agent is not None
-    assert agent.name == "research_agent"
 
 
 # ── risk_agents ───────────────────────────────────────────────────────────────
@@ -48,6 +43,31 @@ def test_create_risk_pessimist_returns_agent():
     assert agent.name == "risk_pessimist"
 
 
+def test_create_risk_optimist_default_model():
+    from agent.risk_agents import create_risk_optimist
+    agent = create_risk_optimist("cal")
+    assert agent.model == "gemini-2.5-flash"
+
+
+def test_create_risk_pessimist_default_model():
+    from agent.risk_agents import create_risk_pessimist
+    agent = create_risk_pessimist("cal")
+    assert agent.model == "gemini-2.0-flash"
+
+
+def test_risk_agents_use_different_models_by_default():
+    from agent.risk_agents import create_risk_optimist, create_risk_pessimist
+    opt = create_risk_optimist("cal")
+    pess = create_risk_pessimist("cal")
+    assert opt.model != pess.model
+
+
+def test_create_risk_optimist_custom_model():
+    from agent.risk_agents import create_risk_optimist
+    agent = create_risk_optimist("cal", model="gemini-2.5-pro")
+    assert agent.model == "gemini-2.5-pro"
+
+
 def test_create_risk_debate_returns_sequential_agent():
     from agent.risk_agents import create_risk_debate
     debate = create_risk_debate("opt cal", "pess cal")
@@ -59,6 +79,15 @@ def test_create_risk_debate_has_two_sub_agents():
     from agent.risk_agents import create_risk_debate
     debate = create_risk_debate("opt", "pess")
     assert len(debate.sub_agents) == 2
+
+
+def test_create_risk_debate_custom_models():
+    from agent.risk_agents import create_risk_debate
+    debate = create_risk_debate("opt", "pess",
+                                optimist_model="gemini-2.5-pro",
+                                pessimist_model="gemini-2.5-flash")
+    assert debate.sub_agents[0].model == "gemini-2.5-pro"
+    assert debate.sub_agents[1].model == "gemini-2.5-flash"
 
 
 # ── coordinator ───────────────────────────────────────────────────────────────
@@ -84,6 +113,51 @@ def test_create_coordinator_returns_agent():
     assert agent.name == "coordinator"
 
 
+def test_coordinator_default_model_is_pro():
+    from agent.coordinator import create_coordinator
+    from models.session import SessionParams, PlanState
+    from models.enums import Strategy, OperatingMode
+
+    params = SessionParams(
+        strategy=Strategy.MOMENTUM,
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe_days=3,
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+    )
+    plan_state = PlanState(session_id="test-session-id", params=params)
+    agent = create_coordinator(params, plan_state)
+    assert agent.model == "gemini-2.5-pro"
+
+
+def test_coordinator_does_not_have_execution_tools():
+    """Coordinator tool list must not include any execution__* tools."""
+    from agent.coordinator import create_coordinator
+    from models.session import SessionParams, PlanState
+    from models.enums import Strategy, OperatingMode
+
+    params = SessionParams(
+        strategy=Strategy.MOMENTUM,
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe_days=3,
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+    )
+    plan_state = PlanState(session_id="test-session-id", params=params)
+    agent = create_coordinator(params, plan_state)
+
+    tool_names = [
+        getattr(t, "name", None) or getattr(getattr(t, "func", None), "__name__", "")
+        for t in agent.tools
+    ]
+    execution_tools = [n for n in tool_names if n.startswith("execution__")]
+    assert execution_tools == [], f"Coordinator has execution tools: {execution_tools}"
+
+
 def test_build_app_returns_runner_tuple():
     from agent.coordinator import build_app
     from models.session import SessionParams
@@ -105,31 +179,3 @@ def test_build_app_returns_runner_tuple():
     assert len(session_id) > 0
     assert plan_state is not None
     assert session_service is not None
-
-
-def test_session_init_callback_sets_flag():
-    """_session_init_callback should mark session as initialised."""
-    from agent.coordinator import _session_init_callback
-    from unittest.mock import MagicMock
-
-    mock_context = MagicMock()
-    mock_context.state = {}  # empty state dict
-
-    with patch("db.schema.init_db"):
-        asyncio.run(_session_init_callback(mock_context))
-
-    assert mock_context.state["session_initialised"] is True
-
-
-def test_session_init_callback_skips_reinitialisation():
-    """Second call should not call init_db again."""
-    from agent.coordinator import _session_init_callback
-
-    mock_context = MagicMock()
-    mock_context.state = {"session_initialised": True}  # already initialised
-
-    with patch("db.schema.init_db") as mock_init:
-        asyncio.run(_session_init_callback(mock_context))
-
-    # init_db should not be called again
-    mock_init.assert_not_called()

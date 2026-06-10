@@ -1,0 +1,37 @@
+name: DEFENSIVE
+description: >
+  Capital preservation strategy for CRISIS or HIGH_VOL regimes. Rotates into
+  safe-haven assets (short-duration bonds, gold, cash-equivalent ETFs, low-beta
+  equities). Accepts low returns in exchange for low drawdown. This strategy is
+  the automatic fallback when MOMENTUM, MEAN_REVERSION, and SECTOR_ROTATION all
+  fail to find candidates above their minimum score threshold.
+
+preferred_regimes:
+  - CRISIS
+  - HIGH_VOL
+  - BEAR_TREND
+
+avoid_regimes: []
+
+asset_classes:
+  - etf
+
+entry_rules:
+  - Beta below 0.5 relative to SPY
+  - Positive or near-zero 20-day return
+  - Low ATR relative to universe average
+  - combined_score >= 0.2 for shortlist inclusion (lower bar, preserving capital)
+
+exit_rules:
+  - VIX drops below 20 (crisis over)
+  - Regime shifts to BULL_TREND or LOW_VOL_RANGE
+  - Stop-loss: 1× ATR below entry
+
+order_type: limit
+position_sizing:
+  default_buying_power_pct: 0.06
+  max_portfolio_pct: 0.12
+
+scoring_weights:
+  technical_score: 0.5
+  momentum_score: 0.5

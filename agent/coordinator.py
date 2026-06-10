@@ -1,21 +1,21 @@
 """
-Coordinator agent — top-level orchestrator for the decision cycle.
+Coordinator agent — top-level orchestrator for the trading decision cycle.
 
-Architecture:
-  Coordinator (Agent with AgentTool subagents)
-    ├── AgentTool(research_agent)   — market regime detection
-    ├── AgentTool(analysis_agent)   — technical signal screening
-    ├── AgentTool(risk_debate)      — SequentialAgent: optimist → pessimist
-    └── AgentTool(execution_agent)  — order placement (credentials injected)
+Architecture (flattened):
+  Coordinator (LlmAgent — Gemini 2.5 Pro)
+    ├── ALL_COORDINATOR_TOOLS  (market/analysis/research/memory/coordinator/strategy)
+    ├── AgentTool(risk_debate) — SequentialAgent: optimist → pessimist
+    └── AgentTool(execution_agent) — BaseAgent: deterministic order routing
 
-The coordinator also holds all memory.* and coordinator.* FunctionTools.
+The coordinator directly calls all data/analysis tools and accumulates results in
+session.state before invoking the risk debate. Execution tools are NEVER on the
+coordinator; it writes state["pending_order"] and delegates to the execution AgentTool.
 
-Factory pattern is required: calling create_coordinator() each time avoids the
-"agent already has a parent" ADK error when running multiple sessions.
+Factory pattern prevents "agent already has a parent" ADK errors across sessions.
 """
 from __future__ import annotations
 
-import json
+import logging
 import os
 from typing import Any
 
@@ -23,35 +23,39 @@ from google.adk.agents import Agent  # type: ignore[import]
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
 from google.adk.tools import AgentTool  # type: ignore[import]
 
-from agent.analysis_agent import create_analysis_agent
 from agent.execution_agent import create_execution_agent
 from agent.prompts import COORDINATOR_INSTRUCTION
-from agent.research_agent import create_research_agent
 from agent.risk_agents import create_risk_debate
 from models.session import SessionParams, PlanState
 from tools.registry import ALL_COORDINATOR_TOOLS
 
+logger = logging.getLogger("agent.coordinator")
 
-def create_coordinator(params: SessionParams, plan_state: PlanState) -> Agent:
+
+def create_coordinator(
+    params: SessionParams,
+    plan_state: PlanState,
+    model: str = "gemini-2.5-pro",
+) -> Agent:
     """Factory: returns a fully wired coordinator agent for one session.
 
     Args:
         params: Session configuration (strategy, mode, limits, etc.).
         plan_state: Initial PlanState for this session.
+        model: Gemini model ID for the coordinator. Default: gemini-2.5-pro.
     """
-    # Calibration will be loaded at runtime inside the agent loop.
-    # Use placeholder text until first calibration tool call.
     _placeholder_cal = "Calibration data will be loaded at the start of each cycle."
 
-    research_tool = AgentTool(agent=create_research_agent())
-    analysis_tool = AgentTool(agent=create_analysis_agent())
-    risk_debate_tool = AgentTool(agent=create_risk_debate(_placeholder_cal, _placeholder_cal))
+    risk_debate_tool = AgentTool(
+        agent=create_risk_debate(_placeholder_cal, _placeholder_cal)
+    )
     execution_tool = AgentTool(agent=create_execution_agent())
 
     from config import ETF_UNIVERSES, DEFAULT_ETF_UNIVERSE
     universe_symbols = ETF_UNIVERSES.get(params.universe, DEFAULT_ETF_UNIVERSE)
     symbols_str = ", ".join(universe_symbols)
 
+    from config import MAX_STRATEGY_CYCLES
     instruction = COORDINATOR_INSTRUCTION.format(
         session_id=plan_state.session_id,
         strategy=params.strategy.value,
@@ -62,33 +66,96 @@ def create_coordinator(params: SessionParams, plan_state: PlanState) -> Agent:
         hitl_timeout_action=params.hitl_timeout_action,
         universe=params.universe,
         symbols=symbols_str,
+        max_strategy_cycles=MAX_STRATEGY_CYCLES,
     )
+
+    before_cb = _make_before_callback(params, plan_state)
 
     return Agent(
         name="coordinator",
-        model="gemini-2.5-pro",
+        model=model,
         instruction=instruction,
         tools=[
-            research_tool,
-            analysis_tool,
             risk_debate_tool,
             execution_tool,
             *ALL_COORDINATOR_TOOLS,
         ],
-        before_agent_callback=_session_init_callback,
-        description="Top-level coordinator; orchestrates the full ETF trading decision cycle.",
+        before_agent_callback=before_cb,
+        description=(
+            "Top-level coordinator. Researches markets, screens candidates, "
+            "debates risk, and executes approved trades."
+        ),
     )
 
 
-async def _session_init_callback(callback_context: CallbackContext) -> None:
-    """Initialise session state and resolve any outstanding unresolved trades."""
-    state = callback_context.state
+def _make_before_callback(params: SessionParams, plan_state: PlanState):
+    """Return a before_agent_callback that pre-fetches portfolio/account into state."""
 
-    # Persist the plan state into ADK session state on first invocation
-    if "session_initialised" not in state:
-        from db.schema import init_db
-        init_db()
-        state["session_initialised"] = True
+    async def before_callback(callback_context: CallbackContext) -> None:
+        from infra.rate_limiter import acquire_gemini
+        await acquire_gemini()
+
+        state = callback_context.state
+
+        # One-time session initialisation
+        if "session_initialised" not in state:
+            from db.schema import init_db
+            init_db()
+            state["session_initialised"] = True
+            state["cycle_count"] = 0
+            state["active_strategy"] = params.strategy.value
+
+        # Pre-fetch portfolio and account snapshots before each coordinator turn.
+        # Credentials must be present in env; if not, snapshots are skipped (paper mode).
+        api_key = os.environ.get("ALPACA_API_KEY", "")
+        api_secret = os.environ.get("ALPACA_API_SECRET", "")
+        if api_key and api_secret:
+            try:
+                from alpaca.trading.client import TradingClient  # type: ignore[import]
+                from infra.rate_limiter import acquire_alpaca_trading
+                await acquire_alpaca_trading()
+                client = TradingClient(api_key=api_key, secret_key=api_secret, paper=True)
+
+                account = client.get_account()
+                state["account_snapshot"] = {
+                    "buying_power": float(account.buying_power),
+                    "cash": float(account.cash),
+                    "portfolio_value": float(account.portfolio_value),
+                    "daytrade_count": int(account.daytrade_count),
+                    "pattern_day_trader": bool(account.pattern_day_trader),
+                    "status": str(account.status),
+                }
+
+                positions = client.get_all_positions()
+                state["portfolio_snapshot"] = {
+                    "positions": [
+                        {
+                            "symbol": str(p.symbol),
+                            "qty": float(p.qty),
+                            "side": str(p.side),
+                            "avg_entry_price": float(p.avg_entry_price or 0),
+                            "market_value": float(p.market_value or 0),
+                            "unrealised_pnl": float(p.unrealized_pl or 0),
+                        }
+                        for p in positions
+                    ],
+                    "position_count": len(positions),
+                }
+                logger.debug(
+                    "before_callback: portfolio fetched — %d positions, buying_power=%.2f",
+                    len(positions),
+                    float(account.buying_power),
+                )
+            except Exception as exc:
+                logger.warning("before_callback: portfolio fetch failed — %s", exc)
+                state.setdefault("account_snapshot", {})
+                state.setdefault("portfolio_snapshot", {"positions": [], "position_count": 0})
+        else:
+            logger.debug("before_callback: no Alpaca credentials — skipping portfolio prefetch")
+            state.setdefault("account_snapshot", {})
+            state.setdefault("portfolio_snapshot", {"positions": [], "position_count": 0})
+
+    return before_callback
 
 
 def build_app(params: SessionParams) -> Any:
