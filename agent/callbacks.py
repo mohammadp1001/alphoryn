@@ -28,10 +28,10 @@ def make_agent_log_callbacks(
     after_callback  — logs the structured Pydantic output written to state[output_key].
     """
 
-    async def before_callback(ctx: CallbackContext) -> None:
+    async def before_callback(callback_context: CallbackContext) -> None:
         request_text = ""
         try:
-            content = ctx.user_content
+            content = callback_context.user_content
             if content and content.parts:
                 request_text = " ".join(
                     p.text for p in content.parts if hasattr(p, "text") and p.text
@@ -40,8 +40,8 @@ def make_agent_log_callbacks(
             request_text = "<unavailable>"
         logger.info("[%s] ▶ starting | request: %s", agent_name, request_text or "<empty>")
 
-    async def after_callback(ctx: CallbackContext) -> None:
-        output = ctx.state.get(output_key)
+    async def after_callback(callback_context: CallbackContext) -> None:
+        output = callback_context.state.get(output_key)
         if output is not None:
             logger.info(
                 "[%s] ◀ completed | %s:\n%s",
