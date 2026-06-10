@@ -13,6 +13,8 @@ from config import (
     RATE_ALPACA_DATA_PER_MIN,
     RATE_ALPACA_TRADING_BURST,
     RATE_ALPACA_TRADING_PER_MIN,
+    RATE_GEMINI_BURST,
+    RATE_GEMINI_PER_MIN,
     RATE_SECRET_MANAGER_BURST,
     RATE_SECRET_MANAGER_PER_MIN,
     RATE_YFINANCE_BURST,
@@ -77,6 +79,10 @@ _CONFIGS: dict[str, dict] = {
         "rate": RATE_SECRET_MANAGER_PER_MIN / 60,
         "burst": RATE_SECRET_MANAGER_BURST,
     },
+    "gemini": {
+        "rate": RATE_GEMINI_PER_MIN / 60,
+        "burst": RATE_GEMINI_BURST,
+    },
 }
 
 
@@ -94,3 +100,7 @@ async def acquire_yfinance() -> None:
 
 async def acquire_secret_manager() -> None:
     await _get("secret_manager").acquire()
+
+
+async def acquire_gemini() -> None:
+    await _get("gemini").acquire()

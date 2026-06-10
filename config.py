@@ -83,6 +83,10 @@ RATE_YFINANCE_PER_SEC: float = 2.0
 RATE_YFINANCE_BURST: int = 3
 RATE_SECRET_MANAGER_PER_MIN: int = 10
 RATE_SECRET_MANAGER_BURST: int = 2
+# Gemini / Vertex AI — Vertex free tier is 10 RPM; paid tier is 1000 RPM.
+# Set conservatively; raise if you are on a paid quota.
+RATE_GEMINI_PER_MIN: int = 10
+RATE_GEMINI_BURST: int = 2
 
 # ── Retry ─────────────────────────────────────────────────────────────────────
 RETRY_MAX_ATTEMPTS: int = 3
