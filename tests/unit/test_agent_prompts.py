@@ -34,10 +34,12 @@ def test_risk_preamble_formats_without_key_error():
     assert "No data yet." in formatted
 
 
-def test_risk_preamble_contains_verdict_tag():
+def test_risk_preamble_contains_output_fields():
     from agent.prompts import _RISK_PREAMBLE
     formatted = _RISK_PREAMBLE.format(calibration_summary="test")
-    assert "VERDICT" in formatted
+    assert "recommended_level" in formatted
+    assert "reasoning" in formatted
+    assert "acknowledged_opposing_signal" in formatted
 
 
 def test_risk_optimist_instruction_formats_correctly():

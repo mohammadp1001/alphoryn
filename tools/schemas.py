@@ -560,3 +560,47 @@ class RecordCycleResponse(_Base):
     session_id: str
     cycle_index: int
     written: bool
+
+
+# ---------------------------------------------------------------------------
+# Agent output models (output_schema on Agent, written via output_key)
+# ---------------------------------------------------------------------------
+
+class MarketRegimeOutput(_Base):
+    regime: str
+    reasoning: str
+    vix: FiniteFloat
+    yield_10y: FiniteFloat
+    yield_2y: FiniteFloat
+    top_sector: str | None = None
+    bottom_sector: str | None = None
+    sentiment_label: str
+
+
+class RankedSignalItem(_Base):
+    symbol: str
+    rank: int
+    combined_score: FiniteFloat
+    reasoning: str
+
+
+class RankedSignalsOutput(_Base):
+    strategy: str
+    signals: list[RankedSignalItem]
+
+
+class RiskVerdictOutput(_Base):
+    recommended_level: str
+    reasoning: str
+    acknowledged_opposing_signal: str
+
+
+class OrderResultOutput(_Base):
+    order_id: str
+    status: str
+    symbol: str
+    qty: float
+    side: str
+    type: str
+    limit_price: float | None = None
+    submitted_at: str | None = None

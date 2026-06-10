@@ -4,6 +4,7 @@ from __future__ import annotations
 from google.adk.agents import Agent, SequentialAgent  # type: ignore[import]
 
 from agent.prompts import RISK_OPTIMIST_INSTRUCTION, RISK_PESSIMIST_INSTRUCTION
+from tools.schemas import RiskVerdictOutput
 
 
 def create_risk_optimist(calibration_summary: str) -> Agent:
@@ -21,6 +22,7 @@ def create_risk_optimist(calibration_summary: str) -> Agent:
         tools=[],
         description="Argues for the lowest justifiable risk level for a trade candidate.",
         output_key="optimist_verdict",
+        output_schema=RiskVerdictOutput,
     )
 
 
@@ -42,6 +44,7 @@ def create_risk_pessimist(calibration_summary: str) -> Agent:
             "Reads the optimist verdict from state key 'optimist_verdict'."
         ),
         output_key="pessimist_verdict",
+        output_schema=RiskVerdictOutput,
     )
 
 

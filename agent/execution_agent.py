@@ -5,6 +5,7 @@ from google.adk.agents import Agent  # type: ignore[import]
 
 from agent.prompts import EXECUTION_AGENT_INSTRUCTION
 from tools.registry import EXECUTION_TOOLS
+from tools.schemas import OrderResultOutput
 
 
 def create_execution_agent() -> Agent:
@@ -20,7 +21,8 @@ def create_execution_agent() -> Agent:
         tools=EXECUTION_TOOLS,
         description=(
             "Executes a single approved ETF trade on Alpaca paper account; "
-            "returns a structured OrderResult."
+            "returns a structured OrderResultOutput."
         ),
         output_key="order_result",
+        output_schema=OrderResultOutput,
     )

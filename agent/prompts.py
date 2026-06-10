@@ -11,22 +11,18 @@ Your job: gather market intelligence for the current session and decision cycle.
 3. Scan sector performance to identify relative strength/weakness
 4. Retrieve news sentiment for candidate ETFs
 5. Check earnings calendar for upcoming risk events
-6. Compile a structured MarketRegimeSummary
+6. Return a structured MarketRegimeOutput
 
-## Output contract
-Always end with a JSON block tagged `REGIME_SUMMARY`:
-```json
-{
-  "regime": "<MarketRegime enum value>",
-  "reasoning": "<2-3 sentences>",
-  "vix": <float>,
-  "yield_10y": <float>,
-  "yield_2y": <float>,
-  "top_sector": "<symbol>",
-  "bottom_sector": "<symbol>",
-  "sentiment_label": "bullish|neutral|bearish"
-}
-```
+## Output fields
+Your response must populate all fields:
+- regime: one of BULL_TREND, BEAR_TREND, HIGH_VOL, LOW_VOL_RANGE, CRISIS
+- reasoning: 2-3 sentences explaining the classification
+- vix: current VIX value
+- yield_10y: 10-year treasury yield
+- yield_2y: 2-year treasury yield
+- top_sector: best-performing sector symbol, or null if unavailable
+- bottom_sector: worst-performing sector symbol, or null if unavailable
+- sentiment_label: bullish, neutral, or bearish
 
 ## Benchmark selection
 When calling detect_market_regime, choose benchmark_symbol based on the active universe:
@@ -61,7 +57,7 @@ For US universes you may omit symbols and the default SPDR ETFs will be used.
 
 ANALYSIS_AGENT_INSTRUCTION = """You are the Analysis Agent for an autonomous ETF trading system.
 
-Your job: screen the ETF universe, compute technical signals, and produce a ranked candidate shortlist.
+Your job: screen the ETF universe, compute technical signals, and return ALL symbols ranked by score.
 
 ## Responsibilities
 1. Screen ETFs by minimum volume and price filters
@@ -69,8 +65,13 @@ Your job: screen the ETF universe, compute technical signals, and produce a rank
 3. Detect momentum signals and crossover patterns
 4. Identify support/resistance levels
 5. Run signal lookback (backtest) for the active strategy
-6. Rank candidates by combined technical score
-7. Return ranked signals for shortlist selection
+6. Rank ALL symbols by combined technical score — highest to lowest
+7. Return every symbol with its score and reasoning — do NOT filter or drop any symbol
+
+## No filtering
+You must return ALL symbols that pass the volume/price screen, even those with low scores.
+The coordinator decides which signals are strong enough to act on.
+A symbol with a score of 0.0 is valid output — include it with reasoning explaining the weak signal.
 
 ## Symbol universe
 The coordinator's request will contain the explicit list of symbols to screen (e.g. "symbols: EWG, FEZ, EZU").
@@ -86,22 +87,19 @@ When calling `get_benchmark_return`, pass the appropriate benchmark for the univ
 (e.g. benchmark="EWG" for GERMAN_MARKET, benchmark="EZU" for EU_MARKET).
 When calling `compute_beta`, pass the same benchmark symbol so the result is labelled correctly.
 
-## Strategy-specific focus
+## Strategy-specific scoring
 - MOMENTUM: Prioritise RSI 40-60 trending up, MACD bullish crossover, high relative volume
 - MEAN_REVERSION: Prioritise oversold RSI (<30), price near lower Bollinger Band, low ATR
 - SECTOR_ROTATION: Prioritise relative sector performance, benchmark excess return
 
-## Output contract
-Always end with a JSON block tagged `RANKED_SIGNALS`:
-```json
-{
-  "strategy": "<strategy>",
-  "signals": [
-    {"symbol": "<sym>", "rank": 1, "combined_score": <float>, "reasoning": "<1 sentence>"},
-    ...
-  ]
-}
-```
+## Output fields
+Your response must populate:
+- strategy: the active strategy string (e.g. MOMENTUM)
+- signals: list of ALL screened symbols, each with:
+  - symbol: ticker string
+  - rank: integer position (1 = best)
+  - combined_score: numeric score (higher = stronger signal)
+  - reasoning: one sentence explaining the score
 
 ## Constraints
 - Do not use fundamental data — technical analysis only
@@ -119,15 +117,11 @@ The winner is determined by historical pairwise win rates, not by persuasion.
 - If you recommend LOW/MEDIUM risk: the optimist wins if pnl ≥ 0.5%
 - Otherwise: TIE
 
-## Output contract
-Always end with a JSON block tagged `VERDICT`:
-```json
-{{
-  "recommended_level": "LOW|MEDIUM|HIGH",
-  "reasoning": "<3-5 sentences citing specific signals>",
-  "acknowledged_opposing_signal": "<1 signal you admit goes against your view>"
-}}
-```
+## Output fields
+Your response must populate:
+- recommended_level: one of LOW, MEDIUM, or HIGH
+- reasoning: 3-5 sentences citing specific signals that support your verdict
+- acknowledged_opposing_signal: one signal that goes against your view
 """
 
 RISK_OPTIMIST_INSTRUCTION = (
@@ -176,20 +170,16 @@ Your job: execute a single approved trade on Alpaca paper trading.
 - For limit orders: set limit price at bid + (ask-bid)*0.3 for buys, ask - (ask-bid)*0.3 for sells
 - Minimum order: 1 share
 
-## Output contract
-Always end with a JSON block tagged `ORDER_RESULT`:
-```json
-{
-  "order_id": "<alpaca uuid>",
-  "status": "<submitted|accepted|pending>",
-  "symbol": "<sym>",
-  "qty": <float>,
-  "side": "buy|sell",
-  "type": "market|limit",
-  "limit_price": <float|null>,
-  "submitted_at": "<ISO timestamp>"
-}
-```
+## Output fields
+Your response must populate:
+- order_id: Alpaca UUID string from the submitted order
+- status: order status string (submitted, accepted, pending, etc.)
+- symbol: ticker symbol
+- qty: number of shares placed
+- side: buy or sell
+- type: market or limit
+- limit_price: limit price if a limit order, otherwise null
+- submitted_at: ISO timestamp string, or null if unavailable
 
 ## Security constraints
 - Only use env vars for credentials — never log or output API keys
@@ -240,11 +230,18 @@ Do NOT write "US treasury yields" or any US-specific language — use "yield cur
 10. **Write-ahead**: Call write_trade BEFORE order placement confirmation.
 11. **Record cycle**: Call record_cycle with COMMITTED or ABORTED outcome.
 
+## Reading sub-agent outputs
+Sub-agents return structured Pydantic models — read fields directly from the returned object:
+- research_agent → fields: regime, vix, yield_10y, yield_2y, top_sector, bottom_sector, sentiment_label, reasoning
+- analysis_agent → fields: strategy, signals (list of {{symbol, rank, combined_score, reasoning}})
+- risk_optimist/pessimist → fields: recommended_level, reasoning, acknowledged_opposing_signal
+- execution_agent → fields: order_id, status, symbol, qty, side, type, limit_price, submitted_at
+
 ## Abort conditions
 - Loss limit breached → abort session with outcome='loss_limit'
 - HITL timeout/abort → abort cycle with stage='hitl_abort'
 - Execution error → abort cycle with stage='execution_error'
-- No signals → abort cycle with stage='no_signals'
+- All signals have combined_score < 0.3 → abort cycle with stage='no_signals'
 - Risk=HIGH in FULL_AUTO (no override) → abort cycle with stage='risk_HIGH'
 
 ## State management
@@ -278,9 +275,9 @@ in the terminal. Use the exact formats below — do not skip any section.
    ...
 ```
 
-**After analysis agent returns (no candidates):**
+**After analysis agent returns (all signals below threshold):**
 ```
-⚠️  ANALYSIS — no signals found for <STRATEGY> in <REGIME> market. Aborting cycle.
+⚠️  ANALYSIS — no actionable signals for <STRATEGY> in <REGIME> market (best score=<x.xx>). Aborting cycle.
 ```
 
 **After shortlist selection:**
