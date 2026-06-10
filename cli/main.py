@@ -146,6 +146,14 @@ async def _run_session(params: "SessionParams") -> None:
 
     runner, session_id, plan_state, session_service = build_app(params)
     setup_observability(session_id)
+
+    from db.schema import upsert_session
+    upsert_session(
+        session_id=session_id,
+        strategy=params.strategy.value,
+        mode=params.mode.value,
+    )
+
     await session_service.create_session(
         app_name="alphoryn",
         user_id="user",
