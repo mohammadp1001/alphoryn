@@ -77,7 +77,7 @@ def run_cmd(
     timeframe: int = typer.Option(None, "--timeframe", "-t", help="Days lookback (1|3|5)"),
     shortlist_n: int = typer.Option(None, "--shortlist-n", help="Candidate shortlist size (1-5)"),
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
-    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME"),
+    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
     """Launch a trading session (interactive wizard fills missing params)."""
