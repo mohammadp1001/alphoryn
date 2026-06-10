@@ -6,9 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from infra.retry import _backoff, _is_retryable, with_retry
 from config import RETRY_MAX_ATTEMPTS, RETRY_MAX_DELAY_SECONDS
-
+from infra.retry import _backoff, _is_retryable, with_retry
 
 # ── _is_retryable ─────────────────────────────────────────────────────────────
 
@@ -80,7 +79,7 @@ def test_backoff_attempt_1_within_bounds():
 
 
 def test_backoff_attempt_2_larger_than_1():
-    d1 = _backoff(1)
+    _backoff(1)
     d2 = _backoff(2)
     # attempt 2 base is 2x attempt 1 base; with jitter they might overlap,
     # but max is still bounded
@@ -155,9 +154,8 @@ def test_with_retry_exhausts_all_attempts_and_raises():
         call_count[0] += 1
         raise Exception("503 service unavailable")
 
-    with patch("asyncio.sleep", new=AsyncMock()):
-        with pytest.raises(Exception, match="503"):
-            asyncio.run(fn())
+    with patch("asyncio.sleep", new=AsyncMock()), pytest.raises(Exception, match="503"):
+        asyncio.run(fn())
 
     assert call_count[0] == RETRY_MAX_ATTEMPTS
 
@@ -169,10 +167,12 @@ def test_with_retry_logs_warning_on_retry(caplog):
     async def fn():
         raise Exception("500 server error")
 
-    with patch("asyncio.sleep", new=AsyncMock()):
-        with caplog.at_level(logging.WARNING, logger="infra.retry"):
-            with pytest.raises(Exception):
-                asyncio.run(fn())
+    with (
+        patch("asyncio.sleep", new=AsyncMock()),
+        caplog.at_level(logging.WARNING, logger="infra.retry"),
+        pytest.raises(Exception, match="500 server error"),
+    ):
+        asyncio.run(fn())
 
     assert any("retry" in r.message for r in caplog.records)
 
@@ -191,3 +191,11 @@ def test_with_retry_passes_kwargs_to_function():
         return f"got:{key}"
 
     assert asyncio.run(fn(key="hello")) == "got:hello"
+
+
+def test_is_retryable_resource_exhausted_grpc():
+    assert _is_retryable(Exception("RESOURCE_EXHAUSTED quota exceeded"))
+
+
+def test_is_retryable_resource_exhausted_lowercase():
+    assert _is_retryable(Exception("resource_exhausted from vertex ai"))

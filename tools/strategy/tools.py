@@ -1,7 +1,6 @@
 """strategy.* tools — read trading strategy definitions from strategies/ YAML files."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from infra.observability import get_logger

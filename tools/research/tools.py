@@ -7,10 +7,19 @@ from infra.observability import get_logger
 from infra.rate_limiter import acquire_yfinance
 from infra.retry import with_retry
 from tools.schemas import (
-    AnalystRatingsResponse, CompareEtfsResponse, DividendHistoryResponse,
-    EarningsCalendarResponse, EconomicCalendarResponse, EtfMetricsResponse,
-    ExpenseRatiosResponse, FundFlowsResponse, MacroDataResponse,
-    MarketRegimeResponse, NewsResponse, SectorPerformanceResponse, SentimentResponse,
+    AnalystRatingsResponse,
+    CompareEtfsResponse,
+    DividendHistoryResponse,
+    EarningsCalendarResponse,
+    EconomicCalendarResponse,
+    EtfMetricsResponse,
+    ExpenseRatiosResponse,
+    FundFlowsResponse,
+    MacroDataResponse,
+    MarketRegimeResponse,
+    NewsResponse,
+    SectorPerformanceResponse,
+    SentimentResponse,
 )
 
 logger = get_logger("tools.research")
@@ -183,7 +192,7 @@ async def get_fund_flows(symbol: str) -> dict:
     if len(closes) < 2:
         return FundFlowsResponse(symbol=symbol, flow_direction="neutral", estimated_flow_usd=0.0).model_dump()
 
-    flow = sum((c - closes[i - 1]) * v for i, (c, v) in enumerate(zip(closes[1:], volumes[1:]), 1))
+    flow = sum((c - closes[i - 1]) * v for i, (c, v) in enumerate(zip(closes[1:], volumes[1:], strict=False), 1))
     direction = "inflow" if flow > 0 else ("outflow" if flow < 0 else "neutral")
     return FundFlowsResponse(
         symbol=symbol, flow_direction=direction, estimated_flow_usd=round(float(flow), 0),

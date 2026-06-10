@@ -34,6 +34,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "pip-audit>=2.7",
+    "flask>=3.0",
 ]
 
 [project.scripts]
@@ -64,9 +65,15 @@ source = ["."]
 omit = ["tests/*"]
 
 [tool.coverage.report]
+fail_under = 100
 omit = ["tests/*"]
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
+]
+
+[dependency-groups]
+dev = [
+    "flask>=3.1.3",
 ]

@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 
 def test_loss_limit_not_breached_when_no_loss() -> None:
     from tools.coordinator.tools import check_loss_limit

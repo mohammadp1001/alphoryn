@@ -1,8 +1,5 @@
 """Tests for the eval harness utilities — no ADK, no external APIs."""
-import json
 from pathlib import Path
-
-import pytest
 
 from evals.harness import (
     check_write_ahead_invariant,
@@ -12,7 +9,6 @@ from evals.harness import (
     validate_all_datasets,
     validate_trace_structure,
 )
-
 
 DATASETS_DIR = Path(__file__).parent.parent / "eval" / "datasets"
 

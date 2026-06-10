@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,7 +14,7 @@ def _mock_acquire():
 
 def _make_bar(ts=None, open=100.0, high=105.0, low=99.0, close=103.0, volume=1000000.0):
     b = MagicMock()
-    b.timestamp = ts or datetime(2025, 1, 1, tzinfo=timezone.utc)
+    b.timestamp = ts or datetime(2025, 1, 1, tzinfo=UTC)
     b.open = open
     b.high = high
     b.low = low
@@ -29,7 +29,7 @@ def _make_quote(bid=100.0, ask=100.05, bid_size=100.0, ask_size=200.0, ts=None):
     q.ask_price = ask
     q.bid_size = bid_size
     q.ask_size = ask_size
-    q.timestamp = ts or datetime(2025, 1, 1, tzinfo=timezone.utc)
+    q.timestamp = ts or datetime(2025, 1, 1, tzinfo=UTC)
     return q
 
 
@@ -41,10 +41,9 @@ def test_get_ohlcv_returns_correct_structure():
     mock_client = MagicMock()
     mock_client.get_stock_bars.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_ohlcv
-            result = asyncio.run(get_ohlcv("XLK", "1Day", 5))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("XLK", "1Day", 5))
 
     assert result["symbol"] == "XLK"
     assert result["timeframe"] == "1Day"
@@ -60,10 +59,9 @@ def test_get_ohlcv_symbol_not_in_response():
     mock_client = MagicMock()
     mock_client.get_stock_bars.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_ohlcv
-            result = asyncio.run(get_ohlcv("MISSING", "1Day", 10))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("MISSING", "1Day", 10))
 
     assert result["bars"] == []
 
@@ -74,10 +72,9 @@ def test_get_ohlcv_4hour_timeframe():
     mock_client = MagicMock()
     mock_client.get_stock_bars.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_ohlcv
-            result = asyncio.run(get_ohlcv("SPY", "4Hour", 1))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("SPY", "4Hour", 1))
 
     assert result["symbol"] == "SPY"
 
@@ -88,10 +85,9 @@ def test_get_ohlcv_unknown_timeframe_defaults_to_day():
     mock_client = MagicMock()
     mock_client.get_stock_bars.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_ohlcv
-            result = asyncio.run(get_ohlcv("QQQ", "WeeklyX", 1))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("QQQ", "WeeklyX", 1))
 
     assert result["symbol"] == "QQQ"
 
@@ -104,10 +100,9 @@ def test_get_quote_returns_bid_ask():
     mock_client = MagicMock()
     mock_client.get_stock_latest_quote.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_quote
-            result = asyncio.run(get_quote("XLK"))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_quote
+        result = asyncio.run(get_quote("XLK"))
 
     assert result["symbol"] == "XLK"
     assert result["bid"] == 180.0
@@ -123,10 +118,9 @@ def test_get_spread_calculates_correctly():
     mock_client = MagicMock()
     mock_client.get_stock_latest_quote.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_spread
-            result = asyncio.run(get_spread("SPY"))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_spread
+        result = asyncio.run(get_spread("SPY"))
 
     assert result["symbol"] == "SPY"
     assert abs(result["spread_abs"] - 0.10) < 0.001
@@ -139,10 +133,9 @@ def test_get_spread_zero_mid_returns_zero_pct():
     mock_client = MagicMock()
     mock_client.get_stock_latest_quote.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_spread
-            result = asyncio.run(get_spread("XYZ"))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_spread
+        result = asyncio.run(get_spread("XYZ"))
 
     assert result["spread_pct"] == 0.0
 
@@ -162,7 +155,7 @@ def test_get_order_book_returns_bids_asks():
     ob = MagicMock()
     ob.bids = [bid]
     ob.asks = [ask]
-    ob.timestamp = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    ob.timestamp = datetime(2025, 1, 1, tzinfo=UTC)
 
     mock_resp = {"XLK": ob}
     mock_client = MagicMock()
@@ -170,11 +163,13 @@ def test_get_order_book_returns_bids_asks():
 
     # Patch missing StockLatestOrderbookRequest in alpaca-py version
     mock_req_class = MagicMock()
-    with patch.object(alpaca_reqs, "StockLatestOrderbookRequest", mock_req_class, create=True):
-        with _mock_acquire():
-            with patch("tools.market.tools._data_client", return_value=mock_client):
-                from tools.market.tools import get_order_book
-                result = asyncio.run(get_order_book("XLK", depth=5))
+    with (
+        patch.object(alpaca_reqs, "StockLatestOrderbookRequest", mock_req_class, create=True),
+        _mock_acquire(),
+        patch("tools.market.tools._data_client", return_value=mock_client),
+    ):
+        from tools.market.tools import get_order_book
+        result = asyncio.run(get_order_book("XLK", depth=5))
 
     assert result["symbol"] == "XLK"
     assert len(result["bids"]) == 1
@@ -196,10 +191,9 @@ def test_screen_etfs_returns_filtered_results():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import screen_etfs
-            result = asyncio.run(screen_etfs(min_avg_volume=1_000_000, min_price=50.0))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import screen_etfs
+        result = asyncio.run(screen_etfs(min_avg_volume=1_000_000, min_price=50.0))
 
     assert "results" in result
     assert all(r["price"] >= 50.0 for r in result["results"])
@@ -216,10 +210,9 @@ def test_screen_etfs_filters_below_min_price():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import screen_etfs
-            result = asyncio.run(screen_etfs(min_avg_volume=1_000_000, min_price=100.0))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import screen_etfs
+        result = asyncio.run(screen_etfs(min_avg_volume=1_000_000, min_price=100.0))
 
     assert result["results"] == []
 
@@ -231,10 +224,9 @@ def test_screen_etfs_skips_erroring_tickers():
     mock_yf = MagicMock()
     mock_yf.Ticker.side_effect = Exception("network error")
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import screen_etfs
-            result = asyncio.run(screen_etfs(min_avg_volume=0, min_price=0.0))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import screen_etfs
+        result = asyncio.run(screen_etfs(min_avg_volume=0, min_price=0.0))
 
     assert result["results"] == []
 
@@ -251,12 +243,11 @@ def test_screen_etfs_uses_explicit_symbols():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import screen_etfs
-            result = asyncio.run(
-                screen_etfs(min_avg_volume=0, min_price=0.0, symbols=["EWG", "FEZ"])
-            )
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import screen_etfs
+        result = asyncio.run(
+            screen_etfs(min_avg_volume=0, min_price=0.0, symbols=["EWG", "FEZ"])
+        )
 
     assert [r["symbol"] for r in result["results"]] == ["EWG", "FEZ"]
 
@@ -277,10 +268,9 @@ def test_get_etf_holdings_returns_list():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import get_etf_holdings
-            result = asyncio.run(get_etf_holdings("XLK"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import get_etf_holdings
+        result = asyncio.run(get_etf_holdings("XLK"))
 
     assert result["symbol"] == "XLK"
     assert len(result["top_holdings"]) == 2
@@ -300,10 +290,9 @@ def test_get_etf_holdings_exception_returns_empty():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import get_etf_holdings
-            result = asyncio.run(get_etf_holdings("XLK"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import get_etf_holdings
+        result = asyncio.run(get_etf_holdings("XLK"))
 
     assert result["symbol"] == "XLK"
     assert result["top_holdings"] == []
@@ -341,10 +330,9 @@ def test_get_52w_range_returns_correct_fields():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import get_52w_range
-            result = asyncio.run(get_52w_range("SPY"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import get_52w_range
+        result = asyncio.run(get_52w_range("SPY"))
 
     assert result["symbol"] == "SPY"
     assert result["high_52w"] == 200.0
@@ -364,10 +352,9 @@ def test_get_52w_range_zero_high_returns_zero_pct():
     mock_yf = MagicMock()
     mock_yf.Ticker.return_value = mock_ticker
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import get_52w_range
-            result = asyncio.run(get_52w_range("ZZZ"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import get_52w_range
+        result = asyncio.run(get_52w_range("ZZZ"))
 
     assert result["pct_from_high"] == 0.0
     assert result["pct_from_low"] == 0.0
@@ -381,10 +368,9 @@ def test_get_volume_profile_empty_bars():
     mock_client = MagicMock()
     mock_client.get_stock_bars.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_volume_profile
-            result = asyncio.run(get_volume_profile("MISS", 5))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_volume_profile
+        result = asyncio.run(get_volume_profile("MISS", 5))
 
     assert result["symbol"] == "MISS"
     assert result["buckets"] == []
@@ -397,10 +383,9 @@ def test_get_volume_profile_with_bars():
     mock_client = MagicMock()
     mock_client.get_stock_bars.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_volume_profile
-            result = asyncio.run(get_volume_profile("XLK", 10))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_volume_profile
+        result = asyncio.run(get_volume_profile("XLK", 10))
 
     assert result["symbol"] == "XLK"
     assert len(result["buckets"]) > 0
@@ -423,10 +408,9 @@ def test_get_benchmark_return_empty_data():
     # Make indexing return empty df
     download_result.__getitem__ = lambda self, key: empty_df
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import get_benchmark_return
-            result = asyncio.run(get_benchmark_return("XLK", "1mo"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import get_benchmark_return
+        result = asyncio.run(get_benchmark_return("XLK", "1mo"))
 
     assert result["symbol"] == "XLK"
     assert result["benchmark"] == "SPY"
@@ -435,7 +419,6 @@ def test_get_benchmark_return_empty_data():
 
 def test_get_benchmark_return_with_data():
     import pandas as pd
-    import numpy as np
 
     dates = pd.date_range("2025-01-01", periods=5)
     data = pd.DataFrame({
@@ -450,10 +433,9 @@ def test_get_benchmark_return_with_data():
 
     mock_yf.download.return_value = download_mock
 
-    with _mock_acquire():
-        with patch.dict("sys.modules", {"yfinance": mock_yf}):
-            from tools.market.tools import get_benchmark_return
-            result = asyncio.run(get_benchmark_return("XLK", "1mo"))
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.market.tools import get_benchmark_return
+        result = asyncio.run(get_benchmark_return("XLK", "1mo"))
 
     assert result["symbol"] == "XLK"
     assert "symbol_return_pct" in result
@@ -468,10 +450,9 @@ def test_get_intraday_bars_delegates_to_get_ohlcv():
     mock_client = MagicMock()
     mock_client.get_stock_bars.return_value = mock_resp
 
-    with _mock_acquire():
-        with patch("tools.market.tools._data_client", return_value=mock_client):
-            from tools.market.tools import get_intraday_bars
-            result = asyncio.run(get_intraday_bars("SPY", "5Min"))
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_intraday_bars
+        result = asyncio.run(get_intraday_bars("SPY", "5Min"))
 
     assert result["symbol"] == "SPY"
     assert result["timeframe"] == "5Min"
@@ -497,20 +478,221 @@ def test_get_market_status_with_api_key(monkeypatch):
 
     clock = MagicMock()
     clock.is_open = True
-    clock.next_open = datetime(2025, 1, 2, 9, 30, tzinfo=timezone.utc)
-    clock.next_close = datetime(2025, 1, 2, 16, 0, tzinfo=timezone.utc)
+    clock.next_open = datetime(2025, 1, 2, 9, 30, tzinfo=UTC)
+    clock.next_close = datetime(2025, 1, 2, 16, 0, tzinfo=UTC)
 
     mock_client_cls = MagicMock()
     mock_client_cls.return_value.get_clock.return_value = clock
 
-    with _mock_acquire():
-        with patch("alpaca.trading.client.TradingClient", mock_client_cls):
-            from tools.market.tools import get_market_status
-            result = asyncio.run(get_market_status())
+    with _mock_acquire(), patch("alpaca.trading.client.TradingClient", mock_client_cls):
+        from tools.market.tools import get_market_status
+        result = asyncio.run(get_market_status())
 
     assert result["is_open"] is True
     assert result["next_open"] is not None
     assert result["next_close"] is not None
+
+
+# ── _data_client factory ──────────────────────────────────────────────────────
+
+# ── get_ohlcv yfinance fallback ───────────────────────────────────────────────
+
+def test_get_ohlcv_yfinance_fallback_single_level_bars():
+    """Lines 85-121: when IEX returns empty, yfinance is used (single-level DataFrame)."""
+    import pandas as pd
+
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {}  # empty → fallback
+
+    ts = datetime(2025, 1, 2, tzinfo=UTC)
+    hist = pd.DataFrame(
+        {"Open": [100.0], "High": [105.0], "Low": [99.0], "Close": [103.0], "Volume": [1e6]},
+        index=pd.DatetimeIndex([ts]),
+    )
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._data_client", return_value=mock_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("EWG", "1Day", 1))
+
+    assert result["symbol"] == "EWG"
+    assert len(result["bars"]) == 1
+    assert result["bars"][0]["close"] == pytest.approx(103.0)
+
+
+def test_get_ohlcv_yfinance_fallback_multiindex_columns():
+    """Lines 105-106: yfinance MultiIndex columns are flattened."""
+    import pandas as pd
+
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {}
+
+    ts = datetime(2025, 1, 2, tzinfo=UTC)
+    cols = pd.MultiIndex.from_tuples([
+        ("Open", "XLK"), ("High", "XLK"), ("Low", "XLK"), ("Close", "XLK"), ("Volume", "XLK"),
+    ])
+    hist = pd.DataFrame(
+        [[100.0, 105.0, 99.0, 103.0, 1e6]],
+        index=pd.DatetimeIndex([ts]),
+        columns=cols,
+    )
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._data_client", return_value=mock_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("XLK", "1Day", 1))
+
+    assert len(result["bars"]) == 1
+    assert result["bars"][0]["close"] == pytest.approx(103.0)
+
+
+def test_get_ohlcv_yfinance_fallback_medium_bars():
+    """Lines 94-95 (3mo period): bars=20 → days_needed=40 → 3mo period."""
+    import pandas as pd
+
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {}
+
+    ts = datetime(2025, 1, 2, tzinfo=UTC)
+    hist = pd.DataFrame(
+        {"Open": [100.0], "High": [105.0], "Low": [99.0], "Close": [103.0], "Volume": [1e6]},
+        index=pd.DatetimeIndex([ts]),
+    )
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._data_client", return_value=mock_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("EWG", "1Day", 20))
+
+    mock_yf.download.assert_called_once()
+    _, call_kwargs = mock_yf.download.call_args
+    assert call_kwargs.get("period") == "3mo" or mock_yf.download.call_args[0][1] == "3mo"
+
+
+def test_get_ohlcv_yfinance_fallback_large_bars():
+    """Lines 96-97 (1y period): bars=50 → days_needed=100 → 1y period."""
+    import pandas as pd
+
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {}
+
+    ts = datetime(2025, 1, 2, tzinfo=UTC)
+    hist = pd.DataFrame(
+        {"Open": [100.0], "High": [105.0], "Low": [99.0], "Close": [103.0], "Volume": [1e6]},
+        index=pd.DatetimeIndex([ts]),
+    )
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._data_client", return_value=mock_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("EWG", "1Day", 50))
+
+    mock_yf.download.assert_called_once()
+    call_args = mock_yf.download.call_args
+    period_arg = call_args[1].get("period") or (call_args[0][1] if len(call_args[0]) > 1 else None)
+    assert period_arg == "1y"
+
+
+def test_get_ohlcv_yfinance_fallback_empty_returns_empty():
+    """Lines 101-102: yfinance also returns empty → bars=[]."""
+    import pandas as pd
+
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {}
+
+    empty_hist = pd.DataFrame()  # hist.empty == True
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = empty_hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._data_client", return_value=mock_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("EWG", "1Day", 5))
+
+    assert result["bars"] == []
+
+
+def test_get_ohlcv_yfinance_small_bars_uses_5d_period():
+    """Line 91: bars=1 → days_needed=2 <= 7 → '5d' period."""
+    import pandas as pd
+
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {}
+
+    empty_hist = pd.DataFrame()
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = empty_hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._data_client", return_value=mock_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        asyncio.run(get_ohlcv("EWG", "1Day", 1))
+
+    mock_yf.download.assert_called_once()
+    call_kwargs = mock_yf.download.call_args[1]
+    assert call_kwargs["period"] == "5d"
+
+
+# ── get_sector_map with custom symbols ────────────────────────────────────────
+
+def test_get_sector_map_custom_symbols(monkeypatch):
+    """Lines 292-300: custom symbols use yfinance for sector lookup."""
+    mock_ticker = MagicMock()
+    mock_ticker.info = {"sector": "Technology"}
+    mock_yf = MagicMock()
+    mock_yf.Ticker.return_value = mock_ticker
+
+    with (
+        _mock_acquire(),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_sector_map
+        result = asyncio.run(get_sector_map(["TSLA", "NVDA"]))
+
+    assert "TSLA" in result["etf_to_sector"]
+    assert result["etf_to_sector"]["TSLA"] == "Technology"
+    assert "NVDA" in result["etf_to_sector"]
+
+
+def test_get_sector_map_custom_symbols_yfinance_error(monkeypatch):
+    """Lines 297-299: yfinance error → sector = 'Unknown'."""
+    mock_yf = MagicMock()
+    mock_yf.Ticker.side_effect = Exception("network error")
+
+    with (
+        _mock_acquire(),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_sector_map
+        result = asyncio.run(get_sector_map(["TSLA"]))
+
+    assert result["etf_to_sector"]["TSLA"] == "Unknown"
 
 
 # ── _data_client factory ──────────────────────────────────────────────────────
@@ -529,6 +711,7 @@ def test_data_client_factory_returns_instance(monkeypatch):
         "alpaca.data": mock_data_mod,
     }):
         import importlib
+
         import tools.market.tools as market_tools
         importlib.reload(market_tools)
         result = market_tools._data_client()

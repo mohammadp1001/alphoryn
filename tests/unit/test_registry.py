@@ -1,9 +1,6 @@
 """Unit tests for tools.registry — FunctionTool wrapping and namespace conventions."""
 from __future__ import annotations
 
-import pytest
-
-
 # ── Import registry ───────────────────────────────────────────────────────────
 
 def test_registry_imports_without_error():
@@ -76,6 +73,7 @@ def test_all_coordinator_tools_includes_forex():
 
 def test_market_tools_are_function_tools():
     from google.adk.tools import FunctionTool  # type: ignore[import]
+
     from tools.registry import MARKET_TOOLS
     for tool in MARKET_TOOLS:
         assert isinstance(tool, FunctionTool)
@@ -83,6 +81,7 @@ def test_market_tools_are_function_tools():
 
 def test_execution_tools_are_function_tools():
     from google.adk.tools import FunctionTool  # type: ignore[import]
+
     from tools.registry import EXECUTION_TOOLS
     for tool in EXECUTION_TOOLS:
         assert isinstance(tool, FunctionTool)
@@ -90,6 +89,7 @@ def test_execution_tools_are_function_tools():
 
 def test_memory_tools_are_function_tools():
     from google.adk.tools import FunctionTool  # type: ignore[import]
+
     from tools.registry import MEMORY_TOOLS
     for tool in MEMORY_TOOLS:
         assert isinstance(tool, FunctionTool)
@@ -97,6 +97,7 @@ def test_memory_tools_are_function_tools():
 
 def test_coordinator_tools_are_function_tools():
     from google.adk.tools import FunctionTool  # type: ignore[import]
+
     from tools.registry import COORDINATOR_TOOLS
     for tool in COORDINATOR_TOOLS:
         assert isinstance(tool, FunctionTool)

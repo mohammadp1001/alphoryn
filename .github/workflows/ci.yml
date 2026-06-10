@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "feat/**", "fix/**"]
+    branches: [main, "feat/**", "fix/**", "chore/**"]
   pull_request:
     branches: [main]
 
@@ -35,7 +35,7 @@ jobs:
 
       - name: Mypy type check
         run: mypy . --ignore-missing-imports
-        continue-on-error: true  # type errors are advisory until coverage improves
+        continue-on-error: true  # advisory until type stubs are complete
 
   test:
     name: Unit & integration tests
@@ -55,14 +55,15 @@ jobs:
         run: pip install uv
 
       - name: Install deps
-        run: uv pip install --system pydantic numpy pytest pytest-cov
+        run: uv pip install --system -e ".[dev]"
 
-      - name: Run unit tests
+      - name: Run tests with coverage
         run: |
           python -m pytest tests/unit/ tests/integration/ \
             -v --tb=short \
-            --cov=tools --cov=db --cov=infra --cov=models \
-            --cov-report=xml --cov-report=term-missing
+            --cov=agent --cov=tools --cov=db --cov=infra --cov=models --cov=cli --cov=evals \
+            --cov-report=xml --cov-report=term-missing \
+            --cov-fail-under=100
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -90,8 +91,12 @@ jobs:
     steps:
       - name: Check required jobs
         run: |
+          if [ "${{ needs.lint-and-type.result }}" != "success" ]; then
+            echo "Lint/type-check failed — fix ruff errors before merging"
+            exit 1
+          fi
           if [ "${{ needs.test.result }}" != "success" ]; then
-            echo "Tests failed"
+            echo "Tests or coverage gate failed — all tests must pass at 100% coverage"
             exit 1
           fi
           echo "All required checks passed"

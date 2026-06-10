@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── get_secret ────────────────────────────────────────────────────────────────
 
 def test_get_secret_raises_if_no_project(monkeypatch):
@@ -41,12 +40,15 @@ def test_get_secret_success(monkeypatch):
     mock_sm = MagicMock()
     mock_sm.SecretManagerServiceClient.return_value = mock_client
 
-    with patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)):
-        with patch("infra.secrets.acquire_secret_manager", new=AsyncMock()):
-            import importlib
-            import infra.secrets as secrets_mod
-            importlib.reload(secrets_mod)
-            result = asyncio.run(secrets_mod.get_secret("alpaca-api-key"))
+    with (
+        patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)),
+        patch("infra.secrets.acquire_secret_manager", new=AsyncMock()),
+    ):
+        import importlib
+
+        import infra.secrets as secrets_mod
+        importlib.reload(secrets_mod)
+        result = asyncio.run(secrets_mod.get_secret("alpaca-api-key"))
 
     assert result == "super-secret-value"
     mock_client.access_secret_version.assert_called_once()
@@ -71,12 +73,15 @@ def test_get_secret_uses_correct_resource_name(monkeypatch):
     mock_sm = MagicMock()
     mock_sm.SecretManagerServiceClient.return_value = mock_client
 
-    with patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)):
-        with patch("infra.secrets.acquire_secret_manager", new=AsyncMock()):
-            import importlib
-            import infra.secrets as secrets_mod
-            importlib.reload(secrets_mod)
-            asyncio.run(secrets_mod.get_secret("my-secret", version="3"))
+    with (
+        patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)),
+        patch("infra.secrets.acquire_secret_manager", new=AsyncMock()),
+    ):
+        import importlib
+
+        import infra.secrets as secrets_mod
+        importlib.reload(secrets_mod)
+        asyncio.run(secrets_mod.get_secret("my-secret", version="3"))
 
     assert captured["name"] == "projects/my-project/secrets/my-secret/versions/3"
 
@@ -100,12 +105,15 @@ def test_get_secret_default_version_is_latest(monkeypatch):
     mock_sm = MagicMock()
     mock_sm.SecretManagerServiceClient.return_value = mock_client
 
-    with patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)):
-        with patch("infra.secrets.acquire_secret_manager", new=AsyncMock()):
-            import importlib
-            import infra.secrets as secrets_mod
-            importlib.reload(secrets_mod)
-            asyncio.run(secrets_mod.get_secret("my-secret"))
+    with (
+        patch.dict(sys.modules, _mock_secret_manager_modules(mock_sm)),
+        patch("infra.secrets.acquire_secret_manager", new=AsyncMock()),
+    ):
+        import importlib
+
+        import infra.secrets as secrets_mod
+        importlib.reload(secrets_mod)
+        asyncio.run(secrets_mod.get_secret("my-secret"))
 
     assert captured["name"].endswith("/versions/latest")
 
@@ -138,3 +146,30 @@ def test_get_alpaca_credentials_returns_correct_order():
     assert calls[1] == ALPACA_API_SECRET_SECRET
     assert key == f"value-{ALPACA_API_KEY_SECRET}"
     assert secret == f"value-{ALPACA_API_SECRET_SECRET}"
+
+
+# ── get_oanda_credentials ────────────────────────────────────────────────────
+
+def test_get_oanda_credentials_returns_tuple():
+    with patch("infra.secrets.get_secret", new=AsyncMock(side_effect=["oanda-token", "oanda-account"])):
+        from infra.secrets import get_oanda_credentials
+        result = asyncio.run(get_oanda_credentials())
+
+    assert result[0] == "oanda-token"
+    assert result[1] == "oanda-account"
+
+
+def test_get_oanda_credentials_calls_correct_secrets():
+    calls = []
+
+    async def mock_get_secret(secret_id, version="latest"):
+        calls.append(secret_id)
+        return f"value-{secret_id}"
+
+    with patch("infra.secrets.get_secret", new=mock_get_secret):
+        from infra.secrets import get_oanda_credentials
+        asyncio.run(get_oanda_credentials())
+
+    from config import OANDA_ACCOUNT_ID_SECRET, OANDA_API_TOKEN_SECRET
+    assert OANDA_API_TOKEN_SECRET in calls
+    assert OANDA_ACCOUNT_ID_SECRET in calls

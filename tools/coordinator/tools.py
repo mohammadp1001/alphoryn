@@ -61,7 +61,7 @@ async def request_hitl(
             )
             action = "confirm" if user_input == "confirm" else "abort"
             source = "human"
-        except asyncio.TimeoutError:
+        except TimeoutError:
             action = timeout_action
             source = "timeout"
             print(f"\n[HITL] Timeout — applying '{action}'")
@@ -123,7 +123,7 @@ async def select_shortlist(
         "select_shortlist n_signals=%d shortlist_n=%d min_score=%s strategy=%s",
         len(ranked_signals), shortlist_n, min_score, strategy,
     )
-    from config import MAX_SHORTLIST_N, DEFAULT_MIN_SHORTLIST_SCORE
+    from config import DEFAULT_MIN_SHORTLIST_SCORE, MAX_SHORTLIST_N
 
     effective_min = min_score if min_score is not None else DEFAULT_MIN_SHORTLIST_SCORE
     n = min(shortlist_n, MAX_SHORTLIST_N)
@@ -166,10 +166,11 @@ async def synthesise_risk(
         dict with 'risk_level', 'risk_score', 'debate_winner', 'synthesis_reasoning'.
     """
     logger.info("synthesise_risk opt=%s pess=%s opt_win_rate=%s pess_win_rate=%s", optimist_level, pessimist_level, opt_win_rate, pess_win_rate)
-    from models.enums import RiskLevel, DebateWinner
-    from models.risk import AgentVerdict
-    from config import (PESSIMIST_OVERRIDE_WIN_RATE, RISK_HIGH_THRESHOLD, RISK_LOW_THRESHOLD,
-                        DEBATE_TIE_THRESHOLD_PCT)
+    from config import (
+        PESSIMIST_OVERRIDE_WIN_RATE,
+        RISK_HIGH_THRESHOLD,
+        RISK_LOW_THRESHOLD,
+    )
 
     level_map = {"LOW": 0.5, "MEDIUM": 1.0, "HIGH": 1.5}
     opt_num = level_map.get(optimist_level, 1.0)
@@ -197,7 +198,6 @@ async def synthesise_risk(
     if pessimist_level == "HIGH":
         debate_winner = "pessimist"
     elif optimist_level != "HIGH" and score >= RISK_LOW_THRESHOLD:
-        pnl_threshold = DEBATE_TIE_THRESHOLD_PCT / 100
         debate_winner = "optimist" if score <= RISK_LOW_THRESHOLD + 0.3 else "tie"
     else:
         debate_winner = "tie"
@@ -222,6 +222,7 @@ async def resolve_unresolved_trades() -> dict:
     """
     logger.info("resolve_unresolved_trades")
     import os
+
     from db.schema import get_unresolved_trades, resolve_outcome
 
     unresolved = get_unresolved_trades()
@@ -229,6 +230,7 @@ async def resolve_unresolved_trades() -> dict:
         return {"resolved_count": 0, "failed_count": 0, "details": []}
 
     from alpaca.trading.client import TradingClient  # type: ignore[import]
+
     from infra.rate_limiter import acquire_alpaca_trading
 
     client = TradingClient(

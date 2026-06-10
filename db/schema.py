@@ -5,14 +5,14 @@ Single connection helper — this is a single-user CLI, no connection pooling ne
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Generator
 
 from config import DB_PATH, DEBATE_TIE_THRESHOLD_PCT
 from models.enums import CycleOutcome, DebateWinner, MarketRegime, Strategy
-from models.memory import AgentPairwise, CalibrationContext, CycleRecord, TradeRecord, UpdateResult
+from models.memory import CalibrationContext, CycleRecord, TradeRecord, UpdateResult
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -355,7 +355,7 @@ def _update_pairwise(
         else:
             delta = {"optimist": (0, 1, 0), "pessimist": (1, 0, 0)}[agent]
 
-        w, l, t = delta
+        w, loss, t = delta
         conn.execute(
             """
             INSERT INTO agent_pairwise (agent, market_regime, strategy, wins, losses, ties, last_updated)
@@ -366,7 +366,7 @@ def _update_pairwise(
                 ties = ties + excluded.ties,
                 last_updated = excluded.last_updated
             """,
-            (agent, market_regime, strategy, w, l, t, now),
+            (agent, market_regime, strategy, w, loss, t, now),
         )
 
 

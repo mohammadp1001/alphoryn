@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 DATASETS_DIR = Path(__file__).parent.parent / "tests" / "eval" / "datasets"
 EVAL_CONFIG = Path(__file__).parent.parent / "tests" / "eval" / "eval_config.yaml"
 

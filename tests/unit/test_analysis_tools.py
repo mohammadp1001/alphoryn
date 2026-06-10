@@ -4,9 +4,6 @@ from __future__ import annotations
 import asyncio
 import math
 
-import pytest
-
-
 # ── RSI ───────────────────────────────────────────────────────────────────────
 
 def test_rsi_overbought() -> None:
@@ -335,10 +332,10 @@ def test_run_backtest_with_enough_data() -> None:
 
 
 def test_run_backtest_no_matches_branch() -> None:
-    from tools.analysis.tools import run_backtest
-
     # Volatile data that's unlikely to produce similar momentum patterns
     import math
+
+    from tools.analysis.tools import run_backtest
     closes = [100.0 + 20.0 * math.sin(i * 0.5) for i in range(100)]
     volumes = [1e6] * 100
     # Patch detect_momentum to return very different scores for history vs current
@@ -401,7 +398,7 @@ def test_score_technical_unknown_strategy_uses_default_weights() -> None:
 def test_run_backtest_guarantees_no_matches_branch() -> None:
     """Line 399: guarantee the no-matches return path by mocking detect_momentum."""
     import asyncio
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
 
     from tools.analysis.tools import run_backtest
 

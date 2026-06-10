@@ -4,8 +4,6 @@ from __future__ import annotations
 import asyncio
 import time
 
-import pytest
-
 
 def test_token_bucket_acquire_does_not_block_within_burst() -> None:
     from infra.rate_limiter import TokenBucket
@@ -49,3 +47,15 @@ def test_acquire_yfinance_callable() -> None:
     from infra.rate_limiter import acquire_yfinance
 
     asyncio.run(acquire_yfinance())
+
+
+def test_acquire_gemini_callable() -> None:
+    from infra.rate_limiter import acquire_gemini
+
+    asyncio.run(acquire_gemini())
+
+
+def test_acquire_oanda_callable() -> None:
+    from infra.rate_limiter import acquire_oanda
+
+    asyncio.run(acquire_oanda())

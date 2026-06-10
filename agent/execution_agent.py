@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from google.adk.agents import BaseAgent  # type: ignore[import]
 from google.adk.agents.invocation_context import InvocationContext  # type: ignore[import]
 from google.adk.events import Event, EventActions  # type: ignore[import]
 
-from tools.schemas import PendingOrder, OrderResultOutput
+from tools.schemas import OrderResultOutput, PendingOrder
 
 logger = logging.getLogger("agent.execution")
 
@@ -83,8 +83,11 @@ async def _execute_alpaca(order: PendingOrder) -> dict:
 
     try:
         from alpaca.trading.client import TradingClient  # type: ignore[import]
-        from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest  # type: ignore[import]
         from alpaca.trading.enums import OrderSide, TimeInForce  # type: ignore[import]
+        from alpaca.trading.requests import (  # type: ignore[import]
+            LimitOrderRequest,
+            MarketOrderRequest,
+        )
 
         await acquire_alpaca_trading()
         client = TradingClient(api_key=api_key, secret_key=api_secret, paper=True)
@@ -165,7 +168,7 @@ async def _execute_oanda(order: PendingOrder) -> dict:
     try:
         import oandapyV20  # type: ignore[import]
         from oandapyV20.endpoints.orders import OrderCreate  # type: ignore[import]
-        from oandapyV20.endpoints.accounts import AccountDetails  # type: ignore[import]
+
         from tools.schemas import ForexOrderResult
 
         await acquire_oanda()

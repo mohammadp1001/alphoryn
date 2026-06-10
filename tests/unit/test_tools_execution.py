@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 
 def _mock_acquire():
@@ -52,7 +50,7 @@ def _make_order(order_id="order-1", status="submitted", symbol="XLK",
     o.side.__str__ = lambda self: side
     o.filled_qty = filled_qty
     o.filled_avg_price = filled_price
-    o.submitted_at = submitted_at or datetime(2025, 1, 1, tzinfo=timezone.utc)
+    o.submitted_at = submitted_at or datetime(2025, 1, 1, tzinfo=UTC)
     o.updated_at = updated_at
     return o
 
@@ -70,10 +68,9 @@ def test_get_portfolio_returns_correct_structure(monkeypatch):
     mock_client.get_account.return_value = account
     mock_client.get_all_positions.return_value = positions
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import get_portfolio
-            result = asyncio.run(get_portfolio())
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import get_portfolio
+        result = asyncio.run(get_portfolio())
 
     assert "positions" in result
     assert len(result["positions"]) == 2
@@ -95,10 +92,9 @@ def test_get_portfolio_position_fields(monkeypatch):
     mock_client.get_account.return_value = account
     mock_client.get_all_positions.return_value = positions
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import get_portfolio
-            result = asyncio.run(get_portfolio())
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import get_portfolio
+        result = asyncio.run(get_portfolio())
 
     pos = result["positions"][0]
     assert pos["symbol"] == "QQQ"
@@ -119,10 +115,9 @@ def test_get_position_has_position(monkeypatch):
     mock_client = MagicMock()
     mock_client.get_open_position.return_value = pos
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import get_position
-            result = asyncio.run(get_position("XLE"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import get_position
+        result = asyncio.run(get_position("XLE"))
 
     assert result["has_position"] is True
     assert result["symbol"] == "XLE"
@@ -136,10 +131,9 @@ def test_get_position_no_position(monkeypatch):
     mock_client = MagicMock()
     mock_client.get_open_position.side_effect = Exception("position not found")
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import get_position
-            result = asyncio.run(get_position("NOPE"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import get_position
+        result = asyncio.run(get_position("NOPE"))
 
     assert result["has_position"] is False
     assert result["symbol"] == "NOPE"
@@ -156,10 +150,9 @@ def test_place_market_order_buy(monkeypatch):
     mock_client = MagicMock()
     mock_client.submit_order.return_value = order
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import place_market_order
-            result = asyncio.run(place_market_order("XLK", 10.0, "buy"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import place_market_order
+        result = asyncio.run(place_market_order("XLK", 10.0, "buy"))
 
     assert result["order_id"] == "mkt-1"
     assert result["type"] == "market"
@@ -176,10 +169,9 @@ def test_place_market_order_sell(monkeypatch):
     mock_client = MagicMock()
     mock_client.submit_order.return_value = order
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import place_market_order
-            result = asyncio.run(place_market_order("SPY", 5.0, "sell"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import place_market_order
+        result = asyncio.run(place_market_order("SPY", 5.0, "sell"))
 
     assert result["side"] == "sell"
     assert result["submitted_at"] is not None
@@ -196,10 +188,9 @@ def test_place_market_order_submitted_at_none(monkeypatch):
     mock_client = MagicMock()
     mock_client.submit_order.return_value = order
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import place_market_order
-            result = asyncio.run(place_market_order("XLK", 1.0, "buy"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import place_market_order
+        result = asyncio.run(place_market_order("XLK", 1.0, "buy"))
 
     assert result["submitted_at"] is None
 
@@ -215,10 +206,9 @@ def test_place_limit_order(monkeypatch):
     mock_client = MagicMock()
     mock_client.submit_order.return_value = order
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import place_limit_order
-            result = asyncio.run(place_limit_order("QQQ", 3.0, "buy", 399.50))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import place_limit_order
+        result = asyncio.run(place_limit_order("QQQ", 3.0, "buy", 399.50))
 
     assert result["type"] == "limit"
     assert result["limit_price"] == 399.50
@@ -234,10 +224,9 @@ def test_place_limit_order_sell(monkeypatch):
     mock_client = MagicMock()
     mock_client.submit_order.return_value = order
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import place_limit_order
-            result = asyncio.run(place_limit_order("IWM", 2.0, "sell", 210.0))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import place_limit_order
+        result = asyncio.run(place_limit_order("IWM", 2.0, "sell", 210.0))
 
     assert result["type"] == "limit"
     assert result["side"] == "sell"
@@ -252,10 +241,9 @@ def test_cancel_order_success(monkeypatch):
     mock_client = MagicMock()
     mock_client.cancel_order_by_id.return_value = None  # success
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import cancel_order
-            result = asyncio.run(cancel_order("order-999"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import cancel_order
+        result = asyncio.run(cancel_order("order-999"))
 
     assert result["cancelled"] is True
     assert result["order_id"] == "order-999"
@@ -269,10 +257,9 @@ def test_cancel_order_failure(monkeypatch):
     mock_client = MagicMock()
     mock_client.cancel_order_by_id.side_effect = Exception("order not found")
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import cancel_order
-            result = asyncio.run(cancel_order("bad-order"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import cancel_order
+        result = asyncio.run(cancel_order("bad-order"))
 
     assert result["cancelled"] is False
     assert "order not found" in result["message"]
@@ -284,7 +271,7 @@ def test_get_order_status(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    ts = datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc)
+    ts = datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
     order = _make_order(
         order_id="ord-status",
         status="filled",
@@ -296,10 +283,9 @@ def test_get_order_status(monkeypatch):
     mock_client = MagicMock()
     mock_client.get_order_by_id.return_value = order
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import get_order_status
-            result = asyncio.run(get_order_status("ord-status"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import get_order_status
+        result = asyncio.run(get_order_status("ord-status"))
 
     assert result["order_id"] == "ord-status"
     assert result["filled_qty"] == 10.0
@@ -319,10 +305,9 @@ def test_get_order_status_null_fill_fields(monkeypatch):
     mock_client = MagicMock()
     mock_client.get_order_by_id.return_value = order
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import get_order_status
-            result = asyncio.run(get_order_status("ord-new"))
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import get_order_status
+        result = asyncio.run(get_order_status("ord-new"))
 
     assert result["filled_qty"] == 0.0
     assert result["filled_avg_price"] == 0.0
@@ -347,10 +332,9 @@ def test_get_account_status(monkeypatch):
     mock_client = MagicMock()
     mock_client.get_account.return_value = account
 
-    with _mock_acquire():
-        with patch("tools.execution.tools._trading_client", return_value=mock_client):
-            from tools.execution.tools import get_account_status
-            result = asyncio.run(get_account_status())
+    with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
+        from tools.execution.tools import get_account_status
+        result = asyncio.run(get_account_status())
 
     assert result["is_paper"] is True
     assert result["buying_power"] == 3000.0
@@ -376,6 +360,7 @@ def test_trading_client_factory_returns_instance(monkeypatch):
         "alpaca.trading.client": MagicMock(TradingClient=mock_cls),
     }):
         import importlib
+
         import tools.execution.tools as exec_tools
         importlib.reload(exec_tools)
         result = exec_tools._trading_client()
@@ -386,3 +371,17 @@ def test_trading_client_factory_returns_instance(monkeypatch):
         paper=True,
     )
     assert result is mock_instance
+
+
+# ── _finite_float edge cases ──────────────────────────────────────────────────
+
+def test_finite_float_type_error_returns_none():
+    """Line 22: _finite_float([1,2,3]) → TypeError → None."""
+    from tools.schemas import _finite_float
+    assert _finite_float([1, 2, 3]) is None
+
+
+def test_finite_float_value_error_returns_none():
+    """Line 23: _finite_float('not_a_float') → ValueError → None."""
+    from tools.schemas import _finite_float
+    assert _finite_float("not_a_float") is None

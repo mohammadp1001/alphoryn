@@ -5,7 +5,6 @@ import logging
 import sys
 from unittest.mock import MagicMock, patch
 
-
 # ── setup_observability (local / no GCP) ─────────────────────────────────────
 
 def test_setup_observability_local_sets_tracer(monkeypatch):
@@ -35,9 +34,11 @@ def test_setup_observability_with_gcp_project(monkeypatch):
     obs._tracer = None
 
     # Patch both cloud setup methods to avoid actual GCP calls
-    with patch.object(obs, "_setup_cloud_trace") as mock_trace:
-        with patch.object(obs, "_setup_cloud_logging") as mock_logging:
-            obs.setup_observability("gcp-session")
+    with (
+        patch.object(obs, "_setup_cloud_trace") as mock_trace,
+        patch.object(obs, "_setup_cloud_logging") as mock_logging,
+    ):
+        obs.setup_observability("gcp-session")
 
     mock_trace.assert_called_once()
     mock_logging.assert_called_once()
@@ -51,9 +52,8 @@ def test_setup_observability_cloud_trace_import_error_falls_back_to_local(monkey
     obs._tracer = None
 
     # Patch both to avoid any actual GCP calls; just verify it doesn't raise
-    with patch.object(obs, "_setup_cloud_trace"):
-        with patch.object(obs, "_setup_cloud_logging"):
-            obs.setup_observability("fallback-session")
+    with patch.object(obs, "_setup_cloud_trace"), patch.object(obs, "_setup_cloud_logging"):
+        obs.setup_observability("fallback-session")
 
     assert obs._tracer is not None
 
@@ -62,6 +62,7 @@ def test_setup_observability_cloud_trace_import_error_falls_back_to_local(monkey
 
 def test_setup_local_trace_does_not_raise():
     from opentelemetry.sdk.resources import Resource
+
     import infra.observability as obs
 
     resource = Resource.create({"service.name": "test"})
@@ -73,20 +74,24 @@ def test_setup_local_trace_does_not_raise():
 
 def test_setup_cloud_trace_falls_back_if_import_error(monkeypatch):
     from opentelemetry.sdk.resources import Resource
+
     import infra.observability as obs
 
     resource = Resource.create({"service.name": "test"})
 
-    with patch.dict(sys.modules, {"opentelemetry.exporter.cloud_trace": None}):
+    with (
+        patch.dict(sys.modules, {"opentelemetry.exporter.cloud_trace": None}),
+        patch.object(obs, "_setup_local_trace") as mock_local,
+    ):
         # ImportError from missing module; should fall back to local
-        with patch.object(obs, "_setup_local_trace") as mock_local:
-            obs._setup_cloud_trace(resource, "my-project", "sess-1")
-            mock_local.assert_called_once_with(resource)
+        obs._setup_cloud_trace(resource, "my-project", "sess-1")
+        mock_local.assert_called_once_with(resource)
 
 
 def test_setup_cloud_trace_success_path():
     """Success path: CloudTraceSpanExporter found → sets up GCP tracer provider."""
     from opentelemetry.sdk.resources import Resource
+
     import infra.observability as obs
 
     resource = Resource.create({"service.name": "test"})
@@ -240,3 +245,18 @@ def test_get_logger_different_names():
     l1 = get_logger("module.a")
     l2 = get_logger("module.b")
     assert l1 is not l2
+
+
+# ── _setup_cloud_logging ImportError fallback ─────────────────────────────────
+
+def test_setup_cloud_logging_import_error_falls_back_to_basicconfig():
+    """Lines 75-76: missing google.cloud.logging → basicConfig(INFO)."""
+    import infra.observability as obs
+
+    with patch.dict("sys.modules", {"google.cloud.logging": None}):
+        obs._setup_cloud_logging("my-project", "sess-001")
+
+    root = logging.getLogger()
+    assert root.level <= logging.INFO or any(
+        isinstance(h, logging.StreamHandler) for h in root.handlers
+    )

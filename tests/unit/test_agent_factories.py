@@ -1,10 +1,6 @@
 """Unit tests for agent factory functions."""
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import MagicMock, patch
-
-
 # ── execution_agent ───────────────────────────────────────────────────────────
 
 def test_create_execution_agent_returns_agent():
@@ -16,6 +12,7 @@ def test_create_execution_agent_returns_agent():
 
 def test_execution_agent_is_base_agent():
     from google.adk.agents import BaseAgent  # type: ignore[import]
+
     from agent.execution_agent import create_execution_agent
     agent = create_execution_agent()
     assert isinstance(agent, BaseAgent)
@@ -94,8 +91,8 @@ def test_create_risk_debate_custom_models():
 
 def test_create_coordinator_returns_agent():
     from agent.coordinator import create_coordinator
-    from models.session import SessionParams, PlanState
-    from models.enums import Strategy, OperatingMode
+    from models.enums import OperatingMode, Strategy
+    from models.session import PlanState, SessionParams
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -115,8 +112,8 @@ def test_create_coordinator_returns_agent():
 
 def test_coordinator_default_model_is_pro():
     from agent.coordinator import create_coordinator
-    from models.session import SessionParams, PlanState
-    from models.enums import Strategy, OperatingMode
+    from models.enums import OperatingMode, Strategy
+    from models.session import PlanState, SessionParams
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -135,8 +132,8 @@ def test_coordinator_default_model_is_pro():
 def test_coordinator_does_not_have_execution_tools():
     """Coordinator tool list must not include any execution__* tools."""
     from agent.coordinator import create_coordinator
-    from models.session import SessionParams, PlanState
-    from models.enums import Strategy, OperatingMode
+    from models.enums import OperatingMode, Strategy
+    from models.session import PlanState, SessionParams
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -160,8 +157,8 @@ def test_coordinator_does_not_have_execution_tools():
 
 def test_build_app_returns_runner_tuple():
     from agent.coordinator import build_app
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.SECTOR_ROTATION,

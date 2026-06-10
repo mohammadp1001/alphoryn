@@ -3,14 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
-import tempfile
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -311,7 +307,7 @@ def test_record_cycle_empty_symbols(tmp_db, monkeypatch):
     from db.schema import upsert_session
     upsert_session("sess-10", "MOMENTUM", "SEMI_AUTO")
 
-    from tools.memory.tools import record_cycle, get_session_cycles
+    from tools.memory.tools import get_session_cycles, record_cycle
     asyncio.run(record_cycle(
         session_id="sess-10", cycle_index=0, outcome="ABORTED",
         shortlisted_symbols=[], risk_level="",

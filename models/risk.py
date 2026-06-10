@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from models.analysis import BacktestResult, RankedSignals
-from models.enums import RiskLevel, Strategy, MarketRegime
+from models.enums import MarketRegime, RiskLevel, Strategy
 from models.research import SentimentReport
 
 
@@ -63,7 +63,7 @@ class RiskAssessment(BaseModel):
         opt_win_rate: float,
         pess_win_rate: float,
         synthesis_reasoning: str,
-    ) -> "RiskAssessment":
+    ) -> RiskAssessment:
         from config import (
             PESSIMIST_OVERRIDE_WIN_RATE,
             RISK_HIGH_THRESHOLD,

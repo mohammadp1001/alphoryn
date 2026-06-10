@@ -5,16 +5,13 @@ import asyncio
 import json
 import os
 import sqlite3
-import tempfile
 from contextlib import contextmanager
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
 from cli.main import app
-
 
 runner = CliRunner()
 
@@ -153,7 +150,7 @@ def test_history_cmd_empty_db(tmp_db):
 
 
 def test_history_cmd_with_sessions(tmp_db):
-    from db.schema import upsert_session, close_session
+    from db.schema import close_session, upsert_session
     upsert_session("sess-hist-1", "MOMENTUM", "SEMI_AUTO")
     close_session("sess-hist-1", "clean", 50.0, 3)
 
@@ -223,9 +220,9 @@ def test_load_alpaca_credentials_from_secret_manager(monkeypatch):
 # ── _print_session_params (helper) ───────────────────────────────────────────
 
 def test_print_session_params_does_not_raise():
-    from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
     from cli.main import _print_session_params
+    from models.enums import OperatingMode, Strategy
+    from models.session import SessionParams
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -247,8 +244,8 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -271,15 +268,17 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
 
     mock_session_service = AsyncMock()
 
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "mock-session-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})):
-                    from cli.main import _run_session
-                    with pytest.raises(RuntimeError):
-                        asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "mock-session-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        pytest.raises(RuntimeError),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))
 
     # Credentials must be cleared
     assert os.environ.get("ALPACA_API_KEY") is None
@@ -291,8 +290,8 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -319,17 +318,19 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
 
     mock_session_service = AsyncMock()
 
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "run-session-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(return_value={
-                               "positions": [{"symbol": "XLK"}],
-                               "portfolio_value": 10000.0,
-                           })):
-                    from cli.main import _run_session
-                    asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "run-session-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={
+                  "positions": [{"symbol": "XLK"}],
+                  "portfolio_value": 10000.0,
+              })),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))
 
     # If we get here without raising, the portfolio load success path ran
 
@@ -339,8 +340,8 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -362,14 +363,16 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     # Should NOT raise — KeyboardInterrupt is caught internally
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "ki-session-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})):
-                    from cli.main import _run_session
-                    asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "ki-session-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))
 
 
 def test_run_cmd_confirms_and_runs(tmp_db, monkeypatch):
@@ -429,8 +432,8 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
+    from models.enums import OperatingMode, Strategy
     from models.session import SessionParams
-    from models.enums import Strategy, OperatingMode
 
     params = SessionParams(
         strategy=Strategy.MOMENTUM,
@@ -452,15 +455,17 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
 
     mock_session_service = AsyncMock()
 
-    with patch("agent.coordinator.build_app",
-               return_value=(mock_runner, "exc-sess-id", MagicMock(), mock_session_service)):
-        with patch("db.schema.init_db"):
-            with patch("infra.observability.setup_observability"):
-                with patch("tools.execution.tools.get_portfolio",
-                           new=AsyncMock(side_effect=RuntimeError("connection refused"))):
-                    from cli.main import _run_session
-                    # Should NOT raise — the portfolio exception is caught internally
-                    asyncio.run(_run_session(params))
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "exc-sess-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(side_effect=RuntimeError("connection refused"))),
+    ):
+        from cli.main import _run_session
+        # Should NOT raise — the portfolio exception is caught internally
+        asyncio.run(_run_session(params))
 
 
 def test_cli_main_entrypoint_calls_app():
@@ -470,3 +475,273 @@ def test_cli_main_entrypoint_calls_app():
     with patch("typer.Typer.__call__") as mock_call:
         runpy.run_module("cli.main", run_name="__main__", alter_sys=False)
     mock_call.assert_called_once()
+
+
+# ── _run_session: event type coverage ────────────────────────────────────────
+
+def _make_session_params():
+    from models.enums import OperatingMode, Strategy
+    from models.session import SessionParams
+    return SessionParams(
+        strategy=Strategy.MOMENTUM,
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe_days=3,
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+    )
+
+
+def test_run_session_empty_content_skipped(tmp_db, monkeypatch):
+    """Line 221: event with no content is skipped via continue."""
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
+
+    params = _make_session_params()
+
+    event_no_content = MagicMock()
+    event_no_content.content = None  # triggers the continue branch
+
+    event_with_text = MagicMock()
+    mock_part = MagicMock(spec=["text"])
+    mock_part.text = "Done."
+    event_with_text.content = MagicMock()
+    event_with_text.content.parts = [mock_part]
+
+    async def fake_run_async(*args, **kwargs):
+        yield event_no_content
+        yield event_with_text
+
+    mock_runner = MagicMock()
+    mock_runner.run_async = fake_run_async
+    mock_session_service = AsyncMock()
+
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "skip-sess", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))  # must not raise
+
+
+def test_run_session_function_call_event(tmp_db, monkeypatch):
+    """Lines 226-229: part with function_call renders tool invocation line."""
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
+
+    params = _make_session_params()
+
+    part_fc = MagicMock(spec=["function_call"])
+    part_fc.function_call = MagicMock()
+    part_fc.function_call.name = "market__get_ohlcv"
+    part_fc.function_call.args = {"symbol": "XLK", "bars": 20}
+
+    event = MagicMock()
+    event.content = MagicMock()
+    event.content.parts = [part_fc]
+
+    async def fake_run_async(*args, **kwargs):
+        yield event
+
+    mock_runner = MagicMock()
+    mock_runner.run_async = fake_run_async
+    mock_session_service = AsyncMock()
+
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "fc-sess", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))  # must not raise
+
+
+def test_run_session_function_response_event(tmp_db, monkeypatch):
+    """Lines 230-234: part with function_response renders summary."""
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
+
+    params = _make_session_params()
+
+    part_fr = MagicMock(spec=["function_response"])
+    part_fr.function_response = MagicMock()
+    part_fr.function_response.name = "get_portfolio"
+    part_fr.function_response.response = {
+        "positions": [{"symbol": "XLK"}],
+        "portfolio_value": 10000.0,
+        "cash_usd": 5000.0,
+    }
+
+    event = MagicMock()
+    event.content = MagicMock()
+    event.content.parts = [part_fr]
+
+    async def fake_run_async(*args, **kwargs):
+        yield event
+
+    mock_runner = MagicMock()
+    mock_runner.run_async = fake_run_async
+    mock_session_service = AsyncMock()
+
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "fr-sess", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))  # must not raise
+
+
+# ── _summarise_tool_response ──────────────────────────────────────────────────
+
+def test_summarise_empty_resp():
+    from cli.main import _summarise_tool_response
+    assert _summarise_tool_response("anything", {}) == "(empty)"
+
+
+def test_summarise_get_ohlcv_with_bars():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "symbol": "XLK",
+        "bars": [{"close": 185.0}, {"close": 186.0}],
+    }
+    result = _summarise_tool_response("get_ohlcv", resp)
+    assert "XLK" in result
+    assert "2 bars" in result
+    assert "last close" in result
+
+
+def test_summarise_get_ohlcv_zero_bars():
+    from cli.main import _summarise_tool_response
+    resp = {"symbol": "XLK", "bars": []}
+    result = _summarise_tool_response("get_ohlcv", resp)
+    assert "0 bars" in result
+
+
+def test_summarise_screen_etfs():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "results": [
+            {"symbol": "XLK"},
+            {"symbol": "XLE"},
+        ]
+    }
+    result = _summarise_tool_response("screen_etfs", resp)
+    assert "2 ETFs" in result
+    assert "XLK" in result
+
+
+def test_summarise_score_technical():
+    from cli.main import _summarise_tool_response
+    resp = {"symbol": "XLK", "score": 0.75, "signal": "buy", "regime_fit": 0.9}
+    result = _summarise_tool_response("score_technical", resp)
+    assert "XLK" in result
+    assert "0.75" in result
+
+
+def test_summarise_score_momentum():
+    from cli.main import _summarise_tool_response
+    resp = {"symbol": "SPY", "score": 0.6, "signal": "hold", "regime_fit": 0.7}
+    result = _summarise_tool_response("score_momentum", resp)
+    assert "SPY" in result
+
+
+def test_summarise_detect_market_regime():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "regime": "BULL_TREND",
+        "vix": 15.2,
+        "benchmark_symbol": "SPY",
+        "benchmark_return_20d": 3.5,
+    }
+    result = _summarise_tool_response("detect_market_regime", resp)
+    assert "BULL_TREND" in result
+    assert "15.2" in result
+
+
+def test_summarise_get_macro_data():
+    from cli.main import _summarise_tool_response
+    resp = {"vix": 18.5, "yield_10y": 4.2, "dxy": 104.3}
+    result = _summarise_tool_response("get_macro_data", resp)
+    assert "18.5" in result
+    assert "4.2" in result
+
+
+def test_summarise_get_quote():
+    from cli.main import _summarise_tool_response
+    resp = {"symbol": "XLK", "bid": 180.0, "ask": 180.05}
+    result = _summarise_tool_response("get_quote", resp)
+    assert "XLK" in result
+    assert "180.0" in result
+
+
+def test_summarise_get_calibration_with_data():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "has_data": True,
+        "opt_win_rate": 0.6,
+        "pess_win_rate": 0.4,
+        "trade_count": 10,
+    }
+    result = _summarise_tool_response("get_calibration", resp)
+    assert "60%" in result
+    assert "40%" in result
+
+
+def test_summarise_get_calibration_no_data():
+    from cli.main import _summarise_tool_response
+    resp = {"has_data": False}
+    result = _summarise_tool_response("get_calibration", resp)
+    assert "no calibration" in result
+
+
+def test_summarise_get_portfolio():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "positions": [{"symbol": "XLK"}],
+        "portfolio_value": 10000.0,
+        "cash_usd": 5000.0,
+    }
+    result = _summarise_tool_response("get_portfolio", resp)
+    assert "1 positions" in result
+    assert "10,000" in result
+
+
+def test_summarise_write_trade():
+    from cli.main import _summarise_tool_response
+    resp = {"trade_id": "t-123", "written": True, "extra": "ignored"}
+    result = _summarise_tool_response("write_trade", resp)
+    assert "t-123" in result
+
+
+def test_summarise_record_cycle():
+    from cli.main import _summarise_tool_response
+    resp = {"cycle_index": 1, "outcome": "completed"}
+    result = _summarise_tool_response("record_cycle", resp)
+    assert "1" in result
+
+
+def test_summarise_generic_fallback():
+    from cli.main import _summarise_tool_response
+    resp = {"status": "ok", "count": 5, "nested": {"ignored": True}}
+    result = _summarise_tool_response("unknown_tool", resp)
+    assert "status" in result
+    assert "ok" in result
+
+
+def test_summarise_generic_fallback_all_complex():
+    from cli.main import _summarise_tool_response
+    resp = {"nested": {"a": 1}, "list": [1, 2, 3]}
+    result = _summarise_tool_response("unknown_tool", resp)
+    assert result == "(ok)"

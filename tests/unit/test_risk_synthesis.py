@@ -1,16 +1,12 @@
 """Unit tests for ADR 0001 deterministic risk synthesis."""
 from __future__ import annotations
 
-import pytest
-
-from models.enums import DebateWinner, RiskLevel
-
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _synthesise(opt_level: str, pess_level: str, opt_win: float, pess_win: float) -> dict:
     """Call synthesise_risk tool function directly (no ADK wrapper needed)."""
     import asyncio
+
     from tools.coordinator.tools import synthesise_risk
 
     return asyncio.run(synthesise_risk(opt_level, "", pess_level, "", opt_win, pess_win))
