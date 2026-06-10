@@ -590,31 +590,31 @@ def test_get_economic_calendar_fomc_event():
 
 def test_detect_market_regime_crisis():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=35.0, yield_10y=4.5, yield_2y=5.0, spy_return_20d=-5.0))
+    result = asyncio.run(detect_market_regime(vix=35.0, yield_10y=4.5, yield_2y=5.0, benchmark_return_20d=-5.0))
     assert result["regime"] == "CRISIS"
 
 
 def test_detect_market_regime_high_vol():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=25.0, yield_10y=4.0, yield_2y=4.5, spy_return_20d=0.5))
+    result = asyncio.run(detect_market_regime(vix=25.0, yield_10y=4.0, yield_2y=4.5, benchmark_return_20d=0.5))
     assert result["regime"] == "HIGH_VOL"
 
 
 def test_detect_market_regime_bull_trend():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=12.0, yield_10y=4.0, yield_2y=4.2, spy_return_20d=3.5))
+    result = asyncio.run(detect_market_regime(vix=12.0, yield_10y=4.0, yield_2y=4.2, benchmark_return_20d=3.5))
     assert result["regime"] == "BULL_TREND"
 
 
 def test_detect_market_regime_bear_trend():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=18.0, yield_10y=4.0, yield_2y=4.2, spy_return_20d=-3.0))
+    result = asyncio.run(detect_market_regime(vix=18.0, yield_10y=4.0, yield_2y=4.2, benchmark_return_20d=-3.0))
     assert result["regime"] == "BEAR_TREND"
 
 
 def test_detect_market_regime_low_vol_range():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=14.0, yield_10y=4.0, yield_2y=4.1, spy_return_20d=1.0))
+    result = asyncio.run(detect_market_regime(vix=14.0, yield_10y=4.0, yield_2y=4.1, benchmark_return_20d=1.0))
     assert result["regime"] == "LOW_VOL_RANGE"
 
 
@@ -623,7 +623,7 @@ def test_detect_market_regime_returns_all_fields():
     result = asyncio.run(detect_market_regime(15.0, 4.0, 4.2, 2.5))
     assert "reasoning" in result
     assert "yield_curve_spread" in result
-    assert "spy_return_20d" in result
+    assert "benchmark_return_20d" in result
 
 
 # ── get_analyst_ratings ───────────────────────────────────────────────────────
