@@ -2,7 +2,7 @@
 Coordinator agent — top-level orchestrator for the trading decision cycle.
 
 Architecture (flattened):
-  Coordinator (LlmAgent — Gemini 2.5 Pro)
+  Coordinator (LlmAgent — Gemini 2.5 Flash)
     ├── ALL_COORDINATOR_TOOLS  (market/analysis/research/memory/coordinator/strategy)
     ├── AgentTool(risk_debate) — SequentialAgent: optimist → pessimist
     └── AgentTool(execution_agent) — BaseAgent: deterministic order routing

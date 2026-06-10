@@ -73,7 +73,10 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
             StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
         )
 
-    bar_list = resp.get(symbol, [])
+    try:
+        bar_list = resp[symbol]
+    except (KeyError, TypeError):
+        bar_list = []
     result = [
         {
             "timestamp": b.timestamp.isoformat(),
