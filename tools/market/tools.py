@@ -109,9 +109,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
             "low": float(row["Low"]),
             "close": float(row["Close"]),
             "volume": float(row["Volume"]),
-        }
-        for idx, row in hist.tail(bars).iterrows()
-    ]
+        })
     return OhlcvResponse(symbol=symbol, timeframe=timeframe, bars=result).model_dump()
 
 
