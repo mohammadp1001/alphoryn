@@ -10,13 +10,13 @@ from tools.schemas import RiskVerdictOutput
 
 def create_risk_optimist(
     calibration_summary: str,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-2.5-pro",
 ) -> Agent:
     """Factory: returns a fresh optimist risk agent.
 
     Args:
         calibration_summary: Pre-formatted calibration string injected into system prompt.
-        model: Gemini model ID. Default: gemini-2.5-flash.
+        model: Gemini model ID. Default: gemini-2.5-pro (strong reasoning for risk analysis).
     """
     before_cb, after_cb = make_agent_log_callbacks("risk_optimist", "optimist_verdict")
     return Agent(
@@ -36,13 +36,13 @@ def create_risk_optimist(
 
 def create_risk_pessimist(
     calibration_summary: str,
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-2.5-pro",
 ) -> Agent:
     """Factory: returns a fresh pessimist risk agent.
 
     Args:
         calibration_summary: Pre-formatted calibration string injected into system prompt.
-        model: Gemini model ID. Default: gemini-2.0-flash (intentionally different from optimist).
+        model: Gemini model ID. Default: gemini-2.5-pro (strong reasoning for risk analysis).
     """
     before_cb, after_cb = make_agent_log_callbacks("risk_pessimist", "pessimist_verdict")
     return Agent(
@@ -66,13 +66,12 @@ def create_risk_pessimist(
 def create_risk_debate(
     opt_calibration_summary: str,
     pess_calibration_summary: str,
-    optimist_model: str = "gemini-2.5-flash",
-    pessimist_model: str = "gemini-2.0-flash",
+    optimist_model: str = "gemini-2.5-pro",
+    pessimist_model: str = "gemini-2.5-pro",
 ) -> SequentialAgent:
     """Factory: returns a SequentialAgent that runs optimist then pessimist.
 
-    Models default to different Gemini variants to ensure genuine adversarial
-    diversity — the two agents reason from different base distributions.
+    Both default to gemini-2.5-pro for strong reasoning on risk decisions.
 
     The optimist writes its verdict to state['optimist_verdict'].
     The pessimist reads that and writes to state['pessimist_verdict'].
