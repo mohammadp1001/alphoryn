@@ -215,21 +215,37 @@ async def get_etf_holdings(symbol: str) -> dict:
     return {"symbol": symbol, "top_holdings": holdings[:10]}
 
 
-async def get_sector_map() -> dict:
-    """Return the ETF-to-sector mapping for the default universe.
+async def get_sector_map(symbols: list[str] | None = None) -> dict:
+    """Return the ETF-to-sector mapping for a symbol list or the default US universe.
+
+    Args:
+        symbols: Explicit list of ETF symbols to map. When omitted, uses the hardcoded
+            US sector mapping (XL* ETFs + common broad-market / commodity tickers).
 
     Returns:
         dict with 'etf_to_sector' and 'sector_to_etfs' mappings.
     """
-    logger.info("get_sector_map")
-    etf_to_sector = {
-        "XLK": "Technology", "XLE": "Energy", "XLF": "Financials",
-        "XLV": "Healthcare", "XLY": "Consumer Discretionary", "XLP": "Consumer Staples",
-        "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities",
-        "XLRE": "Real Estate", "XLC": "Communication Services",
-        "SPY": "Broad Market", "QQQ": "Broad Market", "IWM": "Broad Market",
-        "GLD": "Commodities", "TLT": "Fixed Income", "VNQ": "Real Estate",
-    }
+    logger.info("get_sector_map symbols=%s", symbols)
+    if symbols is None:
+        etf_to_sector: dict[str, str] = {
+            "XLK": "Technology", "XLE": "Energy", "XLF": "Financials",
+            "XLV": "Healthcare", "XLY": "Consumer Discretionary", "XLP": "Consumer Staples",
+            "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities",
+            "XLRE": "Real Estate", "XLC": "Communication Services",
+            "SPY": "Broad Market", "QQQ": "Broad Market", "IWM": "Broad Market",
+            "GLD": "Commodities", "TLT": "Fixed Income", "VNQ": "Real Estate",
+        }
+    else:
+        await acquire_yfinance()
+        import yfinance as yf  # type: ignore[import]
+        etf_to_sector = {}
+        for sym in symbols:
+            try:
+                sector = yf.Ticker(sym).info.get("sector") or "Unknown"
+            except Exception:
+                sector = "Unknown"
+            etf_to_sector[sym] = sector
+
     sector_to_etfs: dict[str, list[str]] = {}
     for etf, sector in etf_to_sector.items():
         sector_to_etfs.setdefault(sector, []).append(etf)
@@ -299,31 +315,37 @@ async def get_volume_profile(symbol: str, days: int) -> dict:
 
 
 @with_retry
-async def get_benchmark_return(symbol: str, period: str) -> dict:
-    """Compare symbol return against SPY benchmark for a period.
+async def get_benchmark_return(symbol: str, period: str, benchmark: str = "SPY") -> dict:
+    """Compare symbol return against a benchmark for a period.
 
     Args:
         symbol: Ticker symbol.
         period: Period string — '1mo', '3mo', '6mo', '1y'.
+        benchmark: Benchmark ticker to compare against. Defaults to 'SPY'.
+            Use 'EZU' for EU markets, 'EWG' for German market, 'EFA' for international
+            developed, 'EEM' for emerging markets, 'GLD' for commodities, 'TLT' for fixed income.
 
     Returns:
         dict with 'symbol', 'benchmark', 'period', 'symbol_return_pct', 'benchmark_return_pct', 'excess_return_pct'.
     """
-    logger.info("get_benchmark_return symbol=%s period=%s", symbol, period)
+    logger.info("get_benchmark_return symbol=%s period=%s benchmark=%s", symbol, period, benchmark)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
-    hist = yf.download([symbol, "SPY"], period=period, progress=False)["Close"]
+    tickers = [symbol] if symbol == benchmark else [symbol, benchmark]
+    hist = yf.download(tickers, period=period, progress=False)["Close"]
     if hist.empty:
-        return {"symbol": symbol, "benchmark": "SPY", "period": period,
+        return {"symbol": symbol, "benchmark": benchmark, "period": period,
                 "symbol_return_pct": 0.0, "benchmark_return_pct": 0.0, "excess_return_pct": 0.0}
     sym_ret = _safe_float(float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100))
-    spy_ret = _safe_float(float((hist["SPY"].iloc[-1] / hist["SPY"].iloc[0] - 1) * 100))
+    bench_ret = 0.0 if symbol == benchmark else _safe_float(
+        float((hist[benchmark].iloc[-1] / hist[benchmark].iloc[0] - 1) * 100)
+    )
     return {
-        "symbol": symbol, "benchmark": "SPY", "period": period,
+        "symbol": symbol, "benchmark": benchmark, "period": period,
         "symbol_return_pct": round(sym_ret, 2),
-        "benchmark_return_pct": round(spy_ret, 2),
-        "excess_return_pct": round(sym_ret - spy_ret, 2),
+        "benchmark_return_pct": round(bench_ret, 2),
+        "excess_return_pct": round(sym_ret - bench_ret, 2),
     }
 
 

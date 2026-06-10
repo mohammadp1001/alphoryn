@@ -172,24 +172,30 @@ async def compute_atr(symbol: str, highs: list[float], lows: list[float], closes
     }
 
 
-async def compute_beta(symbol: str, symbol_returns: list[float], benchmark_returns: list[float]) -> dict:
+async def compute_beta(
+    symbol: str,
+    symbol_returns: list[float],
+    benchmark_returns: list[float],
+    benchmark: str = "SPY",
+) -> dict:
     """Compute beta of a symbol against a benchmark.
 
     Args:
         symbol: Ticker symbol.
         symbol_returns: List of daily return percentages for the symbol.
         benchmark_returns: List of daily return percentages for the benchmark (same length).
+        benchmark: Ticker used as the benchmark (for display). Defaults to 'SPY'.
 
     Returns:
         dict with 'symbol', 'benchmark', 'beta', 'r_squared'.
     """
-    logger.info("compute_beta symbol=%s n_returns=%d", symbol, len(symbol_returns))
+    logger.info("compute_beta symbol=%s benchmark=%s n_returns=%d", symbol, benchmark, len(symbol_returns))
     import numpy as np  # type: ignore[import]
 
     x = np.array(benchmark_returns)
     y = np.array(symbol_returns)
     if len(x) < 2:
-        return {"symbol": symbol, "benchmark": "SPY", "beta": 1.0, "r_squared": 0.0, "period_days": len(x)}
+        return {"symbol": symbol, "benchmark": benchmark, "beta": 1.0, "r_squared": 0.0, "period_days": len(x)}
 
     cov = float(np.cov(x, y)[0][1])
     var = float(np.var(x, ddof=1))
@@ -197,7 +203,7 @@ async def compute_beta(symbol: str, symbol_returns: list[float], benchmark_retur
     corr = float(np.corrcoef(x, y)[0][1])
     return {
         "symbol": symbol,
-        "benchmark": "SPY",
+        "benchmark": benchmark,
         "beta": round(beta, 4),
         "r_squared": round(corr ** 2, 4),
         "period_days": len(x),
