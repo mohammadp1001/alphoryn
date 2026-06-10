@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import os
 
-from infra.observability import api_call_span
+from infra.observability import api_call_span, get_logger
 from infra.rate_limiter import acquire_alpaca_trading
 from infra.retry import with_retry
+
+logger = get_logger("tools.execution")
 
 
 def _trading_client():
@@ -32,6 +34,7 @@ async def get_portfolio() -> dict:
     Returns:
         dict with 'positions' (list), 'cash_usd', 'portfolio_value', 'buying_power', 'is_paper'.
     """
+    logger.info("get_portfolio")
     await acquire_alpaca_trading()
     async with api_call_span("alpaca_trading", "get_portfolio"):
         client = _trading_client()
@@ -69,6 +72,7 @@ async def get_position(symbol: str) -> dict:
     Returns:
         dict with position details or 'has_position': false if not held.
     """
+    logger.info("get_position symbol=%s", symbol)
     await acquire_alpaca_trading()
     async with api_call_span("alpaca_trading", "get_position", symbol=symbol):
         client = _trading_client()
@@ -99,6 +103,7 @@ async def place_market_order(symbol: str, qty: float, side: str) -> dict:
     Returns:
         dict with 'order_id', 'status', 'symbol', 'qty', 'side', 'type', 'submitted_at'.
     """
+    logger.info("place_market_order symbol=%s qty=%s side=%s", symbol, qty, side)
     from alpaca.trading.requests import MarketOrderRequest  # type: ignore[import]
     from alpaca.trading.enums import OrderSide, TimeInForce  # type: ignore[import]
 
@@ -139,6 +144,7 @@ async def place_limit_order(symbol: str, qty: float, side: str, limit_price: flo
     Returns:
         dict with 'order_id', 'status', 'symbol', 'qty', 'side', 'type', 'limit_price', 'submitted_at'.
     """
+    logger.info("place_limit_order symbol=%s qty=%s side=%s limit_price=%s", symbol, qty, side, limit_price)
     from alpaca.trading.requests import LimitOrderRequest  # type: ignore[import]
     from alpaca.trading.enums import OrderSide, TimeInForce  # type: ignore[import]
 
@@ -179,6 +185,7 @@ async def cancel_order(order_id: str) -> dict:
     Returns:
         dict with 'order_id', 'cancelled', 'message'.
     """
+    logger.info("cancel_order order_id=%s", order_id)
     await acquire_alpaca_trading()
     async with api_call_span("alpaca_trading", "cancel_order", order_id=order_id):
         client = _trading_client()
@@ -199,6 +206,7 @@ async def get_order_status(order_id: str) -> dict:
     Returns:
         dict with 'order_id', 'status', 'filled_qty', 'filled_avg_price', 'updated_at'.
     """
+    logger.info("get_order_status order_id=%s", order_id)
     await acquire_alpaca_trading()
     async with api_call_span("alpaca_trading", "get_order_status", order_id=order_id):
         client = _trading_client()
@@ -221,6 +229,7 @@ async def get_account_status() -> dict:
         dict with 'is_paper', 'status', 'buying_power', 'cash', 'portfolio_value',
                   'daytrade_count', 'pattern_day_trader'.
     """
+    logger.info("get_account_status")
     await acquire_alpaca_trading()
     async with api_call_span("alpaca_trading", "get_account"):
         account = _trading_client().get_account()
