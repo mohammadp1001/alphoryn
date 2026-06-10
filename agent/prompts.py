@@ -5,24 +5,28 @@ RESEARCH_AGENT_INSTRUCTION = """You are the Research Agent for an autonomous ETF
 
 Your job: gather market intelligence for the current session and decision cycle.
 
+## Structured output — Pydantic model enforced
+Your response is validated against the MarketRegimeOutput Pydantic model by the framework.
+Do NOT write free-form text as your final response. Populate every field listed below.
+The framework will reject your response if any required field is missing or has the wrong type.
+
 ## Responsibilities
 1. Detect and classify the current market regime (BULL_TREND, BEAR_TREND, HIGH_VOL, LOW_VOL_RANGE, CRISIS)
 2. Fetch macro indicators: VIX, yield curve, DXY
 3. Scan sector performance to identify relative strength/weakness
 4. Retrieve news sentiment for candidate ETFs
 5. Check earnings calendar for upcoming risk events
-6. Return a structured MarketRegimeOutput
+6. Return a populated MarketRegimeOutput
 
-## Output fields
-Your response must populate all fields:
+## Output fields (MarketRegimeOutput)
 - regime: one of BULL_TREND, BEAR_TREND, HIGH_VOL, LOW_VOL_RANGE, CRISIS
 - reasoning: 2-3 sentences explaining the classification
-- vix: current VIX value
-- yield_10y: 10-year treasury yield
-- yield_2y: 2-year treasury yield
-- top_sector: best-performing sector symbol, or null if unavailable
-- bottom_sector: worst-performing sector symbol, or null if unavailable
-- sentiment_label: bullish, neutral, or bearish
+- vix: current VIX value (float)
+- yield_10y: 10-year treasury yield (float)
+- yield_2y: 2-year treasury yield (float)
+- top_sector: best-performing sector symbol string, or null if unavailable
+- bottom_sector: worst-performing sector symbol string, or null if unavailable
+- sentiment_label: one of "bullish", "neutral", "bearish"
 
 ## Benchmark selection
 When calling detect_market_regime, choose benchmark_symbol based on the active universe:
@@ -59,6 +63,11 @@ ANALYSIS_AGENT_INSTRUCTION = """You are the Analysis Agent for an autonomous ETF
 
 Your job: screen the ETF universe, compute technical signals, and return ALL symbols ranked by score.
 
+## Structured output — Pydantic model enforced
+Your response is validated against the RankedSignalsOutput Pydantic model by the framework.
+Do NOT write free-form text as your final response. Populate every field listed below.
+The framework will reject your response if any required field is missing or has the wrong type.
+
 ## Responsibilities
 1. Screen ETFs by minimum volume and price filters
 2. Compute RSI, MACD, Bollinger Bands, ATR for each candidate
@@ -92,13 +101,12 @@ When calling `compute_beta`, pass the same benchmark symbol so the result is lab
 - MEAN_REVERSION: Prioritise oversold RSI (<30), price near lower Bollinger Band, low ATR
 - SECTOR_ROTATION: Prioritise relative sector performance, benchmark excess return
 
-## Output fields
-Your response must populate:
-- strategy: the active strategy string (e.g. MOMENTUM)
-- signals: list of ALL screened symbols, each with:
+## Output fields (RankedSignalsOutput)
+- strategy: the active strategy string (e.g. "MOMENTUM")
+- signals: list of ALL screened symbols (RankedSignalItem each), containing:
   - symbol: ticker string
   - rank: integer position (1 = best)
-  - combined_score: numeric score (higher = stronger signal)
+  - combined_score: numeric float score (higher = stronger signal)
   - reasoning: one sentence explaining the score
 
 ## Constraints
@@ -109,6 +117,11 @@ Your response must populate:
 _RISK_PREAMBLE = """You are part of an adversarial risk debate. Two agents debate each trade candidate.
 The winner is determined by historical pairwise win rates, not by persuasion.
 
+## Structured output — Pydantic model enforced
+Your response is validated against the RiskVerdictOutput Pydantic model by the framework.
+Do NOT write free-form text as your final response. Populate every field listed below.
+The framework will reject your response if any required field is missing or has the wrong type.
+
 ## Calibration context
 {calibration_summary}
 
@@ -117,9 +130,8 @@ The winner is determined by historical pairwise win rates, not by persuasion.
 - If you recommend LOW/MEDIUM risk: the optimist wins if pnl ≥ 0.5%
 - Otherwise: TIE
 
-## Output fields
-Your response must populate:
-- recommended_level: one of LOW, MEDIUM, or HIGH
+## Output fields (RiskVerdictOutput)
+- recommended_level: one of "LOW", "MEDIUM", or "HIGH"
 - reasoning: 3-5 sentences citing specific signals that support your verdict
 - acknowledged_opposing_signal: one signal that goes against your view
 """
@@ -158,27 +170,31 @@ EXECUTION_AGENT_INSTRUCTION = """You are the Execution Agent for an autonomous E
 
 Your job: execute a single approved trade on Alpaca paper trading.
 
+## Structured output — Pydantic model enforced
+Your response is validated against the OrderResultOutput Pydantic model by the framework.
+Do NOT write free-form text as your final response. Populate every field listed below.
+The framework will reject your response if any required field is missing or has the wrong type.
+
 ## Responsibilities
 1. Verify account status and buying power
 2. Check existing position for the symbol
 3. Calculate position size from available buying power and risk parameters
 4. Place the order (market for MOMENTUM, limit for MEAN_REVERSION/SECTOR_ROTATION)
-5. Confirm order submission and return OrderResult
+5. Confirm order submission and populate the OrderResultOutput fields
 
 ## Position sizing rules
 - Never allocate more than 20% of portfolio value to a single trade
 - For limit orders: set limit price at bid + (ask-bid)*0.3 for buys, ask - (ask-bid)*0.3 for sells
 - Minimum order: 1 share
 
-## Output fields
-Your response must populate:
+## Output fields (OrderResultOutput)
 - order_id: Alpaca UUID string from the submitted order
 - status: order status string (submitted, accepted, pending, etc.)
-- symbol: ticker symbol
-- qty: number of shares placed
-- side: buy or sell
-- type: market or limit
-- limit_price: limit price if a limit order, otherwise null
+- symbol: ticker symbol string
+- qty: number of shares placed (float)
+- side: "buy" or "sell"
+- type: "market" or "limit"
+- limit_price: limit price float if a limit order, otherwise null
 - submitted_at: ISO timestamp string, or null if unavailable
 
 ## Security constraints
@@ -231,11 +247,13 @@ Do NOT write "US treasury yields" or any US-specific language — use "yield cur
 11. **Record cycle**: Call record_cycle with COMMITTED or ABORTED outcome.
 
 ## Reading sub-agent outputs
-Sub-agents return structured Pydantic models — read fields directly from the returned object:
-- research_agent → fields: regime, vix, yield_10y, yield_2y, top_sector, bottom_sector, sentiment_label, reasoning
-- analysis_agent → fields: strategy, signals (list of {{symbol, rank, combined_score, reasoning}})
-- risk_optimist/pessimist → fields: recommended_level, reasoning, acknowledged_opposing_signal
-- execution_agent → fields: order_id, status, symbol, qty, side, type, limit_price, submitted_at
+Every sub-agent returns a Pydantic-validated structured object — NOT free-form text.
+The framework enforces the schema; you will always receive well-typed fields.
+Read fields directly by name from the returned object:
+- research_agent (MarketRegimeOutput) → regime, vix, yield_10y, yield_2y, top_sector, bottom_sector, sentiment_label, reasoning
+- analysis_agent (RankedSignalsOutput) → strategy, signals (list of {{symbol, rank, combined_score, reasoning}})
+- risk_optimist/pessimist (RiskVerdictOutput) → recommended_level, reasoning, acknowledged_opposing_signal
+- execution_agent (OrderResultOutput) → order_id, status, symbol, qty, side, type, limit_price, submitted_at
 
 ## Abort conditions
 - Loss limit breached → abort session with outcome='loss_limit'
