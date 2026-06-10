@@ -91,7 +91,7 @@ def test_run_cmd_dry_run_does_not_start_session():
         app,
         ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
          "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
-         "--hitl-timeout", "60", "--dry-run"],
+         "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS", "--dry-run"],
     )
     assert result.exit_code == 0
     assert "Dry run" in result.output
@@ -103,7 +103,8 @@ def test_run_cmd_dry_run_all_strategies():
             app,
             ["run", "--strategy", strategy, "--mode", "FULL_AUTO",
              "--loss-limit", "1000", "--timeframe", "1",
-             "--shortlist-n", "1", "--hitl-timeout", "30", "--dry-run"],
+             "--shortlist-n", "1", "--hitl-timeout", "30",
+             "--universe", "US_SECTOR_ETFS", "--dry-run"],
         )
         assert result.exit_code == 0, f"Strategy {strategy} failed: {result.output}"
 
@@ -114,7 +115,7 @@ def test_run_cmd_cancelled_by_user():
         app,
         ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
          "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
-         "--hitl-timeout", "60"],
+         "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
         input="n\n",  # decline to start
     )
     assert result.exit_code == 0
@@ -126,7 +127,7 @@ def test_run_cmd_wizard_fills_missing_params():
     result = runner.invoke(
         app,
         ["run", "--dry-run"],
-        input="MOMENTUM\nSEMI_AUTO\n500\n3\n2\n60\n",
+        input="MOMENTUM\nSEMI_AUTO\n500\n3\n2\n60\nUS_SECTOR_ETFS\n",
     )
     assert result.exit_code == 0
     assert "Dry run" in result.output
@@ -138,7 +139,7 @@ def test_run_cmd_full_auto_skips_hitl_prompt():
         app,
         ["run", "--strategy", "MOMENTUM", "--mode", "FULL_AUTO",
          "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
-         "--dry-run"],
+         "--universe", "US_SECTOR_ETFS", "--dry-run"],
     )
     assert result.exit_code == 0
 
@@ -384,7 +385,7 @@ def test_run_cmd_confirms_and_runs(tmp_db, monkeypatch):
             app,
             ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
              "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
-             "--hitl-timeout", "60"],
+             "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
             input="y\n",  # confirm
         )
     assert result.exit_code == 0

@@ -77,6 +77,7 @@ def run_cmd(
     timeframe: int = typer.Option(None, "--timeframe", "-t", help="Days lookback (1|3|5)"),
     shortlist_n: int = typer.Option(None, "--shortlist-n", help="Candidate shortlist size (1-5)"),
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
+    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
     """Launch a trading session (interactive wizard fills missing params)."""
@@ -114,6 +115,15 @@ def run_cmd(
     elif hitl_timeout is None:
         hitl_timeout = 60
 
+    if not universe:
+        from config import ETF_UNIVERSES
+        universe_choices = list(ETF_UNIVERSES.keys())
+        universe = Prompt.ask(
+            "Market universe",
+            choices=universe_choices,
+            default="US_SECTOR_ETFS",
+        )
+
     params = SessionParams(
         timeframe_days=timeframe,
         strategy=Strategy(strategy),
@@ -122,6 +132,7 @@ def run_cmd(
         shortlist_n=shortlist_n,
         hitl_timeout_seconds=hitl_timeout,
         hitl_timeout_action="abort",
+        universe=universe,
     )
 
     _print_session_params(params)
@@ -181,11 +192,15 @@ async def _run_session(params: "SessionParams") -> None:
         rprint(f"[yellow]Could not load portfolio: {exc}[/yellow]")
 
     # ── Main session loop ─────────────────────────────────────────────────────
+    from config import ETF_UNIVERSES
+    universe_symbols = ETF_UNIVERSES.get(params.universe, ETF_UNIVERSES["US_SECTOR_ETFS"])
     initial_message = (
         f"Start trading session {session_id}. "
         f"Strategy: {params.strategy.value}. "
         f"Mode: {params.mode.value}. "
         f"Loss limit: {params.loss_limit_eur} EUR. "
+        f"Market universe: {params.universe} — symbols: {', '.join(universe_symbols)}. "
+        f"Only consider symbols from this universe throughout the session. "
         f"Execute the decision cycle flow as per your instructions."
     )
 
@@ -208,10 +223,12 @@ async def _run_session(params: "SessionParams") -> None:
                 elif hasattr(part, "function_call") and part.function_call:
                     fc = part.function_call
                     args_preview = ", ".join(f"{k}={v!r}" for k, v in (fc.args or {}).items())
-                    rprint(f"[dim yellow]  → {fc.name}({args_preview})[/dim yellow]")
+                    rprint(f"[dim yellow]  → [{author}] {fc.name}({args_preview})[/dim yellow]")
                 elif hasattr(part, "function_response") and part.function_response:
                     fr = part.function_response
-                    rprint(f"[dim green]  ← {fr.name} returned[/dim green]")
+                    resp = fr.response or {}
+                    summary = _summarise_tool_response(fr.name, resp)
+                    rprint(f"[dim green]  ← [{author}] {fr.name}: {summary}[/dim green]")
 
     except KeyboardInterrupt:
         rprint("\n[yellow]Session interrupted by user.[/yellow]")
@@ -332,6 +349,66 @@ def status_cmd() -> None:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _summarise_tool_response(tool_name: str, resp: dict) -> str:
+    """Return a compact human-readable summary of a tool response for CLI display."""
+    import json as _json
+
+    if not resp:
+        return "(empty)"
+
+    # Tool-specific compact summaries
+    if tool_name == "get_ohlcv" and "bars" in resp:
+        bars = resp["bars"]
+        if bars:
+            last = bars[-1]
+            return f"{resp.get('symbol')} | {len(bars)} bars | last close={last.get('close')}"
+        return f"{resp.get('symbol')} | 0 bars"
+
+    if tool_name == "screen_etfs" and "results" in resp:
+        results = resp["results"]
+        syms = [r["symbol"] for r in results]
+        return f"{len(results)} ETFs passed: {', '.join(syms)}"
+
+    if tool_name in ("score_technical", "score_momentum") and "symbol" in resp:
+        return (
+            f"{resp['symbol']} | score={resp.get('score')} "
+            f"signal={resp.get('signal')} regime_fit={resp.get('regime_fit')}"
+        )
+
+    if tool_name == "detect_market_regime" and "regime" in resp:
+        return f"regime={resp['regime']} vix={resp.get('vix')} spy_20d={resp.get('spy_return_20d')}"
+
+    if tool_name == "get_macro_data":
+        return f"vix={resp.get('vix')} yield_10y={resp.get('yield_10y')} dxy={resp.get('dxy')}"
+
+    if tool_name == "get_quote" and "symbol" in resp:
+        return f"{resp['symbol']} bid={resp.get('bid')} ask={resp.get('ask')}"
+
+    if tool_name == "get_calibration":
+        return (
+            f"opt_win_rate={resp.get('opt_win_rate'):.0%} "
+            f"pess_win_rate={resp.get('pess_win_rate'):.0%} "
+            f"n={resp.get('trade_count')}"
+        ) if resp.get("has_data") else "no calibration data yet"
+
+    if tool_name == "get_portfolio":
+        return (
+            f"{len(resp.get('positions', []))} positions | "
+            f"value=${resp.get('portfolio_value', 0):,.0f} | "
+            f"cash=${resp.get('cash_usd', 0):,.0f}"
+        )
+
+    if tool_name in ("write_trade", "record_cycle"):
+        return _json.dumps({k: v for k, v in resp.items() if k in ("trade_id", "written", "cycle_index", "outcome")})
+
+    # Generic fallback: show top-level keys and scalar values only
+    parts = []
+    for k, v in resp.items():
+        if isinstance(v, (str, int, float, bool)) and len(parts) < 6:
+            parts.append(f"{k}={v!r}")
+    return ", ".join(parts) if parts else "(ok)"
+
+
 def _print_session_params(params: "SessionParams") -> None:
     table = Table(title="Session Parameters", show_header=False)
     table.add_column("", style="bold")
@@ -340,6 +417,7 @@ def _print_session_params(params: "SessionParams") -> None:
     rows = [
         ("Strategy", params.strategy.value),
         ("Mode", params.mode.value),
+        ("Universe", params.universe),
         ("Loss limit", f"€{params.loss_limit_eur:,.0f}"),
         ("Timeframe", f"{params.timeframe_days} days"),
         ("Shortlist N", str(params.shortlist_n)),

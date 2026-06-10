@@ -8,12 +8,26 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 DB_PATH = CONFIG_DIR / "algotrade.db"
 
 # ── ETF universe ─────────────────────────────────────────────────────────────
-DEFAULT_ETF_UNIVERSE: list[str] = [
-    # SPDR sector ETFs (11)
-    "XLK", "XLE", "XLF", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC",
-    # Broad market (6)
-    "SPY", "QQQ", "IWM", "GLD", "TLT", "VNQ",
-]
+ETF_UNIVERSES: dict[str, list[str]] = {
+    "US_SECTOR_ETFS": [
+        "XLK", "XLE", "XLF", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC",
+        "SPY", "QQQ", "IWM", "GLD", "TLT", "VNQ",
+    ],
+    "US_TECH_ETFS": [
+        "QQQ", "XLK", "SOXX", "ARKK", "IGV", "SKYY", "WCLD",
+    ],
+    "US_BROAD_MARKET": [
+        "SPY", "QQQ", "IWM", "DIA", "VTI", "VOO",
+    ],
+    "COMMODITIES": [
+        "GLD", "SLV", "USO", "UNG", "DBA", "PDBC",
+    ],
+    "FIXED_INCOME": [
+        "TLT", "IEF", "SHY", "HYG", "LQD", "BND",
+    ],
+}
+
+DEFAULT_ETF_UNIVERSE: list[str] = ETF_UNIVERSES["US_SECTOR_ETFS"]
 
 # ── Session defaults ──────────────────────────────────────────────────────────
 DEFAULT_SHORTLIST_N: int = 2
