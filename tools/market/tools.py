@@ -39,7 +39,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     start = end - timedelta(days=bars * 2)  # over-fetch, trim to bars
 
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
+    with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
         resp = _data_client().get_stock_bars(
             StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end)
         )
@@ -72,7 +72,7 @@ async def get_quote(symbol: str) -> dict:
     from alpaca.data.requests import StockLatestQuoteRequest  # type: ignore[import]
 
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
+    with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
         resp = _data_client().get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol))
 
     q = resp[symbol]
@@ -122,7 +122,7 @@ async def get_order_book(symbol: str, depth: int) -> dict:
     from alpaca.data.requests import StockLatestOrderbookRequest  # type: ignore[import]
 
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_order_book", symbol=symbol):
+    with api_call_span("alpaca_data", "get_order_book", symbol=symbol):
         resp = _data_client().get_stock_latest_orderbook(
             StockLatestOrderbookRequest(symbol_or_symbols=symbol)
         )

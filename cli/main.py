@@ -144,12 +144,17 @@ async def _run_session(params: "SessionParams") -> None:
 
     init_db()
 
-    runner, session_id, plan_state = build_app(params)
+    runner, session_id, plan_state, session_service = build_app(params)
     setup_observability(session_id)
+    await session_service.create_session(
+        app_name="alphoryn",
+        user_id="user",
+        session_id=session_id,
+    )
     logger = get_logger("cli.run")
 
     rprint(f"\n[bold green]Session started[/bold green] — ID: [cyan]{session_id}[/cyan]")
-    logger.info("session_start", extra={"session_id": session_id})
+    logger.info("session_start", extra={"trading_session_id": session_id})
 
     # ── Load existing Alpaca portfolio ────────────────────────────────────────
     try:
@@ -195,7 +200,7 @@ async def _run_session(params: "SessionParams") -> None:
         rprint("\n[yellow]Session interrupted by user.[/yellow]")
     except Exception as exc:
         rprint(f"[red]Session error: {exc}[/red]")
-        logger.error("session_error", extra={"session_id": session_id, "error": str(exc)})
+        logger.error("session_error", extra={"trading_session_id": session_id, "error": str(exc)})
         raise
     finally:
         # Clear credentials from environment

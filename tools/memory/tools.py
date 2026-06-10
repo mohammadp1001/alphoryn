@@ -70,7 +70,7 @@ async def write_trade(
         executed_at=datetime.utcnow(),
     )
 
-    async with db_write_span("write_trade_record"):
+    with db_write_span("trade_records", trade_id):
         write_trade_record(record)
 
     return {"trade_id": trade_id, "written": True}
@@ -88,7 +88,7 @@ async def resolve_trade(trade_id: str, actual_pnl_pct: float) -> dict:
     """
     from db.schema import resolve_outcome
 
-    async with db_write_span("resolve_outcome"):
+    with db_write_span("trade_records", trade_id):
         result = resolve_outcome(trade_id, actual_pnl_pct)
 
     winner = result.debate_winner.value if result.debate_winner else "tie"
