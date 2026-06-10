@@ -81,6 +81,7 @@ def run_cmd(
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
     universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET|CRYPTO|MIXED_MARKET"),
     allow_closed_market: bool = typer.Option(False, "--allow-closed-market", help="Proceed even when market is closed (useful for testing)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
     """Launch a trading session (interactive wizard fills missing params)."""
@@ -150,7 +151,7 @@ def run_cmd(
         rprint("[yellow]Dry run — session not started.[/yellow]")
         return
 
-    if not Confirm.ask("\nStart session?", default=True):
+    if not yes and not Confirm.ask("\nStart session?", default=True):
         rprint("[yellow]Cancelled.[/yellow]")
         return
 
