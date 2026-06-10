@@ -97,9 +97,12 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     if hasattr(hist.columns, "nlevels") and hist.columns.nlevels > 1:
         hist.columns = hist.columns.get_level_values(0)
 
-    hist = hist.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
-    result = [
-        {
+    ohlcv_cols = ["Open", "High", "Low", "Close", "Volume"]
+    hist = hist.dropna(subset=ohlcv_cols)
+
+    result = []
+    for idx, row in hist.tail(bars).iterrows():
+        result.append({
             "timestamp": idx.isoformat(),
             "open": float(row["Open"]),
             "high": float(row["High"]),
