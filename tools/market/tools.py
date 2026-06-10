@@ -93,6 +93,10 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     if hist.empty:
         return {"symbol": symbol, "timeframe": timeframe, "bars": []}
 
+    # yf.download returns MultiIndex columns ('Open', '<SYM>') even for a single symbol
+    if hasattr(hist.columns, "nlevels") and hist.columns.nlevels > 1:
+        hist.columns = hist.columns.get_level_values(0)
+
     result = []
     for idx, row in hist.tail(bars).iterrows():
         result.append({
