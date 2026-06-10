@@ -78,6 +78,8 @@ _COORD_BASE_KWARGS = dict(
     universe="US_SECTOR_ETFS",
     symbols="XLK, XLE, XLF",
     exchange_tz="America/New_York",
+    timeframe="1Day",
+    session_expires_at="2026-06-11T20:00:00",
     max_strategy_cycles=3,
 )
 

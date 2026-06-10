@@ -147,7 +147,7 @@ def _make_params():
         strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
-        timeframe_days=3,
+        timeframe="1Day",
         shortlist_n=2,
         hitl_timeout_seconds=60,
         hitl_timeout_action="abort",

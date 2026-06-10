@@ -59,3 +59,13 @@ class HITLAction(StrEnum):
     CONFIRM = "confirm"
     ABORT = "abort"
     TIMEOUT = "timeout"
+
+
+class SessionTimeframe(StrEnum):
+    MIN_30  = "30Min"
+    HOUR_1  = "1Hour"
+    HOUR_3  = "3Hour"
+    HOUR_12 = "12Hour"
+    DAY_1   = "1Day"
+    DAY_2   = "2Day"
+    DAY_5   = "5Day"

@@ -1,18 +1,28 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pydantic import BaseModel, Field
 
-from models.enums import MarketRegime, OperatingMode, SessionOutcome, Strategy
+from models.enums import MarketRegime, OperatingMode, SessionOutcome, SessionTimeframe, Strategy
 from models.execution import Portfolio
 from models.memory import CycleRecord
 from models.risk import RiskAssessment
 
+_TIMEFRAME_DURATION: dict[SessionTimeframe, timedelta] = {
+    SessionTimeframe.MIN_30:  timedelta(minutes=30),
+    SessionTimeframe.HOUR_1:  timedelta(hours=1),
+    SessionTimeframe.HOUR_3:  timedelta(hours=3),
+    SessionTimeframe.HOUR_12: timedelta(hours=12),
+    SessionTimeframe.DAY_1:   timedelta(days=1),
+    SessionTimeframe.DAY_2:   timedelta(days=2),
+    SessionTimeframe.DAY_5:   timedelta(days=5),
+}
+
 
 class SessionParams(BaseModel):
     """Set once via CLI wizard at session start."""
-    timeframe_days: int = 3             # 1 | 3 | 5 — lookback window for analysis
+    timeframe: SessionTimeframe = SessionTimeframe.DAY_1  # how long the session runs
     strategy: Strategy = Strategy.MOMENTUM
     mode: OperatingMode = OperatingMode.SEMI_AUTO
     loss_limit_eur: float = 500.0
@@ -20,6 +30,10 @@ class SessionParams(BaseModel):
     hitl_timeout_seconds: int = 60
     hitl_timeout_action: str = "abort"  # "abort" | "proceed"
     universe: str = "US_SECTOR_ETFS"   # key into config.ETF_UNIVERSES
+
+    @property
+    def duration(self) -> timedelta:
+        return _TIMEFRAME_DURATION[self.timeframe]
 
 
 class PlanState(BaseModel):
