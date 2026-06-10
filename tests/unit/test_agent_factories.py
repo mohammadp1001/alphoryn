@@ -43,20 +43,21 @@ def test_create_risk_pessimist_returns_agent():
 def test_create_risk_optimist_default_model():
     from agent.risk_agents import create_risk_optimist
     agent = create_risk_optimist("cal")
-    assert agent.model == "gemini-2.5-flash"
+    assert agent.model == "gemini-2.5-pro"
 
 
 def test_create_risk_pessimist_default_model():
     from agent.risk_agents import create_risk_pessimist
     agent = create_risk_pessimist("cal")
-    assert agent.model == "gemini-2.0-flash"
+    assert agent.model == "gemini-2.5-pro"
 
 
-def test_risk_agents_use_different_models_by_default():
+def test_risk_agents_both_use_pro_by_default():
     from agent.risk_agents import create_risk_optimist, create_risk_pessimist
     opt = create_risk_optimist("cal")
     pess = create_risk_pessimist("cal")
-    assert opt.model != pess.model
+    assert opt.model == "gemini-2.5-pro"
+    assert pess.model == "gemini-2.5-pro"
 
 
 def test_create_risk_optimist_custom_model():
