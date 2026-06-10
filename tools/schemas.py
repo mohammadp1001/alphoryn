@@ -155,6 +155,7 @@ class MarketStatusResponse(_Base):
     next_open: str | None
     next_close: str | None
     timestamp: str
+    timezone: str = "America/New_York"
 
 
 # ---------------------------------------------------------------------------
