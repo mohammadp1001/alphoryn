@@ -577,7 +577,7 @@ def test_get_ohlcv_yfinance_fallback_medium_bars():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
-        result = asyncio.run(get_ohlcv("EWG", "1Day", 20))
+        asyncio.run(get_ohlcv("EWG", "1Day", 20))
 
     mock_yf.download.assert_called_once()
     _, call_kwargs = mock_yf.download.call_args
@@ -605,7 +605,7 @@ def test_get_ohlcv_yfinance_fallback_large_bars():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
-        result = asyncio.run(get_ohlcv("EWG", "1Day", 50))
+        asyncio.run(get_ohlcv("EWG", "1Day", 50))
 
     mock_yf.download.assert_called_once()
     call_args = mock_yf.download.call_args

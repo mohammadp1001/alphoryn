@@ -16,7 +16,6 @@ avoid_regimes:
 
 asset_classes:
   - etf
-  - forex
 
 entry_rules:
   - RSI below 30 (oversold) for long entries
