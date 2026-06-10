@@ -4,8 +4,11 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta
 
+from infra.observability import get_logger
 from infra.rate_limiter import acquire_yfinance
 from infra.retry import with_retry
+
+logger = get_logger("tools.research")
 
 
 def _safe_float(v: float) -> float:
@@ -24,6 +27,7 @@ async def get_news(symbol: str, days: int) -> dict:
     Returns:
         dict with 'symbol' and 'items' (list of {headline, source, published_at, url}).
     """
+    logger.info("get_news symbol=%s days=%d", symbol, days)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -58,6 +62,7 @@ async def get_sentiment(symbol: str, news_items: list[dict]) -> dict:
     Returns:
         dict with 'symbol', 'score' (-1 to +1), 'label' ('bearish'|'neutral'|'bullish'), 'item_count'.
     """
+    logger.info("get_sentiment symbol=%s n_items=%d", symbol, len(news_items))
     bullish_keywords = ["surge", "rally", "gain", "rise", "beat", "upgrade", "buy", "strong",
                         "record", "high", "growth", "profit", "positive", "optimistic"]
     bearish_keywords = ["crash", "fall", "drop", "miss", "downgrade", "sell", "weak", "low",
@@ -92,6 +97,7 @@ async def get_earnings_calendar(symbol: str, days_ahead: int) -> dict:
     Returns:
         dict with 'symbol' and 'events' (list of {date, estimate_eps, surprise_pct}).
     """
+    logger.info("get_earnings_calendar symbol=%s days_ahead=%d", symbol, days_ahead)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -122,6 +128,7 @@ async def get_macro_data() -> dict:
     Returns:
         dict with 'vix', 'yield_10y', 'yield_2y', 'dxy', 'timestamp'.
     """
+    logger.info("get_macro_data")
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -151,6 +158,7 @@ async def get_fund_flows(symbol: str) -> dict:
     Returns:
         dict with 'symbol', 'flow_direction' ('inflow'|'outflow'|'neutral'), 'estimated_flow_usd'.
     """
+    logger.info("get_fund_flows symbol=%s", symbol)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -183,6 +191,7 @@ async def get_etf_metrics(symbol: str) -> dict:
     Returns:
         dict with 'symbol', 'aum_usd', 'expense_ratio', 'nav', 'shares_outstanding'.
     """
+    logger.info("get_etf_metrics symbol=%s", symbol)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -206,6 +215,7 @@ async def compare_etfs(symbols: list[str]) -> dict:
     Returns:
         dict with 'comparisons' (list of {symbol, aum_usd, expense_ratio, ytd_return_pct, beta}).
     """
+    logger.info("compare_etfs n_symbols=%d", len(symbols))
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -236,6 +246,7 @@ async def get_expense_ratios(symbols: list[str]) -> dict:
     Returns:
         dict with 'ratios' (list of {symbol, expense_ratio}).
     """
+    logger.info("get_expense_ratios n_symbols=%d", len(symbols))
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -262,6 +273,7 @@ async def get_sector_performance(timeframe: str) -> dict:
     Returns:
         dict with 'returns' (list of {symbol, sector, return_pct}) sorted by return descending.
     """
+    logger.info("get_sector_performance timeframe=%s", timeframe)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -296,6 +308,7 @@ async def get_dividend_history(symbol: str) -> dict:
     Returns:
         dict with 'symbol' and 'dividends' (list of {date, amount}).
     """
+    logger.info("get_dividend_history symbol=%s", symbol)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -320,6 +333,7 @@ async def get_economic_calendar(days_ahead: int) -> dict:
     Returns:
         dict with 'events' (list of {event, date, impact, forecast}).
     """
+    logger.info("get_economic_calendar days_ahead=%d", days_ahead)
     events = [
         {
             "event": "FOMC Meeting",
@@ -350,6 +364,7 @@ async def detect_market_regime(vix: float, yield_10y: float, yield_2y: float, sp
     Returns:
         dict with 'regime' (MarketRegime enum string) and 'reasoning'.
     """
+    logger.info("detect_market_regime vix=%s spy_return_20d=%s", vix, spy_return_20d)
     if vix > 30:
         regime = "CRISIS"
         reasoning = f"VIX={vix:.1f} signals extreme fear; market in crisis mode"
@@ -387,6 +402,7 @@ async def get_analyst_ratings(symbol: str) -> dict:
     Returns:
         dict with 'symbol', 'ratings' (list of {firm, rating, price_target, rating_date}).
     """
+    logger.info("get_analyst_ratings symbol=%s", symbol)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 

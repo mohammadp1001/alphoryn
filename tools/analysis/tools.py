@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import math
 
+from infra.observability import get_logger
+
+logger = get_logger("tools.analysis")
+
 
 # ── Technical indicators (pure numpy, no TA-Lib dependency) ──────────────────
 
@@ -17,6 +21,7 @@ async def compute_rsi(symbol: str, closes: list[float], period: int) -> dict:
     Returns:
         dict with 'symbol', 'period', 'current', 'values' (last 10), 'is_overbought', 'is_oversold'.
     """
+    logger.info("compute_rsi symbol=%s period=%d n_closes=%d", symbol, period, len(closes))
     import numpy as np  # type: ignore[import]
 
     arr = np.array(closes, dtype=float)
@@ -59,6 +64,7 @@ async def compute_macd(symbol: str, closes: list[float]) -> dict:
     Returns:
         dict with 'symbol', 'current_macd', 'current_signal', 'current_histogram'.
     """
+    logger.info("compute_macd symbol=%s n_closes=%d", symbol, len(closes))
     import numpy as np  # type: ignore[import]
 
     def ema(data: list[float], span: int) -> list[float]:
@@ -104,6 +110,7 @@ async def compute_bollinger(symbol: str, closes: list[float], period: int) -> di
     Returns:
         dict with 'symbol', 'current_upper', 'current_middle', 'current_lower', 'current_price', 'pct_b', 'bandwidth'.
     """
+    logger.info("compute_bollinger symbol=%s period=%d n_closes=%d", symbol, period, len(closes))
     import numpy as np  # type: ignore[import]
 
     arr = np.array(closes[-period:], dtype=float)
@@ -140,6 +147,7 @@ async def compute_atr(symbol: str, highs: list[float], lows: list[float], closes
     Returns:
         dict with 'symbol', 'period', 'current', 'values' (last 5).
     """
+    logger.info("compute_atr symbol=%s period=%d n_bars=%d", symbol, period, len(closes))
     tr_values = []
     for i in range(1, len(closes)):
         high_low = highs[i] - lows[i]
@@ -175,6 +183,7 @@ async def compute_beta(symbol: str, symbol_returns: list[float], benchmark_retur
     Returns:
         dict with 'symbol', 'benchmark', 'beta', 'r_squared'.
     """
+    logger.info("compute_beta symbol=%s n_returns=%d", symbol, len(symbol_returns))
     import numpy as np  # type: ignore[import]
 
     x = np.array(benchmark_returns)
@@ -206,6 +215,7 @@ async def detect_momentum(symbol: str, closes: list[float], volumes: list[float]
     Returns:
         dict with 'symbol', 'momentum_score' (-1 to +1), and component contributions.
     """
+    logger.info("detect_momentum symbol=%s n_closes=%d", symbol, len(closes))
     if len(closes) < 20:
         return {"symbol": symbol, "momentum_score": 0.0, "rsi_contribution": 0.0,
                 "macd_contribution": 0.0, "price_vs_sma_contribution": 0.0,
@@ -256,6 +266,7 @@ async def detect_crossover(symbol: str, macd_histogram: list[float]) -> dict:
     Returns:
         dict with 'symbol', 'crossover_type' ('bullish'|'bearish'|'none'), 'bars_since_crossover', 'strength'.
     """
+    logger.info("detect_crossover symbol=%s", symbol)
     if len(macd_histogram) < 2:
         return {"symbol": symbol, "crossover_type": "none", "bars_since_crossover": None, "strength": 0.0}
 
@@ -292,6 +303,7 @@ async def detect_support_resistance(symbol: str, highs: list[float], lows: list[
     Returns:
         dict with 'symbol', 'levels', 'nearest_support', 'nearest_resistance'.
     """
+    logger.info("detect_support_resistance symbol=%s n_bars=%d", symbol, len(closes))
     import numpy as np  # type: ignore[import]
 
     price = closes[-1]
@@ -338,6 +350,7 @@ async def rank_by_momentum(momentum_scores: list[dict]) -> dict:
     Returns:
         dict with 'signals' (ranked list) and 'screened_universe' (all symbols evaluated).
     """
+    logger.info("rank_by_momentum n_symbols=%d", len(momentum_scores))
     universe = [m["symbol"] for m in momentum_scores]
     ranked = sorted(momentum_scores, key=lambda x: x["momentum_score"], reverse=True)
 
@@ -366,6 +379,7 @@ async def run_backtest(symbol: str, strategy: str, closes: list[float], volumes:
     Returns:
         dict with signal pattern stats: 'avg_forward_return_pct', 'win_rate_pct', 'match_count', etc.
     """
+    logger.info("run_backtest symbol=%s strategy=%s n_closes=%d", symbol, strategy, len(closes))
     from config import SIGNAL_FORWARD_RETURN_DAYS, SIGNAL_LOOKBACK_BARS
 
     import numpy as np  # type: ignore[import]
@@ -429,6 +443,7 @@ async def calc_sharpe(symbol: str, daily_returns: list[float]) -> dict:
     Returns:
         dict with 'symbol', 'sharpe_ratio', 'annualised_return_pct', 'annualised_volatility_pct'.
     """
+    logger.info("calc_sharpe symbol=%s n_returns=%d", symbol, len(daily_returns))
     import numpy as np  # type: ignore[import]
 
     arr = np.array(daily_returns)
@@ -454,6 +469,7 @@ async def calc_max_drawdown(symbol: str, closes: list[float]) -> dict:
     Returns:
         dict with 'symbol', 'max_drawdown_pct', 'drawdown_start_bar', 'drawdown_end_bar'.
     """
+    logger.info("calc_max_drawdown symbol=%s n_closes=%d", symbol, len(closes))
     import numpy as np  # type: ignore[import]
 
     arr = np.array(closes)
@@ -490,6 +506,7 @@ async def calc_correlation(symbols: list[str], closes_matrix: list[list[float]])
     Returns:
         dict with 'symbols' and 'matrix' (2D list of correlation coefficients).
     """
+    logger.info("calc_correlation symbols=%s", symbols)
     import numpy as np  # type: ignore[import]
 
     arr = np.array(closes_matrix)
@@ -513,6 +530,7 @@ async def score_technical(symbol: str, strategy: str, rsi_current: float, macd_h
     Returns:
         dict with 'symbol', 'composite_score' (-1 to +1), and component scores.
     """
+    logger.info("score_technical symbol=%s strategy=%s", symbol, strategy)
     rsi_score = (rsi_current - 50) / 50
 
     # MACD score: normalise by assuming histogram rarely exceeds ±1% of price

@@ -1,7 +1,9 @@
 """memory.* tools — 6 tools, coordinator scope only."""
 from __future__ import annotations
 
-from infra.observability import db_write_span
+from infra.observability import db_write_span, get_logger
+
+logger = get_logger("tools.memory")
 
 
 async def write_trade(
@@ -43,6 +45,7 @@ async def write_trade(
     Returns:
         dict with 'trade_id', 'written'.
     """
+    logger.info("write_trade session_id=%s cycle=%d symbol=%s side=%s qty=%s", session_id, cycle_index, symbol, side, qty)
     import uuid
     from datetime import datetime
     from db.schema import write_trade_record
@@ -86,6 +89,7 @@ async def resolve_trade(trade_id: str, actual_pnl_pct: float) -> dict:
     Returns:
         dict with 'trade_id', 'debate_winner', 'resolved'.
     """
+    logger.info("resolve_trade trade_id=%s actual_pnl_pct=%s", trade_id, actual_pnl_pct)
     from db.schema import resolve_outcome
 
     with db_write_span("trade_records", trade_id):
@@ -105,6 +109,7 @@ async def get_calibration(market_regime: str, strategy: str) -> dict:
     Returns:
         dict with 'has_data', 'opt_win_rate', 'pess_win_rate', 'opt_summary', 'pess_summary', 'trade_count'.
     """
+    logger.info("get_calibration market_regime=%s strategy=%s", market_regime, strategy)
     from db.schema import get_calibration as _get_cal
     from models.enums import MarketRegime, Strategy
 
@@ -132,6 +137,7 @@ async def get_session_cycles(session_id: str) -> dict:
     Returns:
         dict with 'session_id' and 'cycles' (list of cycle records).
     """
+    logger.info("get_session_cycles session_id=%s", session_id)
     from db.schema import _connect  # type: ignore[attr-defined]
 
     with _connect() as conn:
@@ -167,6 +173,7 @@ async def get_unresolved_trades() -> dict:
     Returns:
         dict with 'trades' (list of {trade_id, symbol, order_id, opened_at}).
     """
+    logger.info("get_unresolved_trades")
     from db.schema import get_unresolved_trades as _get_unresolved
 
     trades = _get_unresolved()
@@ -212,6 +219,7 @@ async def record_cycle(
     Returns:
         dict with 'session_id', 'cycle_index', 'written'.
     """
+    logger.info("record_cycle session_id=%s cycle=%d outcome=%s", session_id, cycle_index, outcome)
     from db.schema import _connect  # type: ignore[attr-defined]
 
     with _connect() as conn:
