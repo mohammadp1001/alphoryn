@@ -1,19 +1,19 @@
 """research.* tools — 12 tools, research agent scope."""
 from __future__ import annotations
 
-import math
 from datetime import datetime, timedelta
 
 from infra.observability import get_logger
 from infra.rate_limiter import acquire_yfinance
 from infra.retry import with_retry
+from tools.schemas import (
+    AnalystRatingsResponse, CompareEtfsResponse, DividendHistoryResponse,
+    EarningsCalendarResponse, EconomicCalendarResponse, EtfMetricsResponse,
+    ExpenseRatiosResponse, FundFlowsResponse, MacroDataResponse,
+    MarketRegimeResponse, NewsResponse, SectorPerformanceResponse, SentimentResponse,
+)
 
 logger = get_logger("tools.research")
-
-
-def _safe_float(v: float) -> float:
-    """Replace NaN/Inf with 0.0 — JSON doesn't support these values."""
-    return 0.0 if not math.isfinite(v) else v
 
 
 @with_retry
@@ -49,7 +49,7 @@ async def get_news(symbol: str, days: int) -> dict:
     except Exception:
         pass
 
-    return {"symbol": symbol, "items": items}
+    return NewsResponse(symbol=symbol, items=items).model_dump()
 
 
 async def get_sentiment(symbol: str, news_items: list[dict]) -> dict:
@@ -83,7 +83,7 @@ async def get_sentiment(symbol: str, news_items: list[dict]) -> dict:
         score = max(-1.0, min(1.0, raw / 3))
 
     label = "bullish" if score > 0.1 else ("bearish" if score < -0.1 else "neutral")
-    return {"symbol": symbol, "score": round(score, 4), "label": label, "item_count": count}
+    return SentimentResponse(symbol=symbol, score=round(score, 4), label=label, item_count=count).model_dump()
 
 
 @with_retry
@@ -118,7 +118,7 @@ async def get_earnings_calendar(symbol: str, days_ahead: int) -> dict:
     except Exception:
         pass
 
-    return {"symbol": symbol, "events": events[:5]}
+    return EarningsCalendarResponse(symbol=symbol, events=events[:5]).model_dump()
 
 
 @with_retry
@@ -150,13 +150,13 @@ async def get_macro_data(
         except Exception:
             return 0.0
 
-    return {
-        "vix": _last_close(vix_symbol),
-        "yield_10y": _last_close(yield_10y_symbol) / 10,  # ^TNX-family symbols quote in tenths
-        "yield_2y": _last_close(yield_2y_symbol) / 10,
-        "dxy": _last_close(dxy_symbol),
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+    return MacroDataResponse(
+        vix=_last_close(vix_symbol),
+        yield_10y=_last_close(yield_10y_symbol) / 10,  # ^TNX-family symbols quote in tenths
+        yield_2y=_last_close(yield_2y_symbol) / 10,
+        dxy=_last_close(dxy_symbol),
+        timestamp=datetime.utcnow().isoformat(),
+    ).model_dump()
 
 
 @with_retry
@@ -175,21 +175,19 @@ async def get_fund_flows(symbol: str) -> dict:
 
     hist = yf.download(symbol, period="5d", progress=False)
     if hist.empty:
-        return {"symbol": symbol, "flow_direction": "neutral", "estimated_flow_usd": 0.0}
+        return FundFlowsResponse(symbol=symbol, flow_direction="neutral", estimated_flow_usd=0.0).model_dump()
 
     closes = hist["Close"].tolist()
     volumes = hist["Volume"].tolist()
 
     if len(closes) < 2:
-        return {"symbol": symbol, "flow_direction": "neutral", "estimated_flow_usd": 0.0}
+        return FundFlowsResponse(symbol=symbol, flow_direction="neutral", estimated_flow_usd=0.0).model_dump()
 
     flow = sum((c - closes[i - 1]) * v for i, (c, v) in enumerate(zip(closes[1:], volumes[1:]), 1))
     direction = "inflow" if flow > 0 else ("outflow" if flow < 0 else "neutral")
-    return {
-        "symbol": symbol,
-        "flow_direction": direction,
-        "estimated_flow_usd": round(float(flow), 0),
-    }
+    return FundFlowsResponse(
+        symbol=symbol, flow_direction=direction, estimated_flow_usd=round(float(flow), 0),
+    ).model_dump()
 
 
 @with_retry
@@ -207,13 +205,13 @@ async def get_etf_metrics(symbol: str) -> dict:
     import yfinance as yf  # type: ignore[import]
 
     info = yf.Ticker(symbol).info
-    return {
-        "symbol": symbol,
-        "aum_usd": float(info.get("totalAssets", 0) or 0),
-        "expense_ratio": float(info.get("annualReportExpenseRatio", 0) or 0),
-        "nav": float(info.get("navPrice") or info.get("regularMarketPrice", 0) or 0),
-        "shares_outstanding": float(info.get("sharesOutstanding", 0) or 0),
-    }
+    return EtfMetricsResponse(
+        symbol=symbol,
+        aum_usd=float(info.get("totalAssets", 0) or 0),
+        expense_ratio=float(info.get("annualReportExpenseRatio", 0) or 0),
+        nav=float(info.get("navPrice") or info.get("regularMarketPrice", 0) or 0),
+        shares_outstanding=float(info.get("sharesOutstanding", 0) or 0),
+    ).model_dump()
 
 
 @with_retry
@@ -244,7 +242,7 @@ async def compare_etfs(symbols: list[str]) -> dict:
         except Exception:
             comparisons.append({"symbol": sym, "aum_usd": 0, "expense_ratio": 0,
                                 "ytd_return_pct": 0, "beta": 1.0})
-    return {"comparisons": comparisons}
+    return CompareEtfsResponse(comparisons=comparisons).model_dump()
 
 
 @with_retry
@@ -271,7 +269,7 @@ async def get_expense_ratios(symbols: list[str]) -> dict:
             })
         except Exception:
             ratios.append({"symbol": sym, "expense_ratio": 0.0})
-    return {"ratios": ratios}
+    return ExpenseRatiosResponse(ratios=ratios).model_dump()
 
 
 @with_retry
@@ -307,7 +305,7 @@ async def get_sector_performance(timeframe: str, symbols: list[str] | None = Non
         try:
             hist = yf.download(sym, period=timeframe, progress=False)["Close"]
             if len(hist) >= 2:
-                ret = _safe_float(float((hist.iloc[-1] / hist.iloc[0] - 1) * 100))
+                ret = float((hist.iloc[-1] / hist.iloc[0] - 1) * 100)
                 sector = sector_map.get(sym)
                 if sector is None:
                     try:
@@ -319,7 +317,7 @@ async def get_sector_performance(timeframe: str, symbols: list[str] | None = Non
             pass
 
     returns.sort(key=lambda x: x["return_pct"], reverse=True)
-    return {"timeframe": timeframe, "returns": returns}
+    return SectorPerformanceResponse(timeframe=timeframe, returns=returns).model_dump()
 
 
 @with_retry
@@ -345,7 +343,7 @@ async def get_dividend_history(symbol: str) -> dict:
                 dividends.append({"date": dt.isoformat(), "amount": round(float(amount), 4)})
     except Exception:
         pass
-    return {"symbol": symbol, "dividends": dividends}
+    return DividendHistoryResponse(symbol=symbol, dividends=dividends).model_dump()
 
 
 async def get_economic_calendar(days_ahead: int) -> dict:
@@ -372,7 +370,7 @@ async def get_economic_calendar(days_ahead: int) -> dict:
             "forecast": "2.3% YoY",
         },
     ]
-    return {"events": [e for e in events if True], "days_ahead": days_ahead}
+    return EconomicCalendarResponse(events=events, days_ahead=days_ahead).model_dump()
 
 
 @with_retry
@@ -408,16 +406,16 @@ async def detect_market_regime(vix: float, yield_10y: float, yield_2y: float, be
         regime = "LOW_VOL_RANGE"
         reasoning = f"VIX={vix:.1f}, {benchmark_symbol} 20d={benchmark_return_20d:.1f}%; low-vol range-bound market"
 
-    return {
-        "regime": regime,
-        "reasoning": reasoning,
-        "vix": vix,
-        "yield_10y": yield_10y,
-        "yield_2y": yield_2y,
-        "yield_curve_spread": round(yield_10y - yield_2y, 3),
-        "benchmark_symbol": benchmark_symbol,
-        "benchmark_return_20d": benchmark_return_20d,
-    }
+    return MarketRegimeResponse(
+        regime=regime,
+        reasoning=reasoning,
+        vix=vix,
+        yield_10y=yield_10y,
+        yield_2y=yield_2y,
+        yield_curve_spread=round(yield_10y - yield_2y, 3),
+        benchmark_symbol=benchmark_symbol,
+        benchmark_return_20d=benchmark_return_20d,
+    ).model_dump()
 
 
 @with_retry
@@ -448,4 +446,4 @@ async def get_analyst_ratings(symbol: str) -> dict:
                 })
     except Exception:
         pass
-    return {"symbol": symbol, "ratings": ratings}
+    return AnalystRatingsResponse(symbol=symbol, ratings=ratings).model_dump()

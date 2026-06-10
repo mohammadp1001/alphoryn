@@ -1,20 +1,20 @@
 """market.* tools — 12 tools, analysis agent scope."""
 from __future__ import annotations
 
-import math
 import os
 from datetime import datetime, timedelta
 
 from infra.observability import api_call_span, get_logger
 from infra.rate_limiter import acquire_alpaca_data, acquire_yfinance
 from infra.retry import with_retry
+from tools.schemas import (
+    BenchmarkReturnResponse, EtfHoldingsResponse, IntradayBarsResponse,
+    MarketStatusResponse, OhlcvResponse, OrderBookResponse, QuoteResponse,
+    Range52wResponse, ScreenEtfsResponse, SectorMapResponse, SpreadResponse,
+    VolumeProfileResponse,
+)
 
 logger = get_logger("tools.market")
-
-
-def _safe_float(v: float) -> float:
-    """Replace NaN/Inf with 0.0 — JSON doesn't support these values."""
-    return 0.0 if not math.isfinite(v) else v
 
 
 def _data_client():
@@ -71,7 +71,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     ]
 
     if result:
-        return {"symbol": symbol, "timeframe": timeframe, "bars": result}
+        return OhlcvResponse(symbol=symbol, timeframe=timeframe, bars=result).model_dump()
 
     # IEX had no data — fall back to yfinance
     logger.info("get_ohlcv IEX empty for %s, falling back to yfinance", symbol)
@@ -91,23 +91,25 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     yf_interval = {"1Day": "1d", "1Hour": "1h", "4Hour": "1d"}.get(timeframe, "1d")
     hist = yf.download(symbol, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True)
     if hist.empty:
-        return {"symbol": symbol, "timeframe": timeframe, "bars": []}
+        return OhlcvResponse(symbol=symbol, timeframe=timeframe, bars=[]).model_dump()
 
     # yf.download returns MultiIndex columns ('Open', '<SYM>') even for a single symbol
     if hasattr(hist.columns, "nlevels") and hist.columns.nlevels > 1:
         hist.columns = hist.columns.get_level_values(0)
 
-    result = []
-    for idx, row in hist.tail(bars).iterrows():
-        result.append({
+    hist = hist.dropna(subset=["Open", "High", "Low", "Close", "Volume"])
+    result = [
+        {
             "timestamp": idx.isoformat(),
             "open": float(row["Open"]),
             "high": float(row["High"]),
             "low": float(row["Low"]),
             "close": float(row["Close"]),
             "volume": float(row["Volume"]),
-        })
-    return {"symbol": symbol, "timeframe": timeframe, "bars": result}
+        }
+        for idx, row in hist.tail(bars).iterrows()
+    ]
+    return OhlcvResponse(symbol=symbol, timeframe=timeframe, bars=result).model_dump()
 
 
 @with_retry
@@ -128,14 +130,14 @@ async def get_quote(symbol: str) -> dict:
         resp = _data_client().get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol, feed="iex"))
 
     q = resp[symbol]
-    return {
-        "symbol": symbol,
-        "bid": float(q.bid_price),
-        "ask": float(q.ask_price),
-        "bid_size": float(q.bid_size),
-        "ask_size": float(q.ask_size),
-        "timestamp": q.timestamp.isoformat(),
-    }
+    return QuoteResponse(
+        symbol=symbol,
+        bid=float(q.bid_price),
+        ask=float(q.ask_price),
+        bid_size=float(q.bid_size),
+        ask_size=float(q.ask_size),
+        timestamp=q.timestamp.isoformat(),
+    ).model_dump()
 
 
 @with_retry
@@ -153,12 +155,12 @@ async def get_spread(symbol: str) -> dict:
     mid = (quote["bid"] + quote["ask"]) / 2
     spread_abs = quote["ask"] - quote["bid"]
     spread_pct = (spread_abs / mid * 100) if mid > 0 else 0.0
-    return {
-        "symbol": symbol,
-        "spread_abs": round(spread_abs, 4),
-        "spread_pct": round(spread_pct, 4),
-        "timestamp": quote["timestamp"],
-    }
+    return SpreadResponse(
+        symbol=symbol,
+        spread_abs=round(spread_abs, 4),
+        spread_pct=round(spread_pct, 4),
+        timestamp=quote["timestamp"],
+    ).model_dump()
 
 
 @with_retry
@@ -182,12 +184,12 @@ async def get_order_book(symbol: str, depth: int) -> dict:
         )
 
     ob = resp[symbol]
-    return {
-        "symbol": symbol,
-        "bids": [{"price": float(b.p), "size": float(b.s)} for b in ob.bids[:depth]],
-        "asks": [{"price": float(a.p), "size": float(a.s)} for a in ob.asks[:depth]],
-        "timestamp": ob.timestamp.isoformat(),
-    }
+    return OrderBookResponse(
+        symbol=symbol,
+        bids=[{"price": float(b.p), "size": float(b.s)} for b in ob.bids[:depth]],
+        asks=[{"price": float(a.p), "size": float(a.s)} for a in ob.asks[:depth]],
+        timestamp=ob.timestamp.isoformat(),
+    ).model_dump()
 
 
 async def screen_etfs(min_avg_volume: float, min_price: float, symbols: list[str] | None = None) -> dict:
@@ -225,7 +227,7 @@ async def screen_etfs(min_avg_volume: float, min_price: float, symbols: list[str
                 })
         except Exception:
             continue
-    return {"results": results}
+    return ScreenEtfsResponse(results=results).model_dump()
 
 
 @with_retry
@@ -254,7 +256,7 @@ async def get_etf_holdings(symbol: str) -> dict:
             })
     except Exception:
         pass
-    return {"symbol": symbol, "top_holdings": holdings[:10]}
+    return EtfHoldingsResponse(symbol=symbol, top_holdings=holdings[:10]).model_dump()
 
 
 async def get_sector_map(symbols: list[str] | None = None) -> dict:
@@ -291,7 +293,7 @@ async def get_sector_map(symbols: list[str] | None = None) -> dict:
     sector_to_etfs: dict[str, list[str]] = {}
     for etf, sector in etf_to_sector.items():
         sector_to_etfs.setdefault(sector, []).append(etf)
-    return {"etf_to_sector": etf_to_sector, "sector_to_etfs": sector_to_etfs}
+    return SectorMapResponse(etf_to_sector=etf_to_sector, sector_to_etfs=sector_to_etfs).model_dump()
 
 
 @with_retry
@@ -312,14 +314,14 @@ async def get_52w_range(symbol: str) -> dict:
     high = float(info.get("fiftyTwoWeekHigh", 0))
     low = float(info.get("fiftyTwoWeekLow", 0))
     price = float(info.get("regularMarketPrice") or info.get("currentPrice", 0))
-    return {
-        "symbol": symbol,
-        "high_52w": high,
-        "low_52w": low,
-        "current_price": price,
-        "pct_from_high": round((price - high) / high * 100, 2) if high else 0.0,
-        "pct_from_low": round((price - low) / low * 100, 2) if low else 0.0,
-    }
+    return Range52wResponse(
+        symbol=symbol,
+        high_52w=high,
+        low_52w=low,
+        current_price=price,
+        pct_from_high=round((price - high) / high * 100, 2) if high else 0.0,
+        pct_from_low=round((price - low) / low * 100, 2) if low else 0.0,
+    ).model_dump()
 
 
 @with_retry
@@ -340,7 +342,7 @@ async def get_volume_profile(symbol: str, days: int) -> dict:
     closes = [b["close"] for b in ohlcv["bars"]]
     volumes = [b["volume"] for b in ohlcv["bars"]]
     if not closes:
-        return {"symbol": symbol, "buckets": [], "point_of_control": 0.0, "days": days}
+        return VolumeProfileResponse(symbol=symbol, buckets=[], point_of_control=0.0, days=days).model_dump()
 
     bins = np.linspace(min(closes), max(closes), 20)
     bucket_vols = [0.0] * (len(bins) - 1)
@@ -353,7 +355,7 @@ async def get_volume_profile(symbol: str, days: int) -> dict:
         {"price_level": round(float((bins[i] + bins[i + 1]) / 2), 2), "volume": round(bucket_vols[i], 0)}
         for i in range(len(bucket_vols))
     ]
-    return {"symbol": symbol, "buckets": buckets, "point_of_control": poc, "days": days}
+    return VolumeProfileResponse(symbol=symbol, buckets=buckets, point_of_control=poc, days=days).model_dump()
 
 
 @with_retry
@@ -377,18 +379,20 @@ async def get_benchmark_return(symbol: str, period: str, benchmark: str = "SPY")
     tickers = [symbol] if symbol == benchmark else [symbol, benchmark]
     hist = yf.download(tickers, period=period, progress=False)["Close"]
     if hist.empty:
-        return {"symbol": symbol, "benchmark": benchmark, "period": period,
-                "symbol_return_pct": 0.0, "benchmark_return_pct": 0.0, "excess_return_pct": 0.0}
-    sym_ret = _safe_float(float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100))
-    bench_ret = 0.0 if symbol == benchmark else _safe_float(
-        float((hist[benchmark].iloc[-1] / hist[benchmark].iloc[0] - 1) * 100)
+        return BenchmarkReturnResponse(
+            symbol=symbol, benchmark=benchmark, period=period,
+            symbol_return_pct=0.0, benchmark_return_pct=0.0, excess_return_pct=0.0,
+        ).model_dump()
+    sym_ret = float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100)
+    bench_ret = 0.0 if symbol == benchmark else float(
+        (hist[benchmark].iloc[-1] / hist[benchmark].iloc[0] - 1) * 100
     )
-    return {
-        "symbol": symbol, "benchmark": benchmark, "period": period,
-        "symbol_return_pct": round(sym_ret, 2),
-        "benchmark_return_pct": round(bench_ret, 2),
-        "excess_return_pct": round(sym_ret - bench_ret, 2),
-    }
+    return BenchmarkReturnResponse(
+        symbol=symbol, benchmark=benchmark, period=period,
+        symbol_return_pct=round(sym_ret, 2),
+        benchmark_return_pct=round(bench_ret, 2),
+        excess_return_pct=round(sym_ret - bench_ret, 2),
+    ).model_dump()
 
 
 @with_retry
@@ -403,7 +407,10 @@ async def get_intraday_bars(symbol: str, resolution: str) -> dict:
         dict with 'symbol', 'timeframe', and 'bars' (list of OHLCV dicts).
     """
     logger.info("get_intraday_bars symbol=%s resolution=%s", symbol, resolution)
-    return await get_ohlcv(symbol, resolution, 100)
+    ohlcv = await get_ohlcv(symbol, resolution, 100)
+    return IntradayBarsResponse(
+        symbol=ohlcv["symbol"], timeframe=ohlcv["timeframe"], bars=ohlcv["bars"]
+    ).model_dump()
 
 
 async def get_market_status() -> dict:
@@ -418,15 +425,17 @@ async def get_market_status() -> dict:
     api_key = os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY")
     api_secret = os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET")
     if not api_key:
-        return {"is_open": False, "next_open": None, "next_close": None,
-                "timestamp": datetime.utcnow().isoformat()}
+        return MarketStatusResponse(
+            is_open=False, next_open=None, next_close=None,
+            timestamp=datetime.utcnow().isoformat(),
+        ).model_dump()
 
     await acquire_alpaca_data()
     client = TradingClient(api_key, api_secret, paper=True)
     clock = client.get_clock()
-    return {
-        "is_open": clock.is_open,
-        "next_open": clock.next_open.isoformat() if clock.next_open else None,
-        "next_close": clock.next_close.isoformat() if clock.next_close else None,
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+    return MarketStatusResponse(
+        is_open=clock.is_open,
+        next_open=clock.next_open.isoformat() if clock.next_open else None,
+        next_close=clock.next_close.isoformat() if clock.next_close else None,
+        timestamp=datetime.utcnow().isoformat(),
+    ).model_dump()
