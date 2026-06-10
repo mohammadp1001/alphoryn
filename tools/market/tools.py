@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from infra.observability import api_call_span, get_logger
 from infra.rate_limiter import acquire_alpaca_data, acquire_yfinance
@@ -43,7 +44,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
 
     Args:
         symbol: Ticker symbol, e.g. 'XLK'.
-        timeframe: Bar size — '1Day', '1Hour', '4Hour'.
+        timeframe: Bar size — '30Min', '1Hour', '3Hour', '4Hour', '12Hour', '1Day'.
         bars: Number of bars to return (most recent).
 
     Returns:
@@ -53,7 +54,14 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     from alpaca.data.timeframe import TimeFrame, TimeFrameUnit  # type: ignore[import]
 
     logger.info("get_ohlcv symbol=%s timeframe=%s bars=%d", symbol, timeframe, bars)
-    tf_map = {"1Day": TimeFrame.Day, "1Hour": TimeFrame.Hour, "4Hour": TimeFrame(4, TimeFrameUnit.Hour)}
+    tf_map = {
+        "1Day":   TimeFrame.Day,
+        "30Min":  TimeFrame(30, TimeFrameUnit.Minute),
+        "1Hour":  TimeFrame.Hour,
+        "3Hour":  TimeFrame(3, TimeFrameUnit.Hour),
+        "4Hour":  TimeFrame(4, TimeFrameUnit.Hour),
+        "12Hour": TimeFrame(12, TimeFrameUnit.Hour),
+    }
     tf = tf_map.get(timeframe, TimeFrame.Day)
 
     end = datetime.utcnow()
@@ -99,7 +107,11 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     else:
         yf_period = "1y"
 
-    yf_interval = {"1Day": "1d", "1Hour": "1h", "4Hour": "1d"}.get(timeframe, "1d")
+    yf_interval = {
+        "1Day": "1d", "12Hour": "1d",
+        "4Hour": "1h", "3Hour": "1h",
+        "1Hour": "1h", "30Min": "30m",
+    }.get(timeframe, "1d")
     hist = yf.download(symbol, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True)
     if hist.empty:
         return OhlcvResponse(symbol=symbol, timeframe=timeframe, bars=[]).model_dump()
@@ -425,29 +437,49 @@ async def get_intraday_bars(symbol: str, resolution: str) -> dict:
     ).model_dump()
 
 
-async def get_market_status() -> dict:
+async def get_market_status(timezone: str = "America/New_York") -> dict:
     """Check if US equities market is currently open.
 
+    Args:
+        timezone: IANA timezone name for display of open/close times.
+            Defaults to 'America/New_York' (NYSE/NASDAQ exchange timezone).
+            Common values: 'Europe/Berlin', 'Asia/Tokyo', 'UTC'.
+
     Returns:
-        dict with 'is_open', 'next_open', 'next_close', 'timestamp'.
+        dict with 'is_open', 'next_open', 'next_close', 'timestamp', 'timezone'.
     """
-    logger.info("get_market_status")
+    logger.info("get_market_status timezone=%s", timezone)
     from alpaca.trading.client import TradingClient  # type: ignore[import]
+
+    try:
+        tz = ZoneInfo(timezone)
+    except Exception:
+        tz = ZoneInfo("America/New_York")
 
     api_key = os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY")
     api_secret = os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET")
+    now_local = datetime.now(tz).isoformat()
     if not api_key:
         return MarketStatusResponse(
             is_open=False, next_open=None, next_close=None,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=now_local, timezone=timezone,
         ).model_dump()
 
     await acquire_alpaca_data()
     client = TradingClient(api_key, api_secret, paper=True)
     clock = client.get_clock()
+
+    def _to_tz(dt: datetime | None) -> str | None:
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return dt.astimezone(tz).isoformat()
+
     return MarketStatusResponse(
         is_open=clock.is_open,
-        next_open=clock.next_open.isoformat() if clock.next_open else None,
-        next_close=clock.next_close.isoformat() if clock.next_close else None,
-        timestamp=datetime.utcnow().isoformat(),
+        next_open=_to_tz(clock.next_open),
+        next_close=_to_tz(clock.next_close),
+        timestamp=now_local,
+        timezone=timezone,
     ).model_dump()

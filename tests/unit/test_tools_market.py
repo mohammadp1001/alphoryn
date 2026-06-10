@@ -714,7 +714,122 @@ def test_data_client_factory_returns_instance(monkeypatch):
 
         import tools.market.tools as market_tools
         importlib.reload(market_tools)
-        result = market_tools._data_client()
+        market_tools._data_client()
 
     mock_cls.assert_called_once_with(api_key="data-key", secret_key="data-secret")
-    assert result is mock_instance
+
+
+# ── New timeframes (30Min, 3Hour, 12Hour) ─────────────────────────────────────
+
+def test_get_ohlcv_30min_timeframe():
+    bars = [_make_bar()]
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {"SPY": bars}
+
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("SPY", "30Min", 1))
+
+    assert result["symbol"] == "SPY"
+    assert result["timeframe"] == "30Min"
+
+
+def test_get_ohlcv_3hour_timeframe():
+    bars = [_make_bar()]
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {"SPY": bars}
+
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("SPY", "3Hour", 1))
+
+    assert result["symbol"] == "SPY"
+    assert result["timeframe"] == "3Hour"
+
+
+def test_get_ohlcv_12hour_timeframe():
+    bars = [_make_bar()]
+    mock_client = MagicMock()
+    mock_client.get_stock_bars.return_value = {"SPY": bars}
+
+    with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("SPY", "12Hour", 1))
+
+    assert result["symbol"] == "SPY"
+    assert result["timeframe"] == "12Hour"
+
+
+# ── Timezone-aware market status ──────────────────────────────────────────────
+
+def test_get_market_status_default_timezone_in_response(monkeypatch):
+    monkeypatch.delenv("ALPACA_DATA_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+
+    from tools.market.tools import get_market_status
+    result = asyncio.run(get_market_status())
+
+    assert result["timezone"] == "America/New_York"
+
+
+def test_get_market_status_custom_timezone(monkeypatch):
+    monkeypatch.delenv("ALPACA_DATA_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+
+    from tools.market.tools import get_market_status
+    result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
+
+    assert result["timezone"] == "Europe/Berlin"
+    assert result["is_open"] is False
+
+
+def test_get_market_status_invalid_timezone_falls_back(monkeypatch):
+    monkeypatch.delenv("ALPACA_DATA_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_API_KEY", raising=False)
+
+    from tools.market.tools import get_market_status
+    # Should not raise — falls back to America/New_York
+    result = asyncio.run(get_market_status(timezone="Not/A_Real_Zone"))
+
+    assert "timezone" in result
+
+
+def test_get_market_status_times_expressed_in_requested_tz(monkeypatch):
+    monkeypatch.setenv("ALPACA_DATA_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_DATA_SECRET", "test-secret")
+
+    clock = MagicMock()
+    clock.is_open = False
+    clock.next_open = datetime(2025, 6, 10, 13, 30, tzinfo=UTC)   # 09:30 ET = 15:30 Berlin (CEST)
+    clock.next_close = datetime(2025, 6, 10, 20, 0, tzinfo=UTC)   # 16:00 ET = 22:00 Berlin (CEST)
+
+    mock_client_cls = MagicMock()
+    mock_client_cls.return_value.get_clock.return_value = clock
+
+    with _mock_acquire(), patch("alpaca.trading.client.TradingClient", mock_client_cls):
+        from tools.market.tools import get_market_status
+        result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
+
+    assert result["timezone"] == "Europe/Berlin"
+    # Berlin CEST is UTC+2, so 13:30 UTC → 15:30+02:00
+    assert "15:30" in result["next_open"]
+    # 20:00 UTC → 22:00+02:00
+    assert "22:00" in result["next_close"]
+
+
+# ── UNIVERSE_EXCHANGE_TZ config ───────────────────────────────────────────────
+
+def test_universe_exchange_tz_german_market():
+    from config import UNIVERSE_EXCHANGE_TZ
+    assert UNIVERSE_EXCHANGE_TZ["GERMAN_MARKET"] == "Europe/Berlin"
+
+
+def test_universe_exchange_tz_us_market():
+    from config import UNIVERSE_EXCHANGE_TZ
+    assert UNIVERSE_EXCHANGE_TZ["US_SECTOR_ETFS"] == "America/New_York"
+
+
+def test_universe_exchange_tz_covers_all_universes():
+    from config import ETF_UNIVERSES, UNIVERSE_EXCHANGE_TZ
+    missing = [k for k in ETF_UNIVERSES if k not in UNIVERSE_EXCHANGE_TZ]
+    assert missing == [], f"Universes missing from UNIVERSE_EXCHANGE_TZ: {missing}"

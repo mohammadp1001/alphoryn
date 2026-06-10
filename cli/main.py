@@ -196,14 +196,17 @@ async def _run_session(params: SessionParams) -> None:
         rprint(f"[yellow]Could not load portfolio: {exc}[/yellow]")
 
     # ── Main session loop ─────────────────────────────────────────────────────
-    from config import ETF_UNIVERSES
+    from config import ETF_UNIVERSES, UNIVERSE_EXCHANGE_TZ
     universe_symbols = ETF_UNIVERSES.get(params.universe, ETF_UNIVERSES["US_SECTOR_ETFS"])
+    exchange_tz = UNIVERSE_EXCHANGE_TZ.get(params.universe, "America/New_York")
     initial_message = (
         f"Start trading session {session_id}. "
         f"Strategy: {params.strategy.value}. "
         f"Mode: {params.mode.value}. "
         f"Loss limit: {params.loss_limit_eur} EUR. "
         f"Market universe: {params.universe} — symbols: {', '.join(universe_symbols)}. "
+        f"Exchange timezone: {exchange_tz}. "
+        f"When calling get_market_status, pass timezone='{exchange_tz}'. "
         f"Only consider symbols from this universe throughout the session. "
         f"Execute the decision cycle flow as per your instructions."
     )

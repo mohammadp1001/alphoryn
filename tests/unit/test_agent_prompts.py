@@ -77,6 +77,7 @@ _COORD_BASE_KWARGS = dict(
     hitl_timeout_action="abort",
     universe="US_SECTOR_ETFS",
     symbols="XLK, XLE, XLF",
+    exchange_tz="America/New_York",
     max_strategy_cycles=3,
 )
 
@@ -188,6 +189,25 @@ def test_coordinator_asset_class_field():
     from agent.prompts import COORDINATOR_INSTRUCTION
     formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
     assert "asset_class" in formatted
+
+
+def test_coordinator_market_hours_check_is_step_0():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "market_closed" in formatted
+    assert "market__get_market_status" in formatted
+
+
+def test_coordinator_exchange_tz_in_formatted_prompt():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**{**_COORD_BASE_KWARGS, "exchange_tz": "Europe/Berlin"})
+    assert "Europe/Berlin" in formatted
+
+
+def test_coordinator_market_closed_abort_stage():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "stage='market_closed'" in formatted
 
 
 # ── Execution agent (BaseAgent — no LLM prompt) ───────────────────────────────

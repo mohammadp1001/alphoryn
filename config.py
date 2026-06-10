@@ -57,6 +57,26 @@ ETF_UNIVERSES: dict[str, list[str]] = {
 
 DEFAULT_ETF_UNIVERSE: list[str] = ETF_UNIVERSES["US_SECTOR_ETFS"]
 
+# Maps each ETF universe to the IANA timezone most relevant to the user.
+# All ETFs here are US-listed and trade on NYSE/NASDAQ (America/New_York),
+# but a user focused on European or Asian markets may prefer to see open/close
+# times expressed in their local exchange timezone.
+UNIVERSE_EXCHANGE_TZ: dict[str, str] = {
+    "US_SECTOR_ETFS":          "America/New_York",
+    "US_TECH_ETFS":            "America/New_York",
+    "US_BROAD_MARKET":         "America/New_York",
+    "COMMODITIES":             "America/New_York",
+    "FIXED_INCOME":            "America/New_York",
+    "INTERNATIONAL_DEVELOPED": "America/New_York",
+    "EMERGING_MARKETS":        "America/New_York",
+    "DIVIDEND":                "America/New_York",
+    "HEALTHCARE":              "America/New_York",
+    "ENERGY":                  "America/New_York",
+    "REAL_ESTATE":             "America/New_York",
+    "EU_MARKET":               "Europe/Berlin",
+    "GERMAN_MARKET":           "Europe/Berlin",
+}
+
 # ── Session defaults ──────────────────────────────────────────────────────────
 DEFAULT_SHORTLIST_N: int = 2
 MAX_SHORTLIST_N: int = 5

@@ -229,6 +229,7 @@ placement to the execution_agent.
 - HITL timeout  : {hitl_timeout_seconds}s (on timeout: {hitl_timeout_action})
 - Default universe: {universe}
 - Default symbols : {symbols}
+- Exchange timezone: {exchange_tz}
 
 ## Context available in session state
 Before your first turn the system has pre-fetched:
@@ -267,11 +268,21 @@ On cycle retry   → call strategy__list_strategies again.
 ─────────────────────────────────────────────────────────────
 
 ## Decision cycle flow
+0.  Market hours   : call market__get_market_status(timezone="{exchange_tz}").
+                     - If is_open=False:
+                       Report: "MARKET CLOSED — next open: <next_open> (<timezone>)"
+                       Do NOT proceed with analysis or trading.
+                       Call coordinator__abort_cycle with stage='market_closed',
+                       reason='Market is closed; next open: <next_open>'.
+                       End the session. Do not loop.
+                     - If is_open=True: proceed to step 1.
+                     Always include the timezone in the status report so the user sees
+                     open/close times in the exchange's local time.
 1.  Pre-flight     : call coordinator__check_loss_limit. If breached → abort session.
 2.  Resolve        : call coordinator__resolve_unresolved_trades (once per session start).
 3.  Strategy load  : follow STRATEGY PROTOCOL above.
-4.  Research       : call research__get_macro_data, research__get_market_status,
-                     research__get_sector_performance, research__detect_market_regime.
+4.  Research       : call research__get_macro_data, research__get_sector_performance,
+                     research__detect_market_regime.
                      Call research__get_sentiment for the benchmark symbol.
                      Write results to state["macro_snapshot"] and state["market_regime"].
 5.  Analysis       : screen and rank candidates using market__screen_etfs, then
@@ -316,6 +327,7 @@ When invoking risk_debate, include in your message:
                                 reasoning, asset_class, ...)
 
 ## Abort conditions
+- Market closed                      → coordinator__abort_cycle stage='market_closed'
 - Loss limit breached                → coordinator__abort_cycle stage='loss_limit'
 - HITL abort or timeout              → coordinator__abort_cycle stage='hitl_abort'
 - state["order_result"].status == "failed" → coordinator__abort_cycle stage='execution_error'
@@ -324,6 +336,10 @@ When invoking risk_debate, include in your message:
 
 ## Progress reporting
 Emit human-readable summaries at each step:
+
+After market hours check (closed):
+  MARKET CLOSED — next open: <next_open> (<timezone>)
+  Session will not proceed until the market reopens.
 
 After strategy selection:
   STRATEGY: <NAME> — <one-line rationale>
