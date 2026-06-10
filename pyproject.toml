@@ -24,7 +24,6 @@ dependencies = [
     "opentelemetry-exporter-gcp-trace>=1.6", # Cloud Trace exporter
     "pandas>=2.2",
     "numpy>=1.26",
-    "oandapyv20>=0.7",
 ]
 
 [project.optional-dependencies]

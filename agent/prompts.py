@@ -242,7 +242,6 @@ All tools are named {{namespace}}__{{function}} so you can identify them by pref
   market__*       price, volume, OHLCV, quotes, spreads, order book
   analysis__*     RSI, MACD, Bollinger, momentum, ranking, backtest
   research__*     macro data, sentiment, regime detection, sector performance
-  forex__*        OANDA account balance, open positions, live prices, instruments
   memory__*       trade DB reads/writes, calibration, session cycles
   coordinator__*  HITL, loss limit, shortlist, risk synthesis, cycle recording
   strategy__*     list/load strategy files, describe_tool
@@ -296,11 +295,9 @@ On cycle retry   → call strategy__list_strategies again.
 10. Write-ahead    : call memory__write_trade BEFORE invoking execution_agent.
                      Record the intent to trade in the DB before any order is placed.
 11. Execute        : write state["pending_order"] with fields:
-                       symbol, side, asset_class ("etf"|"crypto"|"forex"),
+                       symbol, side, asset_class ("etf"|"crypto"),
                        order_type, buying_power_pct, limit_price (if limit), strategy,
                        risk_level, session_id, cycle_index
-                     For forex: use OANDA instrument format (e.g. "EUR_USD", "GBP_JPY").
-                     Check forex__get_forex_account first to verify margin availability.
                      Then invoke execution_agent. Read state["order_result"] for outcome.
 12. Record cycle   : call coordinator__record_cycle with COMMITTED or ABORTED outcome.
 

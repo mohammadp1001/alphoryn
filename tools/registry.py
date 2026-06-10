@@ -8,7 +8,6 @@ Namespace slices:
     MARKET_TOOLS      → market__*      (price, volume, market data)
     ANALYSIS_TOOLS    → analysis__*    (technical indicators, ranking)
     RESEARCH_TOOLS    → research__*    (macro, sentiment, regime)
-    FOREX_TOOLS       → forex__*       (OANDA account/prices/positions — read-only)
     EXECUTION_TOOLS   → execution__*   (orders, portfolio — execution BaseAgent only)
     MEMORY_TOOLS      → memory__*      (DB reads/writes)
     COORDINATOR_TOOLS → coordinator__* (session control, HITL, risk synthesis)
@@ -65,13 +64,6 @@ from tools.execution.tools import (
     place_market_order,
 )
 
-# ── forex.* ──────────────────────────────────────────────────────────────────
-from tools.forex.tools import (
-    get_forex_account,
-    get_forex_instruments,
-    get_forex_positions,
-    get_forex_prices,
-)
 from tools.market.tools import (
     get_52w_range,
     get_benchmark_return,
@@ -220,20 +212,11 @@ STRATEGY_TOOLS: list[FunctionTool] = [
     _tool(describe_tool, "strategy"),
 ]
 
-# Forex read tools — coordinator can check OANDA account/prices but cannot place orders
-FOREX_TOOLS: list[FunctionTool] = [
-    _tool(get_forex_account, "forex"),
-    _tool(get_forex_positions, "forex"),
-    _tool(get_forex_prices, "forex"),
-    _tool(get_forex_instruments, "forex"),
-]
-
 # All tools the coordinator LLM sees — execution tools deliberately excluded
 ALL_COORDINATOR_TOOLS: list[FunctionTool] = (
     MARKET_TOOLS
     + ANALYSIS_TOOLS
     + RESEARCH_TOOLS
-    + FOREX_TOOLS
     + MEMORY_TOOLS
     + COORDINATOR_TOOLS
     + STRATEGY_TOOLS

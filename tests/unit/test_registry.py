@@ -42,11 +42,6 @@ def test_strategy_tools_list_populated():
     assert len(STRATEGY_TOOLS) == 3  # list_strategies, get_strategy, describe_tool
 
 
-def test_forex_tools_list_populated():
-    from tools.registry import FOREX_TOOLS
-    assert len(FOREX_TOOLS) == 4  # account, positions, prices, instruments
-
-
 def test_all_coordinator_tools_excludes_execution():
     from tools.registry import ALL_COORDINATOR_TOOLS, EXECUTION_TOOLS
     exec_names = {t.name for t in EXECUTION_TOOLS}
@@ -60,13 +55,6 @@ def test_all_coordinator_tools_includes_strategy():
     strat_names = {t.name for t in STRATEGY_TOOLS}
     coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
     assert strat_names.issubset(coord_names)
-
-
-def test_all_coordinator_tools_includes_forex():
-    from tools.registry import ALL_COORDINATOR_TOOLS, FOREX_TOOLS
-    forex_names = {t.name for t in FOREX_TOOLS}
-    coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
-    assert forex_names.issubset(coord_names)
 
 
 # ── Tool type checks ──────────────────────────────────────────────────────────
@@ -145,12 +133,6 @@ def test_strategy_tools_have_strategy_prefix():
     from tools.registry import STRATEGY_TOOLS
     for tool in STRATEGY_TOOLS:
         assert tool.name.startswith("strategy__"), f"Expected strategy__ prefix: {tool.name}"
-
-
-def test_forex_tools_have_forex_prefix():
-    from tools.registry import FOREX_TOOLS
-    for tool in FOREX_TOOLS:
-        assert tool.name.startswith("forex__"), f"Expected forex__ prefix: {tool.name}"
 
 
 # ── Uniqueness ────────────────────────────────────────────────────────────────

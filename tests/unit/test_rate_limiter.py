@@ -55,7 +55,3 @@ def test_acquire_gemini_callable() -> None:
     asyncio.run(acquire_gemini())
 
 
-def test_acquire_oanda_callable() -> None:
-    from infra.rate_limiter import acquire_oanda
-
-    asyncio.run(acquire_oanda())

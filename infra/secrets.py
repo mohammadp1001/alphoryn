@@ -31,19 +31,6 @@ async def get_secret(secret_id: str, version: str = "latest") -> str:
     return response.payload.data.decode("utf-8")
 
 
-async def get_oanda_credentials() -> tuple[str, str]:
-    """
-    Returns (api_token, account_id) for the OANDA practice account.
-    Called by coordinator harness at execution-agent spawn time only.
-    Values must not be logged, stored on PlanState, or passed to other agents.
-    """
-    from config import OANDA_ACCOUNT_ID_SECRET, OANDA_API_TOKEN_SECRET
-
-    api_token = await get_secret(OANDA_API_TOKEN_SECRET)
-    account_id = await get_secret(OANDA_ACCOUNT_ID_SECRET)
-    return api_token, account_id
-
-
 async def get_alpaca_credentials() -> tuple[str, str]:
     """
     Returns (api_key, api_secret) for the Alpaca execution account.
