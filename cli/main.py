@@ -22,6 +22,8 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from infra.log_setup import configure_console_logging
+
 load_dotenv()
 
 app = typer.Typer(name="algotrade", help="Autonomous ETF trading agent", no_args_is_help=True)
@@ -149,9 +151,6 @@ def run_cmd(
 
 
 async def _run_session(params: "SessionParams") -> None:
-    # Configure logging FIRST — before any ADK imports attach their own handlers.
-    # logging.basicConfig() is a no-op when handlers already exist; this is not.
-    from infra.log_setup import configure_console_logging
     configure_console_logging()
 
     from agent.coordinator import build_app
