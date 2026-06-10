@@ -12,6 +12,11 @@ from infra.retry import with_retry
 logger = get_logger("tools.market")
 
 
+def _safe_float(v: float) -> float:
+    """Replace NaN/Inf with 0.0 — JSON doesn't support these values."""
+    return 0.0 if not math.isfinite(v) else v
+
+
 def _data_client():
     from alpaca.data import StockHistoricalDataClient  # type: ignore[import]
     return StockHistoricalDataClient(
