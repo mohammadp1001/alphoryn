@@ -37,8 +37,9 @@ When calling detect_market_regime, choose benchmark_symbol based on the active u
 - EMERGING_MARKETS: use EEM
 - COMMODITIES: use GLD
 - FIXED_INCOME: use TLT
-Fetch the benchmark's 20-day OHLCV via get_ohlcv, compute the return as
-(last_close - first_close) / first_close * 100, and pass it as benchmark_return_20d.
+Call get_benchmark_return(symbol=<benchmark_sym>, period="1mo", benchmark=<benchmark_sym>)
+and use the returned `symbol_return_pct` field as the benchmark_return_20d value.
+(get_ohlcv is NOT available to you — always use get_benchmark_return for this step.)
 
 ## Macro data
 When calling get_macro_data, pass appropriate symbols for the active universe:
@@ -215,6 +216,14 @@ You must ONLY consider the symbols listed above throughout the entire session.
 When invoking analysis_agent, always include the full symbol list verbatim in your request,
 formatted as: "symbols: {symbols}"
 This ensures the analysis agent passes them explicitly to screen_etfs.
+
+## Research request template
+When invoking research_agent use EXACTLY this template (fill in the placeholders):
+"Determine the current market regime for the {universe} universe.
+Fetch macro indicators (VIX, yield curve, DXY) and sector performance for symbols: {symbols}.
+Universe benchmark: <benchmark_sym from the selection table>.
+Select macro and benchmark symbols as instructed in your system prompt."
+Do NOT write "US treasury yields" or any US-specific language — use "yield curve" or "treasury yields".
 
 ## Decision cycle flow
 1. **Pre-flight**: Check loss limit. If breached → abort session.
