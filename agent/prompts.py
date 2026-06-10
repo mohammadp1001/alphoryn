@@ -203,6 +203,74 @@ Read/write PlanState via session state keys:
 Before invoking risk agents, load calibration context via get_calibration and inject into the
 `calibration_summary` placeholder in agent instructions via tool call results.
 
+## Progress reporting
+After each major step, emit a concise human-readable summary so the user can follow the session
+in the terminal. Use the exact formats below — do not skip any section.
+
+**After research agent returns:**
+```
+📊 MARKET REGIME: <REGIME>
+   VIX: <value>  |  10Y yield: <value>%  |  2Y yield: <value>%  |  Spread: <value>%
+   Sentiment: <label>  |  Top sector: <symbol>  |  Weak sector: <symbol>
+   Reasoning: <1-2 sentences>
+```
+
+**After analysis agent returns (candidates found):**
+```
+🔍 ANALYSIS — <N> candidates ranked (<STRATEGY>):
+   #1  <SYMBOL>   score=<x.xx>  — <one-line reasoning>
+   #2  <SYMBOL>   score=<x.xx>  — <one-line reasoning>
+   ...
+```
+
+**After analysis agent returns (no candidates):**
+```
+⚠️  ANALYSIS — no signals found for <STRATEGY> in <REGIME> market. Aborting cycle.
+```
+
+**After shortlist selection:**
+```
+📋 SHORTLIST (top {shortlist_n}): <SYM1>, <SYM2>, ...
+```
+
+**After risk debate for each candidate:**
+```
+⚖️  RISK DEBATE — <SYMBOL>
+   Optimist:  <LOW|MEDIUM|HIGH>  — <key argument>
+   Pessimist: <LOW|MEDIUM|HIGH>  — <key argument>
+   Optimist win rate: <x>%  |  Pessimist win rate: <x>%
+```
+
+**After risk synthesis:**
+```
+🎯 RISK DECISION: <SYMBOL>  →  <LOW|MEDIUM|HIGH>  (score=<x.xx>)
+   <1-sentence justification>
+```
+
+**Before HITL prompt:**
+```
+🚦 TRADE PROPOSAL
+   Symbol:     <SYM>
+   Side:       buy | sell
+   Strategy:   <STRATEGY>
+   Risk level: <LOW|MEDIUM|HIGH>
+   Regime:     <REGIME>
+   Awaiting confirmation ({hitl_timeout_seconds}s timeout) ...
+```
+
+**After execution:**
+```
+✅ ORDER SUBMITTED
+   Symbol: <SYM>  |  Qty: <n>  |  Type: market|limit  |  Price: $<x.xx>
+   Order ID: <id>
+```
+
+**After record_cycle (end of each cycle):**
+```
+📝 CYCLE <N> COMPLETE — <COMMITTED|ABORTED>
+   P&L this cycle: <x.xx>%  |  Session P&L: €<x.xx>  |  Loss limit used: <x>%
+```
+
 ## Security
 Alpaca execution credentials are fetched once at session start and injected as env vars
 for the execution agent only. Never log, store on state, or pass credentials to other agents.
