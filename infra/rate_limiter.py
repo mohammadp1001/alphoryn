@@ -15,6 +15,8 @@ from config import (
     RATE_ALPACA_TRADING_PER_MIN,
     RATE_GEMINI_BURST,
     RATE_GEMINI_PER_MIN,
+    RATE_OANDA_BURST,
+    RATE_OANDA_PER_MIN,
     RATE_SECRET_MANAGER_BURST,
     RATE_SECRET_MANAGER_PER_MIN,
     RATE_YFINANCE_BURST,
@@ -83,6 +85,10 @@ _CONFIGS: dict[str, dict] = {
         "rate": RATE_GEMINI_PER_MIN / 60,
         "burst": RATE_GEMINI_BURST,
     },
+    "oanda": {
+        "rate": RATE_OANDA_PER_MIN / 60,
+        "burst": RATE_OANDA_BURST,
+    },
 }
 
 
@@ -104,3 +110,7 @@ async def acquire_secret_manager() -> None:
 
 async def acquire_gemini() -> None:
     await _get("gemini").acquire()
+
+
+async def acquire_oanda() -> None:
+    await _get("oanda").acquire()

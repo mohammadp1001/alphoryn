@@ -138,6 +138,7 @@ def test_coordinator_shows_tool_namespaces():
     assert "analysis__*" in formatted
     assert "research__*" in formatted
     assert "strategy__*" in formatted
+    assert "forex__*" in formatted
 
 
 def test_coordinator_no_execution_tools_exposed():
