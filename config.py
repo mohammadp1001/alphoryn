@@ -43,6 +43,12 @@ ETF_UNIVERSES: dict[str, list[str]] = {
     "REAL_ESTATE": [
         "VNQ", "IYR", "XLRE", "REM", "MORT", "KBWY", "SRVR",
     ],
+    "EU_MARKET": [
+        "EZU", "VGK", "FEZ", "IEUR", "HEDJ", "EWQ", "EWI", "EWP", "EWN", "EWD",
+    ],
+    "GERMAN_MARKET": [
+        "EWG", "DBGR", "HEWG", "FLGR",
+    ],
 }
 
 DEFAULT_ETF_UNIVERSE: list[str] = ETF_UNIVERSES["US_SECTOR_ETFS"]
