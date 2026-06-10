@@ -352,34 +352,37 @@ async def get_economic_calendar(days_ahead: int) -> dict:
 
 
 @with_retry
-async def detect_market_regime(vix: float, yield_10y: float, yield_2y: float, spy_return_20d: float) -> dict:
+async def detect_market_regime(vix: float, yield_10y: float, yield_2y: float, benchmark_return_20d: float, benchmark_symbol: str = "SPY") -> dict:
     """Classify current market regime based on macro inputs.
 
     Args:
         vix: Current VIX value.
         yield_10y: 10-year treasury yield percentage.
         yield_2y: 2-year treasury yield percentage.
-        spy_return_20d: SPY 20-day return percentage.
+        benchmark_return_20d: 20-day return (%) of the representative benchmark for the active universe.
+            Use SPY for US markets, EWG for German market, EFA for international developed,
+            EEM for emerging markets, or the most liquid ETF in the active universe.
+        benchmark_symbol: Ticker used as the benchmark (for logging/display). Defaults to 'SPY'.
 
     Returns:
         dict with 'regime' (MarketRegime enum string) and 'reasoning'.
     """
-    logger.info("detect_market_regime vix=%s spy_return_20d=%s", vix, spy_return_20d)
+    logger.info("detect_market_regime vix=%s benchmark=%s return_20d=%s", vix, benchmark_symbol, benchmark_return_20d)
     if vix > 30:
         regime = "CRISIS"
         reasoning = f"VIX={vix:.1f} signals extreme fear; market in crisis mode"
     elif vix > 20:
         regime = "HIGH_VOL"
         reasoning = f"VIX={vix:.1f} elevated; high volatility regime"
-    elif spy_return_20d > 2.0 and vix < 15:
+    elif benchmark_return_20d > 2.0 and vix < 15:
         regime = "BULL_TREND"
-        reasoning = f"Low volatility (VIX={vix:.1f}) with positive momentum ({spy_return_20d:.1f}%)"
-    elif spy_return_20d < -2.0:
+        reasoning = f"Low volatility (VIX={vix:.1f}) with positive {benchmark_symbol} momentum ({benchmark_return_20d:.1f}%)"
+    elif benchmark_return_20d < -2.0:
         regime = "BEAR_TREND"
-        reasoning = f"Negative 20d momentum ({spy_return_20d:.1f}%); bear trend conditions"
+        reasoning = f"Negative {benchmark_symbol} 20d momentum ({benchmark_return_20d:.1f}%); bear trend conditions"
     else:
         regime = "LOW_VOL_RANGE"
-        reasoning = f"VIX={vix:.1f}, SPY 20d={spy_return_20d:.1f}%; low-vol range-bound market"
+        reasoning = f"VIX={vix:.1f}, {benchmark_symbol} 20d={benchmark_return_20d:.1f}%; low-vol range-bound market"
 
     return {
         "regime": regime,
@@ -388,7 +391,8 @@ async def detect_market_regime(vix: float, yield_10y: float, yield_2y: float, sp
         "yield_10y": yield_10y,
         "yield_2y": yield_2y,
         "yield_curve_spread": round(yield_10y - yield_2y, 3),
-        "spy_return_20d": spy_return_20d,
+        "benchmark_symbol": benchmark_symbol,
+        "benchmark_return_20d": benchmark_return_20d,
     }
 
 

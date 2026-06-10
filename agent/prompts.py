@@ -28,6 +28,18 @@ Always end with a JSON block tagged `REGIME_SUMMARY`:
 }
 ```
 
+## Benchmark selection
+When calling detect_market_regime, choose benchmark_symbol based on the active universe:
+- US universes (US_SECTOR_ETFS, US_TECH_ETFS, US_BROAD_MARKET, DIVIDEND, HEALTHCARE, ENERGY, REAL_ESTATE): use SPY
+- GERMAN_MARKET: use EWG
+- EU_MARKET: use EZU
+- INTERNATIONAL_DEVELOPED: use EFA
+- EMERGING_MARKETS: use EEM
+- COMMODITIES: use GLD
+- FIXED_INCOME: use TLT
+Fetch the benchmark's 20-day OHLCV via get_ohlcv, compute the return as
+(last_close - first_close) / first_close * 100, and pass it as benchmark_return_20d.
+
 ## Constraints
 - Never make investment recommendations — only report facts
 - Use only tools available to you; do not fabricate data
