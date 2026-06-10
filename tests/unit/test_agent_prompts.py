@@ -68,64 +68,47 @@ def test_risk_pessimist_contains_recommended_level_in_json_block():
 
 # ── COORDINATOR_INSTRUCTION format ────────────────────────────────────────────
 
+_COORD_BASE_KWARGS = dict(
+    session_id="test-session-id",
+    strategy="MOMENTUM",
+    mode="SEMI_AUTO",
+    loss_limit_eur=500.0,
+    shortlist_n=2,
+    hitl_timeout_seconds=60,
+    hitl_timeout_action="abort",
+    universe="US_SECTOR_ETFS",
+    symbols="XLK, XLE, XLF",
+)
+
+
 def test_coordinator_instruction_formats_without_error():
     from agent.prompts import COORDINATOR_INSTRUCTION
-    formatted = COORDINATOR_INSTRUCTION.format(
-        session_id="test-session-id",
-        strategy="MOMENTUM",
-        mode="SEMI_AUTO",
-        loss_limit_eur=500.0,
-        shortlist_n=2,
-        hitl_timeout_seconds=60,
-        hitl_timeout_action="abort",
-    )
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
     assert "test-session-id" in formatted
     assert "MOMENTUM" in formatted
     assert "SEMI_AUTO" in formatted
     assert "500.0" in formatted
+    assert "US_SECTOR_ETFS" in formatted
+    assert "XLK" in formatted
 
 
 def test_coordinator_instruction_all_strategies():
     from agent.prompts import COORDINATOR_INSTRUCTION
     for strategy in ["MOMENTUM", "MEAN_REVERSION", "SECTOR_ROTATION"]:
-        formatted = COORDINATOR_INSTRUCTION.format(
-            session_id="s",
-            strategy=strategy,
-            mode="FULL_AUTO",
-            loss_limit_eur=1000.0,
-            shortlist_n=3,
-            hitl_timeout_seconds=30,
-            hitl_timeout_action="confirm",
-        )
+        formatted = COORDINATOR_INSTRUCTION.format(**{**_COORD_BASE_KWARGS, "strategy": strategy})
         assert strategy in formatted
 
 
 def test_coordinator_instruction_all_modes():
     from agent.prompts import COORDINATOR_INSTRUCTION
     for mode in ["SEMI_AUTO", "FULL_AUTO"]:
-        formatted = COORDINATOR_INSTRUCTION.format(
-            session_id="s",
-            strategy="MOMENTUM",
-            mode=mode,
-            loss_limit_eur=500.0,
-            shortlist_n=2,
-            hitl_timeout_seconds=60,
-            hitl_timeout_action="abort",
-        )
+        formatted = COORDINATOR_INSTRUCTION.format(**{**_COORD_BASE_KWARGS, "mode": mode})
         assert mode in formatted
 
 
 def test_coordinator_instruction_mentions_decision_cycle_flow():
     from agent.prompts import COORDINATOR_INSTRUCTION
-    formatted = COORDINATOR_INSTRUCTION.format(
-        session_id="s",
-        strategy="MOMENTUM",
-        mode="SEMI_AUTO",
-        loss_limit_eur=500.0,
-        shortlist_n=2,
-        hitl_timeout_seconds=60,
-        hitl_timeout_action="abort",
-    )
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
     assert "research" in formatted.lower()
     assert "execution" in formatted.lower()
 

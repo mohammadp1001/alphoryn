@@ -47,6 +47,11 @@ Your job: screen the ETF universe, compute technical signals, and produce a rank
 6. Rank candidates by combined technical score
 7. Return ranked signals for shortlist selection
 
+## Symbol universe
+The coordinator's request will contain the explicit list of symbols to screen (e.g. "symbols: EWG, FEZ, EZU").
+You MUST extract that list and pass it as the `symbols` parameter when calling `screen_etfs`.
+Never call `screen_etfs` without the `symbols` parameter — do not rely on its default universe.
+
 ## Strategy-specific focus
 - MOMENTUM: Prioritise RSI 40-60 trending up, MACD bullish crossover, high relative volume
 - MEAN_REVERSION: Prioritise oversold RSI (<30), price near lower Bollinger Band, low ATR
@@ -169,6 +174,14 @@ You orchestrate the full decision cycle: research → analysis → risk debate �
 - Loss limit: {loss_limit_eur} EUR
 - Shortlist N: {shortlist_n}
 - HITL timeout: {hitl_timeout_seconds}s (action on timeout: {hitl_timeout_action})
+- Universe: {universe}
+- Symbols: {symbols}
+
+## Market universe
+You must ONLY consider the symbols listed above throughout the entire session.
+When invoking analysis_agent, always include the full symbol list verbatim in your request,
+formatted as: "symbols: {symbols}"
+This ensures the analysis agent passes them explicitly to screen_etfs.
 
 ## Decision cycle flow
 1. **Pre-flight**: Check loss limit. If breached → abort session.
