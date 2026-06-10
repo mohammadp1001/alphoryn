@@ -1,8 +1,14 @@
 """market.* tools — 12 tools, analysis agent scope."""
 from __future__ import annotations
 
+import math
 import os
 from datetime import datetime, timedelta
+
+
+def _safe_float(v: float) -> float:
+    """Replace NaN/Inf with 0.0 — JSON doesn't support these values."""
+    return 0.0 if not math.isfinite(v) else v
 
 from infra.observability import api_call_span
 from infra.rate_limiter import acquire_alpaca_data, acquire_yfinance
@@ -296,8 +302,8 @@ async def get_benchmark_return(symbol: str, period: str) -> dict:
     if hist.empty:
         return {"symbol": symbol, "benchmark": "SPY", "period": period,
                 "symbol_return_pct": 0.0, "benchmark_return_pct": 0.0, "excess_return_pct": 0.0}
-    sym_ret = float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100)
-    spy_ret = float((hist["SPY"].iloc[-1] / hist["SPY"].iloc[0] - 1) * 100)
+    sym_ret = _safe_float(float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100))
+    spy_ret = _safe_float(float((hist["SPY"].iloc[-1] / hist["SPY"].iloc[0] - 1) * 100))
     return {
         "symbol": symbol, "benchmark": "SPY", "period": period,
         "symbol_return_pct": round(sym_ret, 2),
