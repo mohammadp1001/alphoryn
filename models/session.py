@@ -19,6 +19,7 @@ class SessionParams(BaseModel):
     shortlist_n: int = 2                # 1–5, default 2
     hitl_timeout_seconds: int = 60
     hitl_timeout_action: str = "abort"  # "abort" | "proceed"
+    universe: str = "US_SECTOR_ETFS"   # key into config.ETF_UNIVERSES
 
 
 class PlanState(BaseModel):
