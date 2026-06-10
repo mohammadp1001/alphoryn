@@ -148,21 +148,24 @@ async def get_order_book(symbol: str, depth: int) -> dict:
     }
 
 
-async def screen_etfs(min_avg_volume: float, min_price: float) -> dict:
-    """Screen ETFs from the default universe by volume and price filters.
+async def screen_etfs(min_avg_volume: float, min_price: float, symbols: list[str] | None = None) -> dict:
+    """Screen ETFs by volume and price filters.
 
     Args:
         min_avg_volume: Minimum 30-day average volume threshold.
         min_price: Minimum current price threshold.
+        symbols: Explicit list of symbols to screen. Defaults to DEFAULT_ETF_UNIVERSE.
 
     Returns:
         dict with 'results' — list of {symbol, price, avg_volume_30d, ytd_return_pct, sector}.
     """
-    logger.info("screen_etfs min_avg_volume=%s min_price=%s", min_avg_volume, min_price)
-    from config import DEFAULT_ETF_UNIVERSE
+    logger.info("screen_etfs min_avg_volume=%s min_price=%s symbols=%s", min_avg_volume, min_price, symbols)
+    if symbols is None:
+        from config import DEFAULT_ETF_UNIVERSE
+        symbols = DEFAULT_ETF_UNIVERSE
 
     results = []
-    for symbol in DEFAULT_ETF_UNIVERSE:
+    for symbol in symbols:
         try:
             await acquire_yfinance()
             import yfinance as yf  # type: ignore[import]
