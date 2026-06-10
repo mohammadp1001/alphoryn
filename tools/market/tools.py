@@ -224,7 +224,7 @@ async def screen_etfs(min_avg_volume: float, min_price: float, symbols: list[str
                     "price": float(price),
                     "avg_volume_30d": float(avg_vol),
                     "ytd_return_pct": float(info.get("52WeekChange", 0.0) * 100),
-                    "sector": info.get("sector"),
+                    "sector": info.get("sector") or "Unknown",
                 })
         except Exception:
             continue
