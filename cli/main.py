@@ -149,6 +149,11 @@ def run_cmd(
 
 
 async def _run_session(params: "SessionParams") -> None:
+    # Configure logging FIRST — before any ADK imports attach their own handlers.
+    # logging.basicConfig() is a no-op when handlers already exist; this is not.
+    from infra.log_setup import configure_console_logging
+    configure_console_logging()
+
     from agent.coordinator import build_app
     from db.schema import init_db
     from infra.observability import get_logger, setup_observability

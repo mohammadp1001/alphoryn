@@ -11,7 +11,17 @@ Import the namespace sets to assign to each agent:
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from google.adk.tools import FunctionTool  # type: ignore[import]
+
+from infra.tool_logger import log_io
+
+
+def _tool(fn: Callable[..., Any]) -> FunctionTool:
+    """Wrap fn with I/O logging then register as a FunctionTool."""
+    return FunctionTool(func=log_io(fn))
 
 # ── market.* ─────────────────────────────────────────────────────────────────
 from tools.market.tools import (
@@ -100,81 +110,81 @@ from tools.coordinator.tools import (
 # ── Wrapped FunctionTools ─────────────────────────────────────────────────────
 
 MARKET_TOOLS: list[FunctionTool] = [
-    FunctionTool(func=get_ohlcv),
-    FunctionTool(func=get_quote),
-    FunctionTool(func=get_spread),
-    FunctionTool(func=get_order_book),
-    FunctionTool(func=screen_etfs),
-    FunctionTool(func=get_etf_holdings),
-    FunctionTool(func=get_sector_map),
-    FunctionTool(func=get_52w_range),
-    FunctionTool(func=get_volume_profile),
-    FunctionTool(func=get_benchmark_return),
-    FunctionTool(func=get_intraday_bars),
-    FunctionTool(func=get_market_status),
+    _tool(get_ohlcv),
+    _tool(get_quote),
+    _tool(get_spread),
+    _tool(get_order_book),
+    _tool(screen_etfs),
+    _tool(get_etf_holdings),
+    _tool(get_sector_map),
+    _tool(get_52w_range),
+    _tool(get_volume_profile),
+    _tool(get_benchmark_return),
+    _tool(get_intraday_bars),
+    _tool(get_market_status),
 ]
 
 ANALYSIS_TOOLS: list[FunctionTool] = [
-    FunctionTool(func=compute_rsi),
-    FunctionTool(func=compute_macd),
-    FunctionTool(func=compute_bollinger),
-    FunctionTool(func=compute_atr),
-    FunctionTool(func=compute_beta),
-    FunctionTool(func=detect_momentum),
-    FunctionTool(func=detect_crossover),
-    FunctionTool(func=detect_support_resistance),
-    FunctionTool(func=rank_by_momentum),
-    FunctionTool(func=run_backtest),
-    FunctionTool(func=calc_sharpe),
-    FunctionTool(func=calc_max_drawdown),
-    FunctionTool(func=calc_correlation),
-    FunctionTool(func=score_technical),
+    _tool(compute_rsi),
+    _tool(compute_macd),
+    _tool(compute_bollinger),
+    _tool(compute_atr),
+    _tool(compute_beta),
+    _tool(detect_momentum),
+    _tool(detect_crossover),
+    _tool(detect_support_resistance),
+    _tool(rank_by_momentum),
+    _tool(run_backtest),
+    _tool(calc_sharpe),
+    _tool(calc_max_drawdown),
+    _tool(calc_correlation),
+    _tool(score_technical),
 ]
 
 RESEARCH_TOOLS: list[FunctionTool] = [
-    FunctionTool(func=get_news),
-    FunctionTool(func=get_sentiment),
-    FunctionTool(func=get_earnings_calendar),
-    FunctionTool(func=get_macro_data),
-    FunctionTool(func=get_fund_flows),
-    FunctionTool(func=get_etf_metrics),
-    FunctionTool(func=compare_etfs),
-    FunctionTool(func=get_expense_ratios),
-    FunctionTool(func=get_sector_performance),
-    FunctionTool(func=get_dividend_history),
-    FunctionTool(func=get_economic_calendar),
-    FunctionTool(func=detect_market_regime),
-    FunctionTool(func=get_analyst_ratings),
+    _tool(get_news),
+    _tool(get_sentiment),
+    _tool(get_earnings_calendar),
+    _tool(get_macro_data),
+    _tool(get_fund_flows),
+    _tool(get_etf_metrics),
+    _tool(compare_etfs),
+    _tool(get_expense_ratios),
+    _tool(get_sector_performance),
+    _tool(get_dividend_history),
+    _tool(get_economic_calendar),
+    _tool(detect_market_regime),
+    _tool(get_analyst_ratings),
 ]
 
 EXECUTION_TOOLS: list[FunctionTool] = [
-    FunctionTool(func=get_portfolio),
-    FunctionTool(func=get_position),
-    FunctionTool(func=place_market_order),
-    FunctionTool(func=place_limit_order),
-    FunctionTool(func=cancel_order),
-    FunctionTool(func=get_order_status),
-    FunctionTool(func=get_account_status),
+    _tool(get_portfolio),
+    _tool(get_position),
+    _tool(place_market_order),
+    _tool(place_limit_order),
+    _tool(cancel_order),
+    _tool(get_order_status),
+    _tool(get_account_status),
 ]
 
 MEMORY_TOOLS: list[FunctionTool] = [
-    FunctionTool(func=write_trade),
-    FunctionTool(func=resolve_trade),
-    FunctionTool(func=get_calibration),
-    FunctionTool(func=get_session_cycles),
-    FunctionTool(func=get_unresolved_trades),
-    FunctionTool(func=record_cycle),
+    _tool(write_trade),
+    _tool(resolve_trade),
+    _tool(get_calibration),
+    _tool(get_session_cycles),
+    _tool(get_unresolved_trades),
+    _tool(record_cycle),
 ]
 
 COORDINATOR_TOOLS: list[FunctionTool] = [
-    FunctionTool(func=request_hitl),
-    FunctionTool(func=check_loss_limit),
-    FunctionTool(func=select_shortlist),
-    FunctionTool(func=synthesise_risk),
-    FunctionTool(func=resolve_unresolved_trades),
-    FunctionTool(func=update_plan_state),
-    FunctionTool(func=get_session_summary),
-    FunctionTool(func=abort_cycle),
+    _tool(request_hitl),
+    _tool(check_loss_limit),
+    _tool(select_shortlist),
+    _tool(synthesise_risk),
+    _tool(resolve_unresolved_trades),
+    _tool(update_plan_state),
+    _tool(get_session_summary),
+    _tool(abort_cycle),
 ]
 
 # Convenience: all coordinator-scope tools (memory + coordinator)

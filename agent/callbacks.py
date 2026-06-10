@@ -9,49 +9,53 @@ from google.adk.agents.callback_context import CallbackContext  # type: ignore[i
 
 logger = logging.getLogger("agent.callbacks")
 
+_MAX_CHARS = 2000
+
 
 def _serialise(value: object) -> str:
-    """Best-effort JSON serialisation — falls back to repr for non-serialisable types."""
     try:
-        return json.dumps(value, indent=2, default=str)
+        raw = json.dumps(value, indent=2, default=str)
     except Exception:
-        return repr(value)
+        raw = repr(value)
+    if len(raw) > _MAX_CHARS:
+        return raw[:_MAX_CHARS] + "\n  …(truncated)"
+    return raw
 
 
 def make_agent_log_callbacks(
     agent_name: str,
     output_key: str,
 ) -> tuple[Callable, Callable]:
-    """Return (before_callback, after_callback) that log agent I/O at INFO level.
-
-    before_callback — logs the incoming user_content (the coordinator's request).
-    after_callback  — logs the structured Pydantic output written to state[output_key].
-    """
+    """Return (before_callback, after_callback) that log agent I/O at DEBUG level."""
 
     async def before_callback(callback_context: CallbackContext) -> None:
-        request_text = ""
+        request_text = "<unavailable>"
         try:
             content = callback_context.user_content
             if content and content.parts:
                 request_text = " ".join(
                     p.text for p in content.parts if hasattr(p, "text") and p.text
-                )
+                ) or "<empty>"
         except Exception:
-            request_text = "<unavailable>"
-        logger.info("[%s] ▶ starting | request: %s", agent_name, request_text or "<empty>")
+            pass
+        logger.debug(
+            "AGENT ▶  %-20s  request = %s",
+            agent_name,
+            request_text,
+        )
 
     async def after_callback(callback_context: CallbackContext) -> None:
         output = callback_context.state.get(output_key)
         if output is not None:
-            logger.info(
-                "[%s] ◀ completed | %s:\n%s",
+            logger.debug(
+                "AGENT ◀  %-20s  %s =\n%s",
                 agent_name,
                 output_key,
                 _serialise(output),
             )
         else:
             logger.warning(
-                "[%s] ◀ completed | state key '%s' is empty — output_schema may have failed",
+                "AGENT ◀  %-20s  state key '%s' is EMPTY — output_schema enforcement may have failed",
                 agent_name,
                 output_key,
             )
