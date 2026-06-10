@@ -58,10 +58,13 @@ def _backoff(attempt: int) -> float:
 
 def _is_retryable(exc: Exception) -> bool:
     msg = str(exc).lower()
-    # Check for HTTP status codes in the exception message / attributes
+    # HTTP status codes in the exception message (works for httpx, alpaca-py, google-genai)
     for code in _RETRYABLE_STATUS:
         if str(code) in msg:
             return True
-    # Common exception type names from alpaca-py and httpx
+    # gRPC / Vertex AI status names
+    if "resource_exhausted" in msg or "resource exhausted" in msg:
+        return True
+    # Common exception type names from alpaca-py, httpx, grpc
     retryable_names = {"ratelimiterror", "servererror", "timeouterror", "connectionerror"}
     return type(exc).__name__.lower() in retryable_names

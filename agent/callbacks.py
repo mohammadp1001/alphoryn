@@ -7,6 +7,8 @@ from typing import Callable
 
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
 
+from infra.rate_limiter import acquire_gemini
+
 logger = logging.getLogger("agent.callbacks")
 
 _MAX_CHARS = 2000
@@ -26,9 +28,13 @@ def make_agent_log_callbacks(
     agent_name: str,
     output_key: str,
 ) -> tuple[Callable, Callable]:
-    """Return (before_callback, after_callback) that log agent I/O at DEBUG level."""
+    """Return (before_callback, after_callback) that rate-limit and log agent I/O."""
 
     async def before_callback(callback_context: CallbackContext) -> None:
+        # Acquire a Gemini API token before the agent makes its first LLM call.
+        # This is the primary defence against 429 RESOURCE_EXHAUSTED from Vertex AI.
+        await acquire_gemini()
+
         request_text = "<unavailable>"
         try:
             content = callback_context.user_content
