@@ -5,6 +5,7 @@ from google.adk.agents import Agent  # type: ignore[import]
 
 from agent.prompts import ANALYSIS_AGENT_INSTRUCTION
 from tools.registry import ANALYSIS_TOOLS, MARKET_TOOLS
+from tools.schemas import RankedSignalsOutput
 
 
 def create_analysis_agent() -> Agent:
@@ -16,6 +17,8 @@ def create_analysis_agent() -> Agent:
         tools=MARKET_TOOLS + ANALYSIS_TOOLS,
         description=(
             "Screens the ETF universe for technical signals; computes RSI/MACD/Bollinger; "
-            "runs signal lookback; returns ranked candidate shortlist."
+            "runs signal lookback; returns ALL symbols ranked by score."
         ),
+        output_key="ranked_signals",
+        output_schema=RankedSignalsOutput,
     )

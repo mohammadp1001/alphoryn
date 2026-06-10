@@ -5,6 +5,7 @@ from google.adk.agents import Agent  # type: ignore[import]
 
 from agent.prompts import RESEARCH_AGENT_INSTRUCTION
 from tools.registry import MARKET_TOOLS, RESEARCH_TOOLS
+from tools.schemas import MarketRegimeOutput
 
 
 def create_research_agent() -> Agent:
@@ -21,6 +22,8 @@ def create_research_agent() -> Agent:
         ],
         description=(
             "Gathers macro and market intelligence; detects market regime; "
-            "returns a structured MarketRegimeSummary."
+            "returns a structured MarketRegimeOutput."
         ),
+        output_key="market_regime",
+        output_schema=MarketRegimeOutput,
     )
