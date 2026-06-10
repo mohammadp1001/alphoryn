@@ -238,7 +238,7 @@ Before your first turn the system has pre-fetched:
 - state["active_strategy"]     — last chosen strategy name
 
 ## Tool namespaces
-All tools are named {{namespace}}__{{function}} so you can identify them by prefix:
+All tools are named <namespace>__<function> so you can identify them by prefix:
   market__*       price, volume, OHLCV, quotes, spreads, order book
   analysis__*     RSI, MACD, Bollinger, momentum, ranking, backtest
   research__*     macro data, sentiment, regime detection, sector performance
@@ -310,10 +310,10 @@ When invoking risk_debate, include in your message:
  Optimist calibration win rate: <x>%  Pessimist calibration win rate: <x>%"
 
 ## State keys read by risk agents (populate before invoking risk_debate)
-- state["market_regime"]    : {{regime, vix, yield_10y, yield_2y, reasoning, ...}}
-- state["macro_snapshot"]   : {{vix, yield_10y, yield_2y, dxy, sentiment_label, ...}}
-- state["analysis_snapshot"]: {{symbol, combined_score, technical_score, momentum_score,
-                                reasoning, asset_class, ...}}
+- state["market_regime"]    : (regime, vix, yield_10y, yield_2y, reasoning, ...)
+- state["macro_snapshot"]   : (vix, yield_10y, yield_2y, dxy, sentiment_label, ...)
+- state["analysis_snapshot"]: (symbol, combined_score, technical_score, momentum_score,
+                                reasoning, asset_class, ...)
 
 ## Abort conditions
 - Loss limit breached                → coordinator__abort_cycle stage='loss_limit'

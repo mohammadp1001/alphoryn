@@ -614,7 +614,7 @@ class PendingOrder(_Base):
     """Written by coordinator to state["pending_order"]; read by execution BaseAgent."""
     symbol: str
     side: str                        # "buy" | "sell"
-    asset_class: str                 # "etf" | "crypto" | "forex"
+    asset_class: str                 # "etf" | "crypto"
     order_type: str                  # "market" | "limit"
     qty: float | None = None         # shares/units; None = size by buying_power_pct
     buying_power_pct: float = 0.10   # fraction of buying power if qty is None

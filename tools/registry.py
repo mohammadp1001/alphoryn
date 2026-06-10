@@ -63,7 +63,6 @@ from tools.execution.tools import (
     place_limit_order,
     place_market_order,
 )
-
 from tools.market.tools import (
     get_52w_range,
     get_benchmark_return,

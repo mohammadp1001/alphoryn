@@ -5,7 +5,6 @@ import asyncio
 import logging
 from unittest.mock import patch
 
-
 # ── _serialise ────────────────────────────────────────────────────────────────
 
 def test_serialise_simple_value():
@@ -91,9 +90,9 @@ def test_log_io_logs_output_at_debug(caplog):
 
 
 def test_log_io_reraises_exception(caplog):
-    from infra.tool_logger import log_io
-
     import pytest
+
+    from infra.tool_logger import log_io
 
     @log_io
     async def broken_tool(symbol: str) -> dict:
@@ -109,9 +108,9 @@ def test_log_io_reraises_exception(caplog):
 
 
 def test_log_io_logs_error_on_exception(caplog):
-    from infra.tool_logger import log_io
-
     import pytest
+
+    from infra.tool_logger import log_io
 
     @log_io
     async def fail_tool() -> dict:
@@ -173,7 +172,6 @@ def test_log_io_sig_bind_exception_falls_back():
     """Lines 46-47: when inspect.signature raises, args_repr falls back to repr."""
     import infra.tool_logger as tl_mod
     from infra.tool_logger import log_io
-    from unittest.mock import patch
 
     @log_io
     async def simple_fn(x: int) -> int:

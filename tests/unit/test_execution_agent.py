@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 class _FakeSession:
@@ -111,7 +110,7 @@ def test_run_async_impl_crypto_routes_to_alpaca():
     mock_result = {"order_id": "crypto-1", "status": "submitted", "symbol": "BTCUSD",
                    "qty": 1.0, "side": "buy", "type": "market"}
     with patch("agent.execution_agent._execute_alpaca", new=AsyncMock(return_value=mock_result)):
-        events = asyncio.run(_collect(agent._run_async_impl(ctx)))
+        asyncio.run(_collect(agent._run_async_impl(ctx)))
 
     assert ctx.session.state["order_result"]["order_id"] == "crypto-1"
 
@@ -122,7 +121,7 @@ def test_run_async_impl_unknown_asset_class():
     ctx = _FakeCtx()
     ctx.session.state["pending_order"] = _make_pending_order_dict(asset_class="commodity")
 
-    events = asyncio.run(_collect(agent._run_async_impl(ctx)))
+    asyncio.run(_collect(agent._run_async_impl(ctx)))
 
     assert ctx.session.state["order_result"]["status"] == "failed"
     assert "unknown asset_class" in ctx.session.state["order_result"]["error"]
