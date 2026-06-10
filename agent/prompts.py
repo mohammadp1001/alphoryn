@@ -83,11 +83,11 @@ The winner is determined by historical pairwise win rates, not by persuasion.
 ## Output contract
 Always end with a JSON block tagged `VERDICT`:
 ```json
-{
+{{
   "recommended_level": "LOW|MEDIUM|HIGH",
   "reasoning": "<3-5 sentences citing specific signals>",
   "acknowledged_opposing_signal": "<1 signal you admit goes against your view>"
-}
+}}
 ```
 """
 

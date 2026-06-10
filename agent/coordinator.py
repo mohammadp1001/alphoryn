@@ -88,12 +88,12 @@ async def _session_init_callback(callback_context: CallbackContext) -> None:
 def build_app(params: SessionParams) -> Any:
     """Build an ADK Runner App for one trading session.
 
-    Returns the app configured with EventsCompactionConfig for long-running sessions.
+    Returns (runner, session_id, plan_state, session_service).
+    Caller must await session_service.create_session(...) before run_async().
     """
     import uuid
     from google.adk.runners import Runner  # type: ignore[import]
     from google.adk.sessions import InMemorySessionService  # type: ignore[import]
-    from google.adk.agents.run_config import RunConfig  # type: ignore[import]
 
     session_id = str(uuid.uuid4())
     plan_state = PlanState(
@@ -109,4 +109,4 @@ def build_app(params: SessionParams) -> Any:
         app_name="alphoryn",
         session_service=session_service,
     )
-    return runner, session_id, plan_state
+    return runner, session_id, plan_state, session_service

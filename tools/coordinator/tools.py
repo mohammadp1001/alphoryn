@@ -47,7 +47,7 @@ async def request_hitl(
         f"Type 'confirm' to proceed or 'abort' to skip [{timeout_action} in {timeout_seconds}s]: "
     )
 
-    async with hitl_span(session_id, cycle_index, risk_level):
+    with hitl_span(f"{side.upper()} {qty} {symbol}"):
         try:
             loop = asyncio.get_event_loop()
             user_input = await asyncio.wait_for(
