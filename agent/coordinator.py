@@ -51,9 +51,10 @@ def create_coordinator(
     )
     execution_tool = AgentTool(agent=create_execution_agent())
 
-    from config import DEFAULT_ETF_UNIVERSE, ETF_UNIVERSES
+    from config import DEFAULT_ETF_UNIVERSE, ETF_UNIVERSES, UNIVERSE_EXCHANGE_TZ
     universe_symbols = ETF_UNIVERSES.get(params.universe, DEFAULT_ETF_UNIVERSE)
     symbols_str = ", ".join(universe_symbols)
+    exchange_tz = UNIVERSE_EXCHANGE_TZ.get(params.universe, "America/New_York")
 
     from config import MAX_STRATEGY_CYCLES
     instruction = COORDINATOR_INSTRUCTION.format(
@@ -66,6 +67,7 @@ def create_coordinator(
         hitl_timeout_action=params.hitl_timeout_action,
         universe=params.universe,
         symbols=symbols_str,
+        exchange_tz=exchange_tz,
         max_strategy_cycles=MAX_STRATEGY_CYCLES,
     )
 
