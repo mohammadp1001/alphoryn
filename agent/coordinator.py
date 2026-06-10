@@ -2,7 +2,7 @@
 Coordinator agent — top-level orchestrator for the trading decision cycle.
 
 Architecture (flattened):
-  Coordinator (LlmAgent — Gemini 2.5 Pro)
+  Coordinator (LlmAgent — Gemini 2.5 Flash)
     ├── ALL_COORDINATOR_TOOLS  (market/analysis/research/memory/coordinator/strategy)
     ├── AgentTool(risk_debate) — SequentialAgent: optimist → pessimist
     └── AgentTool(execution_agent) — BaseAgent: deterministic order routing
@@ -35,14 +35,14 @@ logger = logging.getLogger("agent.coordinator")
 def create_coordinator(
     params: SessionParams,
     plan_state: PlanState,
-    model: str = "gemini-2.5-pro",
+    model: str = "gemini-2.5-flash",
 ) -> Agent:
     """Factory: returns a fully wired coordinator agent for one session.
 
     Args:
         params: Session configuration (strategy, mode, limits, etc.).
         plan_state: Initial PlanState for this session.
-        model: Gemini model ID for the coordinator. Default: gemini-2.5-pro.
+        model: Gemini model ID for the coordinator. Default: gemini-2.5-flash.
     """
     _placeholder_cal = "Calibration data will be loaded at the start of each cycle."
 

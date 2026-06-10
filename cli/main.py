@@ -226,12 +226,12 @@ async def _run_session(params: SessionParams) -> None:
                 elif hasattr(part, "function_call") and part.function_call:
                     fc = part.function_call
                     args_preview = ", ".join(f"{k}={v!r}" for k, v in (fc.args or {}).items())
-                    rprint(f"[dim yellow]  → [{author}] {fc.name}({args_preview})[/dim yellow]")
+                    rprint(f"[dim yellow]  -> [{author}] {fc.name}({args_preview})[/dim yellow]")
                 elif hasattr(part, "function_response") and part.function_response:
                     fr = part.function_response
                     resp = fr.response or {}
                     summary = _summarise_tool_response(fr.name, resp)
-                    rprint(f"[dim green]  ← [{author}] {fr.name}: {summary}[/dim green]")
+                    rprint(f"[dim green]  <- [{author}] {fr.name}: {summary}[/dim green]")
 
     except KeyboardInterrupt:
         rprint("\n[yellow]Session interrupted by user.[/yellow]")
@@ -424,7 +424,7 @@ def _print_session_params(params: SessionParams) -> None:
         ("Strategy", params.strategy.value),
         ("Mode", params.mode.value),
         ("Universe", params.universe),
-        ("Loss limit", f"€{params.loss_limit_eur:,.0f}"),
+        ("Loss limit", f"EUR {params.loss_limit_eur:,.0f}"),
         ("Timeframe", f"{params.timeframe_days} days"),
         ("Shortlist N", str(params.shortlist_n)),
         ("HITL timeout", f"{params.hitl_timeout_seconds}s ({params.hitl_timeout_action} on timeout)"),
