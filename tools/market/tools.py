@@ -20,8 +20,8 @@ def _safe_float(v: float) -> float:
 def _data_client():
     from alpaca.data import StockHistoricalDataClient  # type: ignore[import]
     return StockHistoricalDataClient(
-        api_key=os.environ.get("ALPACA_DATA_KEY"),
-        secret_key=os.environ.get("ALPACA_DATA_SECRET"),
+        api_key=os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY"),
+        secret_key=os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET"),
     )
 
 
