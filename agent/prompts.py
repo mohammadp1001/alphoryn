@@ -145,8 +145,10 @@ On cycle retry   → call strategy__list_strategies again.
                      research__detect_market_regime.
                      Call research__get_sentiment for the benchmark symbol.
                      Write results to state["macro_snapshot"] and state["market_regime"].
-5.  Analysis       : Analyse ALL symbols in three parallel batches. Never process
-                     one symbol at a time — always submit the full universe at once.
+5.  Analysis       : Analyse ALL symbols in three parallel batches. Include any
+                     symbols from open positions in state["portfolio_snapshot"]
+                     ["positions"] that are not already in the default universe —
+                     their indicator data is needed for the exit review in step 5b.
 
                      BATCH A — OHLCV (one LLM turn):
                        Emit one market__get_ohlcv call per symbol in a SINGLE response,
@@ -162,13 +164,20 @@ On cycle retry   → call strategy__list_strategies again.
 
                      BATCH C — Scoring (one LLM turn, after BATCH B returns):
                        Emit one analysis__score_technical call per symbol in a SINGLE
-                       response. Then call coordinator__select_shortlist with all scores.
+                       response.
 
-                     Write top candidates to state["analysis_snapshot"].
-6.  Shortlist      : call coordinator__select_shortlist with your ranked signals and
-                     the min_score from the active strategy spec.
-                     If shortlist is empty (n=0) → increment cycle_count and retry
-                     with a different strategy (back to step 3).
+                     Write BUY candidate scores to state["analysis_snapshot"].
+5b. Exit review    : for each symbol in state["portfolio_snapshot"]["positions"],
+                     use the indicator data from BATCH B/C to evaluate the loaded
+                     strategy exit_rules. If any exit condition is met, add a SELL
+                     candidate with side="sell", combined_score=1.0.
+                     Sell candidates bypass min_score — any triggered exit rule executes.
+                     If there are no open positions, skip this step.
+6.  Shortlist      : call coordinator__select_shortlist with all scored BUY candidates
+                     plus any SELL candidates from step 5b, using the min_score from the
+                     active strategy spec (min_score applies to BUY candidates only).
+                     If shortlist is empty and no SELL candidates exist →
+                     increment cycle_count and retry with a different strategy (step 3).
 7.  Risk debate    : for each shortlisted candidate, write candidate context to
                      state["analysis_snapshot"], then invoke risk_debate agent.
                      Risk agents read state["market_regime"], state["macro_snapshot"],
@@ -185,8 +194,13 @@ On cycle retry   → call strategy__list_strategies again.
                        symbol, side, asset_class ("etf"|"crypto"),
                        order_type, buying_power_pct, limit_price (if limit), strategy,
                        risk_level, session_id, cycle_index
+                     Determine asset_class: if symbol ends in "-USD" → "crypto",
+                     otherwise → "etf".
                      Then invoke execution_agent. Read state["order_result"] for outcome.
 12. Record cycle   : call coordinator__record_cycle with COMMITTED or ABORTED outcome.
+                     Then immediately return to step 0 and begin the next cycle.
+                     Continue cycling until the session expires or a terminal abort
+                     condition fires. Never stop voluntarily between cycles.
 
 ## Risk debate request template
 When invoking risk_debate, include in your message:

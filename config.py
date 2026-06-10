@@ -53,6 +53,13 @@ ETF_UNIVERSES: dict[str, list[str]] = {
         "HEDJ",  # WisdomTree Europe Hedged Equity
         "VGK",   # Vanguard FTSE Europe
     ],
+    "CRYPTO": [
+        "BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD",
+    ],
+    "MIXED_MARKET": [
+        "SPY", "QQQ", "IWM", "DIA", "VTI", "VOO",
+        "BTC-USD", "ETH-USD", "SOL-USD",
+    ],
 }
 
 DEFAULT_ETF_UNIVERSE: list[str] = ETF_UNIVERSES["US_SECTOR_ETFS"]
@@ -75,6 +82,8 @@ UNIVERSE_EXCHANGE_TZ: dict[str, str] = {
     "REAL_ESTATE":             "America/New_York",
     "EU_MARKET":               "Europe/Berlin",
     "GERMAN_MARKET":           "Europe/Berlin",
+    "CRYPTO":                  "UTC",
+    "MIXED_MARKET":            "America/New_York",
 }
 
 # ── Session defaults ──────────────────────────────────────────────────────────
