@@ -131,3 +131,97 @@ def test_execution_agent_mentions_paper_account():
 def test_execution_agent_mentions_credentials_security():
     from agent.prompts import EXECUTION_AGENT_INSTRUCTION
     assert "credentials" in EXECUTION_AGENT_INSTRUCTION.lower() or "api keys" in EXECUTION_AGENT_INSTRUCTION.lower()
+
+
+# ── New-content checks (prompt improvements) ─────────────────────────────────
+
+def test_analysis_agent_has_pydantic_header():
+    from agent.prompts import ANALYSIS_AGENT_INSTRUCTION
+    assert "Pydantic model enforced" in ANALYSIS_AGENT_INSTRUCTION
+
+
+def test_analysis_agent_has_score_formula():
+    from agent.prompts import ANALYSIS_AGENT_INSTRUCTION
+    assert "0.6" in ANALYSIS_AGENT_INSTRUCTION
+    assert "0.4" in ANALYSIS_AGENT_INSTRUCTION
+    assert "combined_score" in ANALYSIS_AGENT_INSTRUCTION
+
+
+def test_analysis_agent_handles_empty_screen():
+    from agent.prompts import ANALYSIS_AGENT_INSTRUCTION
+    assert "zero symbols" in ANALYSIS_AGENT_INSTRUCTION or "empty list" in ANALYSIS_AGENT_INSTRUCTION
+
+
+def test_research_agent_has_tool_sequence():
+    from agent.prompts import RESEARCH_AGENT_INSTRUCTION
+    assert "get_macro_data" in RESEARCH_AGENT_INSTRUCTION
+    assert "detect_market_regime" in RESEARCH_AGENT_INSTRUCTION
+    assert "get_sentiment" in RESEARCH_AGENT_INSTRUCTION
+
+
+def test_research_agent_sentiment_derivation():
+    from agent.prompts import RESEARCH_AGENT_INSTRUCTION
+    assert "majority label" in RESEARCH_AGENT_INSTRUCTION
+
+
+def test_research_agent_sector_tickers_not_names():
+    from agent.prompts import RESEARCH_AGENT_INSTRUCTION
+    assert '"XLK"' in RESEARCH_AGENT_INSTRUCTION
+    assert "NOT" in RESEARCH_AGENT_INSTRUCTION
+
+
+def test_risk_pessimist_reads_optimist_verdict():
+    from agent.prompts import RISK_PESSIMIST_INSTRUCTION
+    formatted = RISK_PESSIMIST_INSTRUCTION.format(calibration_summary="x")
+    assert "optimist" in formatted.lower()
+    assert "strongest argument" in formatted.lower()
+
+
+def test_risk_preamble_has_regime_priors():
+    from agent.prompts import _RISK_PREAMBLE
+    text = _RISK_PREAMBLE.format(calibration_summary="")
+    assert "CRISIS" in text
+    assert "BULL_TREND" in text
+    assert "LOW_VOL_RANGE" in text
+
+
+def test_execution_agent_has_sizing_formula():
+    from agent.prompts import EXECUTION_AGENT_INSTRUCTION
+    assert "0.10" in EXECUTION_AGENT_INSTRUCTION
+    assert "0.20" in EXECUTION_AGENT_INSTRUCTION
+
+
+def test_execution_agent_handles_existing_position():
+    from agent.prompts import EXECUTION_AGENT_INSTRUCTION
+    assert "already_held" in EXECUTION_AGENT_INSTRUCTION
+
+
+def test_execution_agent_handles_insufficient_funds():
+    from agent.prompts import EXECUTION_AGENT_INSTRUCTION
+    assert "insufficient_funds" in EXECUTION_AGENT_INSTRUCTION
+
+
+def test_coordinator_has_risk_debate_template():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "Risk debate request template" in formatted
+
+
+def test_coordinator_write_ahead_before_execute():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    write_pos = formatted.find("Write-ahead")
+    execute_pos = formatted.find("Execute")
+    assert write_pos < execute_pos, "Write-ahead must appear before Execute in the cycle flow"
+
+
+def test_coordinator_hitl_for_high_risk_any_mode():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "any mode" in formatted
+
+
+def test_coordinator_credentials_not_passed_in_message():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "environment variables" in formatted
