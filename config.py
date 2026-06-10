@@ -25,6 +25,24 @@ ETF_UNIVERSES: dict[str, list[str]] = {
     "FIXED_INCOME": [
         "TLT", "IEF", "SHY", "HYG", "LQD", "BND",
     ],
+    "INTERNATIONAL_DEVELOPED": [
+        "EFA", "VEA", "EWJ", "EWG", "EWU", "EWC", "EWA", "EWL", "EWQ",
+    ],
+    "EMERGING_MARKETS": [
+        "EEM", "VWO", "IEMG", "EWZ", "MCHI", "INDA", "EWY", "EWT",
+    ],
+    "DIVIDEND": [
+        "VYM", "DVY", "SCHD", "HDV", "NOBL", "SDY", "DGRO",
+    ],
+    "HEALTHCARE": [
+        "XLV", "IBB", "IHI", "XBI", "ARKG", "PJP", "LABU",
+    ],
+    "ENERGY": [
+        "XLE", "VDE", "OIH", "XOP", "AMLP", "FCG", "URA",
+    ],
+    "REAL_ESTATE": [
+        "VNQ", "IYR", "XLRE", "REM", "MORT", "KBWY", "SRVR",
+    ],
 }
 
 DEFAULT_ETF_UNIVERSE: list[str] = ETF_UNIVERSES["US_SECTOR_ETFS"]
