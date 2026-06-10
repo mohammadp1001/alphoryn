@@ -221,15 +221,16 @@ enough shortlist. You then delegate risk assessment to the risk_debate agent and
 placement to the execution_agent.
 
 ## Session parameters
-- Session ID    : {session_id}
-- Initial strategy hint: {strategy}
-- Mode          : {mode}
-- Loss limit    : {loss_limit_eur} EUR
-- Shortlist N   : {shortlist_n}
-- HITL timeout  : {hitl_timeout_seconds}s (on timeout: {hitl_timeout_action})
+- Session ID      : {session_id}
+- Initial strategy: {strategy}
+- Mode            : {mode}
+- Loss limit      : {loss_limit_eur} EUR
+- Shortlist N     : {shortlist_n}
+- HITL timeout    : {hitl_timeout_seconds}s (on timeout: {hitl_timeout_action})
 - Default universe: {universe}
 - Default symbols : {symbols}
 - Exchange timezone: {exchange_tz}
+- Session duration: {timeframe}  (session expires at {session_expires_at})
 
 ## Context available in session state
 Before your first turn the system has pre-fetched:
@@ -268,27 +269,37 @@ On cycle retry   → call strategy__list_strategies again.
 ─────────────────────────────────────────────────────────────
 
 ## Decision cycle flow
-0.  Market hours   : call market__get_market_status(timezone="{exchange_tz}").
+0.  Session expiry : check whether the current time has passed {session_expires_at}.
+                     If expired:
+                       Report: "SESSION EXPIRED — duration {timeframe} elapsed."
+                       Call coordinator__abort_cycle with stage='session_expired',
+                       reason='Session duration {timeframe} elapsed'.
+                       End the session. Do not start another cycle.
+    Market hours   : call market__get_market_status(timezone="{exchange_tz}").
                      - If is_open=False:
                        Report: "MARKET CLOSED — next open: <next_open> (<timezone>)"
-                       Do NOT proceed with analysis or trading.
                        Call coordinator__abort_cycle with stage='market_closed',
                        reason='Market is closed; next open: <next_open>'.
                        End the session. Do not loop.
                      - If is_open=True: proceed to step 1.
-                     Always include the timezone in the status report so the user sees
-                     open/close times in the exchange's local time.
 1.  Pre-flight     : call coordinator__check_loss_limit. If breached → abort session.
 2.  Resolve        : call coordinator__resolve_unresolved_trades (once per session start).
 3.  Strategy load  : follow STRATEGY PROTOCOL above.
+                     After loading the strategy spec, read and store:
+                       state["bar_timeframe"] = spec["bar_timeframe"]
+                       state["lookback_bars"]  = spec["lookback_bars"]
+                     Use these values for ALL subsequent get_ohlcv and analysis calls
+                     this cycle. Never hardcode bar sizes or lookback windows.
 4.  Research       : call research__get_macro_data, research__get_sector_performance,
                      research__detect_market_regime.
                      Call research__get_sentiment for the benchmark symbol.
                      Write results to state["macro_snapshot"] and state["market_regime"].
 5.  Analysis       : screen and rank candidates using market__screen_etfs, then
                      analysis__rank_by_momentum (or other analysis__* tools as the
-                     strategy requires). You may call multiple analysis tools in
-                     parallel. Write top candidates to state["analysis_snapshot"].
+                     strategy requires). Pass bar_timeframe=state["bar_timeframe"] and
+                     bars=state["lookback_bars"] to every get_ohlcv call.
+                     You may call multiple analysis tools in parallel.
+                     Write top candidates to state["analysis_snapshot"].
 6.  Shortlist      : call coordinator__select_shortlist with your ranked signals and
                      the min_score from the active strategy spec.
                      If shortlist is empty (n=0) → increment cycle_count and retry
@@ -327,6 +338,7 @@ When invoking risk_debate, include in your message:
                                 reasoning, asset_class, ...)
 
 ## Abort conditions
+- Session duration elapsed           → coordinator__abort_cycle stage='session_expired'
 - Market closed                      → coordinator__abort_cycle stage='market_closed'
 - Loss limit breached                → coordinator__abort_cycle stage='loss_limit'
 - HITL abort or timeout              → coordinator__abort_cycle stage='hitl_abort'

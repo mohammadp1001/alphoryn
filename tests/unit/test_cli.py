@@ -87,7 +87,7 @@ def test_run_cmd_dry_run_does_not_start_session():
     result = runner.invoke(
         app,
         ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
-         "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
+         "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
          "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS", "--dry-run"],
     )
     assert result.exit_code == 0
@@ -99,7 +99,7 @@ def test_run_cmd_dry_run_all_strategies():
         result = runner.invoke(
             app,
             ["run", "--strategy", strategy, "--mode", "FULL_AUTO",
-             "--loss-limit", "1000", "--timeframe", "1",
+             "--loss-limit", "1000", "--timeframe", "1Day",
              "--shortlist-n", "1", "--hitl-timeout", "30",
              "--universe", "US_SECTOR_ETFS", "--dry-run"],
         )
@@ -111,7 +111,7 @@ def test_run_cmd_cancelled_by_user():
     result = runner.invoke(
         app,
         ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
-         "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
+         "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
          "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
         input="n\n",  # decline to start
     )
@@ -124,7 +124,7 @@ def test_run_cmd_wizard_fills_missing_params():
     result = runner.invoke(
         app,
         ["run", "--dry-run"],
-        input="MOMENTUM\nSEMI_AUTO\n500\n3\n2\n60\nUS_SECTOR_ETFS\n",
+        input="MOMENTUM\nSEMI_AUTO\n500\n1Day\n2\n60\nUS_SECTOR_ETFS\n",
     )
     assert result.exit_code == 0
     assert "Dry run" in result.output
@@ -135,7 +135,7 @@ def test_run_cmd_full_auto_skips_hitl_prompt():
     result = runner.invoke(
         app,
         ["run", "--strategy", "MOMENTUM", "--mode", "FULL_AUTO",
-         "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
+         "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
          "--universe", "US_SECTOR_ETFS", "--dry-run"],
     )
     assert result.exit_code == 0
@@ -228,7 +228,7 @@ def test_print_session_params_does_not_raise():
         strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
-        timeframe_days=3,
+        timeframe="1Day",
         shortlist_n=2,
         hitl_timeout_seconds=60,
         hitl_timeout_action="abort",
@@ -251,7 +251,7 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
         strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
-        timeframe_days=3,
+        timeframe="1Day",
         shortlist_n=2,
         hitl_timeout_seconds=60,
         hitl_timeout_action="abort",
@@ -297,7 +297,7 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
         strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
-        timeframe_days=3,
+        timeframe="1Day",
         shortlist_n=2,
         hitl_timeout_seconds=60,
         hitl_timeout_action="abort",
@@ -347,7 +347,7 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
         strategy=Strategy.MOMENTUM,
         mode=OperatingMode.FULL_AUTO,
         loss_limit_eur=1000.0,
-        timeframe_days=1,
+        timeframe="1Day",
         shortlist_n=1,
         hitl_timeout_seconds=30,
         hitl_timeout_action="confirm",
@@ -387,7 +387,7 @@ def test_run_cmd_confirms_and_runs(tmp_db, monkeypatch):
         result = runner.invoke(
             app,
             ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
-             "--loss-limit", "500", "--timeframe", "3", "--shortlist-n", "2",
+             "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
              "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
             input="y\n",  # confirm
         )
@@ -439,7 +439,7 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
         strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
-        timeframe_days=3,
+        timeframe="1Day",
         shortlist_n=2,
         hitl_timeout_seconds=60,
         hitl_timeout_action="abort",
@@ -486,7 +486,7 @@ def _make_session_params():
         strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
-        timeframe_days=3,
+        timeframe="1Day",
         shortlist_n=2,
         hitl_timeout_seconds=60,
         hitl_timeout_action="abort",

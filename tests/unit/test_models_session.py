@@ -1,11 +1,12 @@
 """Unit tests for models.session — SessionParams, PlanState."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from models.enums import (
     CycleOutcome,
     OperatingMode,
+    SessionTimeframe,
     Strategy,
 )
 from models.memory import CycleRecord
@@ -18,7 +19,7 @@ def test_session_params_defaults():
     assert params.strategy == Strategy.MOMENTUM
     assert params.mode == OperatingMode.SEMI_AUTO
     assert params.loss_limit_eur == 500.0
-    assert params.timeframe_days == 3
+    assert params.timeframe == SessionTimeframe.DAY_1
     assert params.shortlist_n == 2
     assert params.hitl_timeout_seconds == 60
     assert params.hitl_timeout_action == "abort"
@@ -29,7 +30,7 @@ def test_session_params_custom_values():
         strategy=Strategy.MEAN_REVERSION,
         mode=OperatingMode.FULL_AUTO,
         loss_limit_eur=1000.0,
-        timeframe_days=5,
+        timeframe=SessionTimeframe.DAY_5,
         shortlist_n=4,
         hitl_timeout_seconds=120,
         hitl_timeout_action="confirm",
@@ -37,6 +38,17 @@ def test_session_params_custom_values():
     assert params.strategy == Strategy.MEAN_REVERSION
     assert params.mode == OperatingMode.FULL_AUTO
     assert params.loss_limit_eur == 1000.0
+    assert params.timeframe == SessionTimeframe.DAY_5
+
+
+def test_session_params_duration_property():
+    assert SessionParams(timeframe=SessionTimeframe.MIN_30).duration == timedelta(minutes=30)
+    assert SessionParams(timeframe=SessionTimeframe.HOUR_1).duration == timedelta(hours=1)
+    assert SessionParams(timeframe=SessionTimeframe.HOUR_3).duration == timedelta(hours=3)
+    assert SessionParams(timeframe=SessionTimeframe.HOUR_12).duration == timedelta(hours=12)
+    assert SessionParams(timeframe=SessionTimeframe.DAY_1).duration == timedelta(days=1)
+    assert SessionParams(timeframe=SessionTimeframe.DAY_2).duration == timedelta(days=2)
+    assert SessionParams(timeframe=SessionTimeframe.DAY_5).duration == timedelta(days=5)
 
 
 def test_session_params_all_strategies():

@@ -37,3 +37,6 @@ position_sizing:
 scoring_weights:
   technical_score: 0.4
   momentum_score: 0.6
+
+bar_timeframe: 1Hour
+lookback_bars: 90

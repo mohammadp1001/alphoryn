@@ -76,14 +76,14 @@ def run_cmd(
     strategy: str = typer.Option(None, "--strategy", "-s", help="MOMENTUM|MEAN_REVERSION|SECTOR_ROTATION"),
     mode: str = typer.Option(None, "--mode", "-m", help="SEMI_AUTO|FULL_AUTO"),
     loss_limit: float = typer.Option(None, "--loss-limit", help="Max loss in EUR"),
-    timeframe: int = typer.Option(None, "--timeframe", "-t", help="Days lookback (1|3|5)"),
+    timeframe: str = typer.Option(None, "--timeframe", "-t", help="Session duration: 30Min|1Hour|3Hour|12Hour|1Day|2Day|5Day"),
     shortlist_n: int = typer.Option(None, "--shortlist-n", help="Candidate shortlist size (1-5)"),
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
     universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
     """Launch a trading session (interactive wizard fills missing params)."""
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode, SessionTimeframe, Strategy
     from models.session import SessionParams
 
     rprint(Panel("[bold cyan]AlgoTrade Session[/bold cyan]", expand=False))
@@ -106,8 +106,13 @@ def run_cmd(
     if loss_limit is None:
         loss_limit = float(Prompt.ask("Loss limit (EUR)", default="500"))
 
+    _tf_choices = [tf.value for tf in SessionTimeframe]
     if timeframe is None:
-        timeframe = IntPrompt.ask("Timeframe days (1/3/5)", default=3)
+        timeframe = Prompt.ask(
+            "Session duration",
+            choices=_tf_choices,
+            default=SessionTimeframe.DAY_1.value,
+        )
 
     if shortlist_n is None:
         shortlist_n = IntPrompt.ask("Candidate shortlist size (1-5)", default=2)
@@ -127,7 +132,7 @@ def run_cmd(
         )
 
     params = SessionParams(
-        timeframe_days=timeframe,
+        timeframe=SessionTimeframe(timeframe),
         strategy=Strategy(strategy),
         mode=OperatingMode(mode),
         loss_limit_eur=loss_limit,
@@ -427,8 +432,8 @@ def _print_session_params(params: SessionParams) -> None:
         ("Strategy", params.strategy.value),
         ("Mode", params.mode.value),
         ("Universe", params.universe),
-        ("Loss limit", f"EUR {params.loss_limit_eur:,.0f}"),
-        ("Timeframe", f"{params.timeframe_days} days"),
+        ("Loss limit", f"€{params.loss_limit_eur:,.0f}"),
+        ("Timeframe", params.timeframe.value),
         ("Shortlist N", str(params.shortlist_n)),
         ("HITL timeout", f"{params.hitl_timeout_seconds}s ({params.hitl_timeout_action} on timeout)"),
     ]
