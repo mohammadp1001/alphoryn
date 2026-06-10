@@ -239,6 +239,28 @@ def test_screen_etfs_skips_erroring_tickers():
     assert result["results"] == []
 
 
+def test_screen_etfs_uses_explicit_symbols():
+    """symbols parameter overrides DEFAULT_ETF_UNIVERSE."""
+    mock_ticker = MagicMock()
+    mock_ticker.info = {
+        "regularMarketPrice": 100.0,
+        "averageVolume": 2_000_000,
+        "52WeekChange": 0.10,
+        "sector": "International",
+    }
+    mock_yf = MagicMock()
+    mock_yf.Ticker.return_value = mock_ticker
+
+    with _mock_acquire():
+        with patch.dict("sys.modules", {"yfinance": mock_yf}):
+            from tools.market.tools import screen_etfs
+            result = asyncio.run(
+                screen_etfs(min_avg_volume=0, min_price=0.0, symbols=["EWG", "FEZ"])
+            )
+
+    assert [r["symbol"] for r in result["results"]] == ["EWG", "FEZ"]
+
+
 # ── get_etf_holdings ──────────────────────────────────────────────────────────
 
 def test_get_etf_holdings_returns_list():

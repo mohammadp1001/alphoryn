@@ -47,7 +47,11 @@ ETF_UNIVERSES: dict[str, list[str]] = {
         "EZU", "VGK", "FEZ", "IEUR", "HEDJ", "EWQ", "EWI", "EWP", "EWN", "EWD",
     ],
     "GERMAN_MARKET": [
-        "EWG", "DBGR", "HEWG", "FLGR",
+        "EWG",   # iShares MSCI Germany — only liquid German ETF on IEX (~$2B AUM)
+        "FEZ",   # Euro Stoxx 50 — ~30% German weight
+        "EZU",   # MSCI Eurozone — ~28% German weight
+        "HEDJ",  # WisdomTree Europe Hedged Equity
+        "VGK",   # Vanguard FTSE Europe
     ],
 }
 
