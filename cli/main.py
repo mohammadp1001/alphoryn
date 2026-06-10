@@ -22,6 +22,8 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from infra.log_setup import configure_console_logging
+
 load_dotenv()
 
 app = typer.Typer(name="algotrade", help="Autonomous ETF trading agent", no_args_is_help=True)
@@ -149,6 +151,8 @@ def run_cmd(
 
 
 async def _run_session(params: "SessionParams") -> None:
+    configure_console_logging()
+
     from agent.coordinator import build_app
     from db.schema import init_db
     from infra.observability import get_logger, setup_observability
