@@ -154,7 +154,7 @@ async def _run_session(params: "SessionParams") -> None:
     logger = get_logger("cli.run")
 
     rprint(f"\n[bold green]Session started[/bold green] — ID: [cyan]{session_id}[/cyan]")
-    logger.info("session_start", extra={"trading_session_id": session_id})
+    logger.info("session_start session_id=%s", session_id)
 
     # ── Load existing Alpaca portfolio ────────────────────────────────────────
     try:
