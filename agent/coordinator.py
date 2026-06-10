@@ -48,6 +48,10 @@ def create_coordinator(params: SessionParams, plan_state: PlanState) -> Agent:
     risk_debate_tool = AgentTool(agent=create_risk_debate(_placeholder_cal, _placeholder_cal))
     execution_tool = AgentTool(agent=create_execution_agent())
 
+    from config import ETF_UNIVERSES, DEFAULT_ETF_UNIVERSE
+    universe_symbols = ETF_UNIVERSES.get(params.universe, DEFAULT_ETF_UNIVERSE)
+    symbols_str = ", ".join(universe_symbols)
+
     instruction = COORDINATOR_INSTRUCTION.format(
         session_id=plan_state.session_id,
         strategy=params.strategy.value,
@@ -56,6 +60,8 @@ def create_coordinator(params: SessionParams, plan_state: PlanState) -> Agent:
         shortlist_n=params.shortlist_n,
         hitl_timeout_seconds=params.hitl_timeout_seconds,
         hitl_timeout_action=params.hitl_timeout_action,
+        universe=params.universe,
+        symbols=symbols_str,
     )
 
     return Agent(
