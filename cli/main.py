@@ -376,7 +376,10 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
         )
 
     if tool_name == "detect_market_regime" and "regime" in resp:
-        return f"regime={resp['regime']} vix={resp.get('vix')} spy_20d={resp.get('spy_return_20d')}"
+        return (
+            f"regime={resp['regime']} vix={resp.get('vix')} "
+            f"{resp.get('benchmark_symbol', 'benchmark')}_20d={resp.get('benchmark_return_20d')}"
+        )
 
     if tool_name == "get_macro_data":
         return f"vix={resp.get('vix')} yield_10y={resp.get('yield_10y')} dxy={resp.get('dxy')}"

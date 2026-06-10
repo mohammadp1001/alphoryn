@@ -122,13 +122,24 @@ async def get_earnings_calendar(symbol: str, days_ahead: int) -> dict:
 
 
 @with_retry
-async def get_macro_data() -> dict:
+async def get_macro_data(
+    vix_symbol: str = "^VIX",
+    yield_10y_symbol: str = "^TNX",
+    yield_2y_symbol: str = "^IRX",
+    dxy_symbol: str = "DX-Y.NYB",
+) -> dict:
     """Fetch key macro indicators: VIX, treasury yields, dollar index.
+
+    Args:
+        vix_symbol: Ticker for volatility index. Defaults to '^VIX' (US).
+        yield_10y_symbol: Ticker for 10-year yield. Defaults to '^TNX' (US Treasury).
+        yield_2y_symbol: Ticker for 2-year yield. Defaults to '^IRX' (US Treasury).
+        dxy_symbol: Ticker for dollar index. Defaults to 'DX-Y.NYB'.
 
     Returns:
         dict with 'vix', 'yield_10y', 'yield_2y', 'dxy', 'timestamp'.
     """
-    logger.info("get_macro_data")
+    logger.info("get_macro_data vix=%s 10y=%s 2y=%s dxy=%s", vix_symbol, yield_10y_symbol, yield_2y_symbol, dxy_symbol)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -140,10 +151,10 @@ async def get_macro_data() -> dict:
             return 0.0
 
     return {
-        "vix": _last_close("^VIX"),
-        "yield_10y": _last_close("^TNX") / 10,  # ^TNX quotes in tenths
-        "yield_2y": _last_close("^IRX") / 10,
-        "dxy": _last_close("DX-Y.NYB"),
+        "vix": _last_close(vix_symbol),
+        "yield_10y": _last_close(yield_10y_symbol) / 10,  # ^TNX-family symbols quote in tenths
+        "yield_2y": _last_close(yield_2y_symbol) / 10,
+        "dxy": _last_close(dxy_symbol),
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -264,32 +275,45 @@ async def get_expense_ratios(symbols: list[str]) -> dict:
 
 
 @with_retry
-async def get_sector_performance(timeframe: str) -> dict:
-    """Get relative sector performance using SPDR sector ETFs.
+async def get_sector_performance(timeframe: str, symbols: list[str] | None = None) -> dict:
+    """Get relative sector performance for a given symbol list or the default SPDR sector ETFs.
 
     Args:
         timeframe: Lookback period — '1mo', '3mo', '6mo', '1y'.
+        symbols: Explicit list of ETF symbols to evaluate. When omitted, uses the 11 SPDR
+            sector ETFs (XLK, XLE, XLF, …) with their hardcoded sector names.
 
     Returns:
         dict with 'returns' (list of {symbol, sector, return_pct}) sorted by return descending.
     """
-    logger.info("get_sector_performance timeframe=%s", timeframe)
+    logger.info("get_sector_performance timeframe=%s symbols=%s", timeframe, symbols)
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
-    sector_etfs = {
-        "XLK": "Technology", "XLE": "Energy", "XLF": "Financials",
-        "XLV": "Healthcare", "XLY": "Consumer Discretionary", "XLP": "Consumer Staples",
-        "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities",
-        "XLRE": "Real Estate", "XLC": "Communication Services",
-    }
+    if symbols is None:
+        sector_map: dict[str, str] = {
+            "XLK": "Technology", "XLE": "Energy", "XLF": "Financials",
+            "XLV": "Healthcare", "XLY": "Consumer Discretionary", "XLP": "Consumer Staples",
+            "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities",
+            "XLRE": "Real Estate", "XLC": "Communication Services",
+        }
+        sym_list = list(sector_map.keys())
+    else:
+        sector_map = {}
+        sym_list = symbols
 
     returns = []
-    for sym, sector in sector_etfs.items():
+    for sym in sym_list:
         try:
             hist = yf.download(sym, period=timeframe, progress=False)["Close"]
             if len(hist) >= 2:
                 ret = _safe_float(float((hist.iloc[-1] / hist.iloc[0] - 1) * 100))
+                sector = sector_map.get(sym)
+                if sector is None:
+                    try:
+                        sector = yf.Ticker(sym).info.get("sector", "Unknown")
+                    except Exception:
+                        sector = "Unknown"
                 returns.append({"symbol": sym, "sector": sector, "return_pct": round(ret, 2)})
         except Exception:
             pass
