@@ -1,6 +1,7 @@
 """research.* tools — 12 tools, research agent scope."""
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 
 from infra.observability import get_logger
@@ -8,6 +9,11 @@ from infra.rate_limiter import acquire_yfinance
 from infra.retry import with_retry
 
 logger = get_logger("tools.research")
+
+
+def _safe_float(v: float) -> float:
+    """Replace NaN/Inf with 0.0 — JSON doesn't support these values."""
+    return 0.0 if not math.isfinite(v) else v
 
 
 @with_retry
@@ -283,7 +289,7 @@ async def get_sector_performance(timeframe: str) -> dict:
         try:
             hist = yf.download(sym, period=timeframe, progress=False)["Close"]
             if len(hist) >= 2:
-                ret = float((hist.iloc[-1] / hist.iloc[0] - 1) * 100)
+                ret = _safe_float(float((hist.iloc[-1] / hist.iloc[0] - 1) * 100))
                 returns.append({"symbol": sym, "sector": sector, "return_pct": round(ret, 2)})
         except Exception:
             pass

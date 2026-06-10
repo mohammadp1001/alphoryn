@@ -224,3 +224,39 @@ def test_invalid_json(client):
     )
     # Flask force=True parses or returns 400 from our handler
     assert resp.status_code in (200, 400)
+
+
+def test_signature_failure_returns_403(client):
+    """Line 83-84: when _WEBHOOK_SECRET is set and signature is wrong, return 403."""
+    import webhook.main as wm
+    payload = json.dumps({"event": "fill", "order": {"id": "x"}}).encode()
+    with patch.object(wm, "_WEBHOOK_SECRET", "real-secret"):
+        # Send with no Alpaca-Signature header — verification fails
+        resp = client.post(
+            "/webhook/alpaca",
+            data=payload,
+            content_type="application/json",
+        )
+    assert resp.status_code == 403
+
+
+def test_non_dict_payload_returns_400(client):
+    """Line 92: when JSON body is a list rather than an object, return 400."""
+    resp = client.post(
+        "/webhook/alpaca",
+        data=json.dumps([{"event": "fill"}]),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+
+
+def test_main_entrypoint_calls_app_run(monkeypatch):
+    """Lines 152-153: __main__ block starts the Flask app on the correct port."""
+    import runpy
+
+    monkeypatch.setenv("PORT", "9999")
+    # Patch Flask.run at the class level so it intercepts the newly created app instance
+    with patch("flask.Flask.run") as mock_run:
+        runpy.run_module("webhook.main", run_name="__main__", alter_sys=False)
+
+    mock_run.assert_called_once_with(host="0.0.0.0", port=9999)

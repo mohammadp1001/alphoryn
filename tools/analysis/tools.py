@@ -78,9 +78,14 @@ async def compute_macd(symbol: str, closes: list[float]) -> dict:
     ema12 = ema(arr, 12)
     ema26 = ema(arr, 26)
     macd_line = [m - s for m, s in zip(ema12, ema26)]
-    signal_line = ema(macd_line[25:], 9)  # signal starts after 26 bars
 
-    hist = [m - s for m, s in zip(macd_line[25 + 8:], signal_line[8:])]
+    # signal starts after 26 bars; guard against insufficient data
+    if len(macd_line) > 25:
+        signal_line = ema(macd_line[25:], 9)
+        hist = [m - s for m, s in zip(macd_line[25 + 8:], signal_line[8:])]
+    else:
+        signal_line = []
+        hist = []
 
     n = min(10, len(hist))
     return {

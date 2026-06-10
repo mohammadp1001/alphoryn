@@ -1,6 +1,7 @@
 """market.* tools — 12 tools, analysis agent scope."""
 from __future__ import annotations
 
+import math
 import os
 from datetime import datetime, timedelta
 
@@ -42,7 +43,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     start = end - timedelta(days=bars * 2)  # over-fetch, trim to bars
 
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
+    with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
         resp = _data_client().get_stock_bars(
             StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end)
         )
@@ -76,7 +77,7 @@ async def get_quote(symbol: str) -> dict:
 
     logger.info("get_quote symbol=%s", symbol)
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
+    with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
         resp = _data_client().get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol))
 
     q = resp[symbol]
@@ -128,7 +129,7 @@ async def get_order_book(symbol: str, depth: int) -> dict:
 
     logger.info("get_order_book symbol=%s depth=%d", symbol, depth)
     await acquire_alpaca_data()
-    async with api_call_span("alpaca_data", "get_order_book", symbol=symbol):
+    with api_call_span("alpaca_data", "get_order_book", symbol=symbol):
         resp = _data_client().get_stock_latest_orderbook(
             StockLatestOrderbookRequest(symbol_or_symbols=symbol)
         )
@@ -308,8 +309,8 @@ async def get_benchmark_return(symbol: str, period: str) -> dict:
     if hist.empty:
         return {"symbol": symbol, "benchmark": "SPY", "period": period,
                 "symbol_return_pct": 0.0, "benchmark_return_pct": 0.0, "excess_return_pct": 0.0}
-    sym_ret = float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100)
-    spy_ret = float((hist["SPY"].iloc[-1] / hist["SPY"].iloc[0] - 1) * 100)
+    sym_ret = _safe_float(float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100))
+    spy_ret = _safe_float(float((hist["SPY"].iloc[-1] / hist["SPY"].iloc[0] - 1) * 100))
     return {
         "symbol": symbol, "benchmark": "SPY", "period": period,
         "symbol_return_pct": round(sym_ret, 2),

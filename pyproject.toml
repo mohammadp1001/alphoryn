@@ -57,3 +57,15 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v"
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+omit = ["tests/*"]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
