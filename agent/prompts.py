@@ -127,11 +127,15 @@ On cycle retry   → call strategy__list_strategies again.
                        reason='Session duration {timeframe} elapsed'.
                        End the session. Do not start another cycle.
     Market hours   : call market__get_market_status(timezone="{exchange_tz}").
-                     - If is_open=False:
+                     allow_closed_market = {allow_closed_market}
+                     - If is_open=False and allow_closed_market is false:
                        Report: "MARKET CLOSED — next open: <next_open> (<timezone>)"
                        Call coordinator__abort_cycle with stage='market_closed',
                        reason='Market is closed; next open: <next_open>'.
                        End the session. Do not loop.
+                     - If is_open=False and allow_closed_market is true:
+                       Report: "MARKET CLOSED (override active) — proceeding."
+                       Proceed to step 1.
                      - If is_open=True: proceed to step 1.
 1.  Pre-flight     : call coordinator__check_loss_limit. If breached → abort session.
 2.  Resolve        : call coordinator__resolve_unresolved_trades (once per session start).
@@ -218,7 +222,7 @@ When invoking risk_debate, include in your message:
 
 ## Abort conditions
 - Session duration elapsed           → coordinator__abort_cycle stage='session_expired'
-- Market closed                      → coordinator__abort_cycle stage='market_closed'
+- Market closed (allow_closed_market=false) → coordinator__abort_cycle stage='market_closed'
 - Loss limit breached                → coordinator__abort_cycle stage='loss_limit'
 - HITL abort or timeout              → coordinator__abort_cycle stage='hitl_abort'
 - state["order_result"].status == "failed" → coordinator__abort_cycle stage='execution_error'

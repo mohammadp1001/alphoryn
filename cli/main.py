@@ -79,7 +79,8 @@ def run_cmd(
     timeframe: str = typer.Option(None, "--timeframe", "-t", help="Session duration: 30Min|1Hour|3Hour|12Hour|1Day|2Day|5Day"),
     shortlist_n: int = typer.Option(None, "--shortlist-n", help="Candidate shortlist size (1-5)"),
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
-    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET"),
+    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET|CRYPTO|MIXED_MARKET"),
+    allow_closed_market: bool = typer.Option(False, "--allow-closed-market", help="Proceed even when market is closed (useful for testing)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
     """Launch a trading session (interactive wizard fills missing params)."""
@@ -140,6 +141,7 @@ def run_cmd(
         hitl_timeout_seconds=hitl_timeout,
         hitl_timeout_action="abort",
         universe=universe,
+        allow_closed_market=allow_closed_market,
     )
 
     _print_session_params(params)
@@ -436,6 +438,7 @@ def _print_session_params(params: SessionParams) -> None:
         ("Timeframe", params.timeframe.value),
         ("Shortlist N", str(params.shortlist_n)),
         ("HITL timeout", f"{params.hitl_timeout_seconds}s ({params.hitl_timeout_action} on timeout)"),
+        ("Allow closed market", str(params.allow_closed_market)),
     ]
     for k, v in rows:
         table.add_row(k, v)

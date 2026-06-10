@@ -30,6 +30,7 @@ class SessionParams(BaseModel):
     hitl_timeout_seconds: int = 60
     hitl_timeout_action: str = "abort"  # "abort" | "proceed"
     universe: str = "US_SECTOR_ETFS"   # key into config.ETF_UNIVERSES
+    allow_closed_market: bool = False  # skip market-closed abort when True
 
     @property
     def duration(self) -> timedelta:
