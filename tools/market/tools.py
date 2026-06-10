@@ -29,6 +29,10 @@ def _data_client():
 async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     """Fetch OHLCV bar history for an ETF.
 
+    Tries Alpaca IEX feed first; falls back to yfinance if IEX returns no data
+    (IEX only covers symbols that actively trade on that venue — many non-US or
+    less-liquid ETFs are absent from IEX even though they're US-listed).
+
     Args:
         symbol: Ticker symbol, e.g. 'XLK'.
         timeframe: Bar size — '1Day', '1Hour', '4Hour'.
@@ -65,6 +69,44 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
         }
         for b in bar_list[-bars:]
     ]
+
+    if result:
+        return {"symbol": symbol, "timeframe": timeframe, "bars": result}
+
+    # IEX had no data — fall back to yfinance
+    logger.info("get_ohlcv IEX empty for %s, falling back to yfinance", symbol)
+    await acquire_yfinance()
+    import yfinance as yf  # type: ignore[import]
+
+    days_needed = bars * 2
+    if days_needed <= 7:
+        yf_period = "5d"
+    elif days_needed <= 30:
+        yf_period = "1mo"
+    elif days_needed <= 90:
+        yf_period = "3mo"
+    else:
+        yf_period = "1y"
+
+    yf_interval = {"1Day": "1d", "1Hour": "1h", "4Hour": "1d"}.get(timeframe, "1d")
+    hist = yf.download(symbol, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True)
+    if hist.empty:
+        return {"symbol": symbol, "timeframe": timeframe, "bars": []}
+
+    # yf.download returns MultiIndex columns ('Open', '<SYM>') even for a single symbol
+    if hasattr(hist.columns, "nlevels") and hist.columns.nlevels > 1:
+        hist.columns = hist.columns.get_level_values(0)
+
+    result = []
+    for idx, row in hist.tail(bars).iterrows():
+        result.append({
+            "timestamp": idx.isoformat(),
+            "open": float(row["Open"]),
+            "high": float(row["High"]),
+            "low": float(row["Low"]),
+            "close": float(row["Close"]),
+            "volume": float(row["Volume"]),
+        })
     return {"symbol": symbol, "timeframe": timeframe, "bars": result}
 
 
