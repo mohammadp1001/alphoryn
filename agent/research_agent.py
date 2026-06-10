@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from google.adk.agents import Agent  # type: ignore[import]
 
+from agent.callbacks import make_agent_log_callbacks
 from agent.prompts import RESEARCH_AGENT_INSTRUCTION
 from tools.registry import MARKET_TOOLS, RESEARCH_TOOLS
 from tools.schemas import MarketRegimeOutput
@@ -10,6 +11,7 @@ from tools.schemas import MarketRegimeOutput
 
 def create_research_agent() -> Agent:
     """Factory: returns a fresh research agent instance with no parent."""
+    before_cb, after_cb = make_agent_log_callbacks("research_agent", "market_regime")
     return Agent(
         name="research_agent",
         model="gemini-2.5-flash",
@@ -26,4 +28,6 @@ def create_research_agent() -> Agent:
         ),
         output_key="market_regime",
         output_schema=MarketRegimeOutput,
+        before_agent_callback=before_cb,
+        after_agent_callback=after_cb,
     )

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from google.adk.agents import Agent  # type: ignore[import]
 
+from agent.callbacks import make_agent_log_callbacks
 from agent.prompts import ANALYSIS_AGENT_INSTRUCTION
 from tools.registry import ANALYSIS_TOOLS, MARKET_TOOLS
 from tools.schemas import RankedSignalsOutput
@@ -10,6 +11,7 @@ from tools.schemas import RankedSignalsOutput
 
 def create_analysis_agent() -> Agent:
     """Factory: returns a fresh analysis agent instance with no parent."""
+    before_cb, after_cb = make_agent_log_callbacks("analysis_agent", "ranked_signals")
     return Agent(
         name="analysis_agent",
         model="gemini-2.5-flash",
@@ -21,4 +23,6 @@ def create_analysis_agent() -> Agent:
         ),
         output_key="ranked_signals",
         output_schema=RankedSignalsOutput,
+        before_agent_callback=before_cb,
+        after_agent_callback=after_cb,
     )

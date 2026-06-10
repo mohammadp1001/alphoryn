@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from google.adk.agents import Agent, SequentialAgent  # type: ignore[import]
 
+from agent.callbacks import make_agent_log_callbacks
 from agent.prompts import RISK_OPTIMIST_INSTRUCTION, RISK_PESSIMIST_INSTRUCTION
 from tools.schemas import RiskVerdictOutput
 
@@ -13,6 +14,7 @@ def create_risk_optimist(calibration_summary: str) -> Agent:
     Args:
         calibration_summary: Pre-formatted calibration string injected into system prompt.
     """
+    before_cb, after_cb = make_agent_log_callbacks("risk_optimist", "optimist_verdict")
     return Agent(
         name="risk_optimist",
         model="gemini-2.5-flash",
@@ -23,6 +25,8 @@ def create_risk_optimist(calibration_summary: str) -> Agent:
         description="Argues for the lowest justifiable risk level for a trade candidate.",
         output_key="optimist_verdict",
         output_schema=RiskVerdictOutput,
+        before_agent_callback=before_cb,
+        after_agent_callback=after_cb,
     )
 
 
@@ -32,6 +36,7 @@ def create_risk_pessimist(calibration_summary: str) -> Agent:
     Args:
         calibration_summary: Pre-formatted calibration string injected into system prompt.
     """
+    before_cb, after_cb = make_agent_log_callbacks("risk_pessimist", "pessimist_verdict")
     return Agent(
         name="risk_pessimist",
         model="gemini-2.5-flash",
@@ -45,6 +50,8 @@ def create_risk_pessimist(calibration_summary: str) -> Agent:
         ),
         output_key="pessimist_verdict",
         output_schema=RiskVerdictOutput,
+        before_agent_callback=before_cb,
+        after_agent_callback=after_cb,
     )
 
 
