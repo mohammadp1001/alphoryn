@@ -106,3 +106,11 @@ OUTCOME_CUTOFF_EXTRA_DAYS: int = 1          # timeframe + 1 day before marking t
 GCP_PROJECT_ID_ENV: str = "GOOGLE_CLOUD_PROJECT"
 ALPACA_API_KEY_SECRET: str = "alpaca-api-key"
 ALPACA_API_SECRET_SECRET: str = "alpaca-api-secret"
+
+# ── OANDA ─────────────────────────────────────────────────────────────────────
+OANDA_API_TOKEN_SECRET: str = "oanda-api-token"      # GCP Secret Manager name
+OANDA_ACCOUNT_ID_SECRET: str = "oanda-account-id"    # GCP Secret Manager name
+OANDA_PRACTICE_URL: str = "api-fxpractice.oanda.com"
+OANDA_LIVE_URL: str = "api-fxtrade.oanda.com"
+RATE_OANDA_PER_MIN: int = 120    # OANDA practice: 120 req/min
+RATE_OANDA_BURST: int = 10
