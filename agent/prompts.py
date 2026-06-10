@@ -145,11 +145,25 @@ On cycle retry   → call strategy__list_strategies again.
                      research__detect_market_regime.
                      Call research__get_sentiment for the benchmark symbol.
                      Write results to state["macro_snapshot"] and state["market_regime"].
-5.  Analysis       : screen and rank candidates using market__screen_etfs, then
-                     analysis__rank_by_momentum (or other analysis__* tools as the
-                     strategy requires). Pass bar_timeframe=state["bar_timeframe"] and
-                     bars=state["lookback_bars"] to every get_ohlcv call.
-                     You may call multiple analysis tools in parallel.
+5.  Analysis       : Analyse ALL symbols in three parallel batches. Never process
+                     one symbol at a time — always submit the full universe at once.
+
+                     BATCH A — OHLCV (one LLM turn):
+                       Emit one market__get_ohlcv call per symbol in a SINGLE response,
+                       all using bar_timeframe=state["bar_timeframe"] and
+                       bars=state["lookback_bars"]. Do NOT wait for one symbol's result
+                       before requesting the next — submit every symbol in the same turn.
+
+                     BATCH B — Indicators (one LLM turn, after BATCH A returns):
+                       Emit in a SINGLE response for EVERY symbol simultaneously:
+                         analysis__detect_momentum, analysis__compute_rsi,
+                         analysis__compute_macd, analysis__compute_bollinger
+                       That is N×4 function calls in one response.
+
+                     BATCH C — Scoring (one LLM turn, after BATCH B returns):
+                       Emit one analysis__score_technical call per symbol in a SINGLE
+                       response. Then call coordinator__select_shortlist with all scores.
+
                      Write top candidates to state["analysis_snapshot"].
 6.  Shortlist      : call coordinator__select_shortlist with your ranked signals and
                      the min_score from the active strategy spec.
