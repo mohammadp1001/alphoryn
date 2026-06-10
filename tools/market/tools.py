@@ -50,7 +50,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     await acquire_alpaca_data()
     with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
         resp = _data_client().get_stock_bars(
-            StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end)
+            StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
         )
 
     bar_list = resp[symbol] if symbol in resp else []
@@ -83,7 +83,7 @@ async def get_quote(symbol: str) -> dict:
     logger.info("get_quote symbol=%s", symbol)
     await acquire_alpaca_data()
     with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
-        resp = _data_client().get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol))
+        resp = _data_client().get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol, feed="iex"))
 
     q = resp[symbol]
     return {
@@ -136,7 +136,7 @@ async def get_order_book(symbol: str, depth: int) -> dict:
     await acquire_alpaca_data()
     with api_call_span("alpaca_data", "get_order_book", symbol=symbol):
         resp = _data_client().get_stock_latest_orderbook(
-            StockLatestOrderbookRequest(symbol_or_symbols=symbol)
+            StockLatestOrderbookRequest(symbol_or_symbols=symbol, feed="iex")
         )
 
     ob = resp[symbol]
