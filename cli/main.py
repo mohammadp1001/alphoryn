@@ -199,10 +199,19 @@ async def _run_session(params: "SessionParams") -> None:
             session_id=session_id,
             new_message=content,
         ):
-            if event.content and event.content.parts:
-                for part in event.content.parts:
-                    if hasattr(part, "text") and part.text:
-                        rprint(f"[dim white]{part.text[:200]}[/dim white]")
+            if not event.content or not event.content.parts:
+                continue
+            author = getattr(event, "author", None) or "agent"
+            for part in event.content.parts:
+                if hasattr(part, "text") and part.text:
+                    rprint(f"\n[bold cyan][{author}][/bold cyan] {part.text}")
+                elif hasattr(part, "function_call") and part.function_call:
+                    fc = part.function_call
+                    args_preview = ", ".join(f"{k}={v!r}" for k, v in (fc.args or {}).items())
+                    rprint(f"[dim yellow]  → {fc.name}({args_preview})[/dim yellow]")
+                elif hasattr(part, "function_response") and part.function_response:
+                    fr = part.function_response
+                    rprint(f"[dim green]  ← {fr.name} returned[/dim green]")
 
     except KeyboardInterrupt:
         rprint("\n[yellow]Session interrupted by user.[/yellow]")
