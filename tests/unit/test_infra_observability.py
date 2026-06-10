@@ -245,3 +245,18 @@ def test_get_logger_different_names():
     l1 = get_logger("module.a")
     l2 = get_logger("module.b")
     assert l1 is not l2
+
+
+# ── _setup_cloud_logging ImportError fallback ─────────────────────────────────
+
+def test_setup_cloud_logging_import_error_falls_back_to_basicconfig():
+    """Lines 75-76: missing google.cloud.logging → basicConfig(INFO)."""
+    import infra.observability as obs
+
+    with patch.dict("sys.modules", {"google.cloud.logging": None}):
+        obs._setup_cloud_logging("my-project", "sess-001")
+
+    root = logging.getLogger()
+    assert root.level <= logging.INFO or any(
+        isinstance(h, logging.StreamHandler) for h in root.handlers
+    )

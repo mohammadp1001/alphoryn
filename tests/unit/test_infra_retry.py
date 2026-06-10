@@ -191,3 +191,11 @@ def test_with_retry_passes_kwargs_to_function():
         return f"got:{key}"
 
     assert asyncio.run(fn(key="hello")) == "got:hello"
+
+
+def test_is_retryable_resource_exhausted_grpc():
+    assert _is_retryable(Exception("RESOURCE_EXHAUSTED quota exceeded"))
+
+
+def test_is_retryable_resource_exhausted_lowercase():
+    assert _is_retryable(Exception("resource_exhausted from vertex ai"))

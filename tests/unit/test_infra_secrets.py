@@ -146,3 +146,30 @@ def test_get_alpaca_credentials_returns_correct_order():
     assert calls[1] == ALPACA_API_SECRET_SECRET
     assert key == f"value-{ALPACA_API_KEY_SECRET}"
     assert secret == f"value-{ALPACA_API_SECRET_SECRET}"
+
+
+# ── get_oanda_credentials ────────────────────────────────────────────────────
+
+def test_get_oanda_credentials_returns_tuple():
+    with patch("infra.secrets.get_secret", new=AsyncMock(side_effect=["oanda-token", "oanda-account"])):
+        from infra.secrets import get_oanda_credentials
+        result = asyncio.run(get_oanda_credentials())
+
+    assert result[0] == "oanda-token"
+    assert result[1] == "oanda-account"
+
+
+def test_get_oanda_credentials_calls_correct_secrets():
+    calls = []
+
+    async def mock_get_secret(secret_id, version="latest"):
+        calls.append(secret_id)
+        return f"value-{secret_id}"
+
+    with patch("infra.secrets.get_secret", new=mock_get_secret):
+        from infra.secrets import get_oanda_credentials
+        asyncio.run(get_oanda_credentials())
+
+    from config import OANDA_ACCOUNT_ID_SECRET, OANDA_API_TOKEN_SECRET
+    assert OANDA_API_TOKEN_SECRET in calls
+    assert OANDA_ACCOUNT_ID_SECRET in calls

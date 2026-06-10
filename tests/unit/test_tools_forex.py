@@ -305,3 +305,26 @@ def test_oanda_missing_credentials_raises(monkeypatch):
     with pytest.raises(RuntimeError, match="OANDA_API_TOKEN"):
         from tools.forex.tools import _oanda_client
         _oanda_client()
+
+
+# ── _oanda_client success path ────────────────────────────────────────────────
+
+def test_oanda_client_success_returns_client_and_account_id(monkeypatch):
+    """Lines 48-49: _oanda_client() creates API client and returns (client, account_id)."""
+    monkeypatch.setenv("OANDA_API_TOKEN", "test-token")
+    monkeypatch.setenv("OANDA_ACCOUNT_ID", "001-001-9999999-001")
+
+    mock_client = MagicMock()
+    mock_api_cls = MagicMock(return_value=mock_client)
+    mock_oanda_mod = MagicMock()
+    mock_oanda_mod.API = mock_api_cls
+
+    with patch.dict("sys.modules", {"oandapyV20": mock_oanda_mod}):
+        import importlib
+        import tools.forex.tools as forex_tools_mod
+        importlib.reload(forex_tools_mod)
+        client, account_id = forex_tools_mod._oanda_client()
+
+    assert client is mock_client
+    assert account_id == "001-001-9999999-001"
+    mock_api_cls.assert_called_once_with(access_token="test-token", environment="practice")

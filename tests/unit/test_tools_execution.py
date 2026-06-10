@@ -371,3 +371,17 @@ def test_trading_client_factory_returns_instance(monkeypatch):
         paper=True,
     )
     assert result is mock_instance
+
+
+# ── _finite_float edge cases ──────────────────────────────────────────────────
+
+def test_finite_float_type_error_returns_none():
+    """Line 22: _finite_float([1,2,3]) → TypeError → None."""
+    from tools.schemas import _finite_float
+    assert _finite_float([1, 2, 3]) is None
+
+
+def test_finite_float_value_error_returns_none():
+    """Line 23: _finite_float('not_a_float') → ValueError → None."""
+    from tools.schemas import _finite_float
+    assert _finite_float("not_a_float") is None

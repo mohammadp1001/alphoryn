@@ -72,3 +72,8 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]
+
+[dependency-groups]
+dev = [
+    "flask>=3.1.3",
+]

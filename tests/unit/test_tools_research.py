@@ -670,3 +670,63 @@ def test_get_analyst_ratings_exception_returns_empty():
         result = asyncio.run(get_analyst_ratings("QQQ"))
 
     assert result["ratings"] == []
+
+
+# ── get_sector_performance with custom symbols ────────────────────────────────
+
+def test_get_sector_performance_custom_symbols_uses_yfinance_sector():
+    """Lines 309-323: custom symbols path — sector looked up via yf.Ticker.info."""
+    import pandas as pd
+
+    close_series = pd.Series([100.0, 105.0])
+
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = {"Close": close_series}
+    mock_ticker = MagicMock()
+    mock_ticker.info = {"sector": "Technology"}
+    mock_yf.Ticker.return_value = mock_ticker
+
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_sector_performance
+        result = asyncio.run(get_sector_performance(timeframe="1mo", symbols=["TSLA", "NVDA"]))
+
+    assert len(result["returns"]) == 2
+    assert result["returns"][0]["sector"] == "Technology"
+
+
+def test_get_sector_performance_custom_symbols_sector_lookup_exception():
+    """Lines 322-323: yf.Ticker.info raises → sector defaults to 'Unknown'."""
+    import pandas as pd
+
+    close_series = pd.Series([100.0, 110.0])
+
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = {"Close": close_series}
+    mock_yf.Ticker.side_effect = Exception("network error")
+
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_sector_performance
+        result = asyncio.run(get_sector_performance(timeframe="1mo", symbols=["XYZ"]))
+
+    assert result["returns"][0]["sector"] == "Unknown"
+
+
+def test_get_sector_performance_custom_symbols_empty_sector_map():
+    """Lines 309-310: sector_map starts empty for custom symbols (not the default map)."""
+    import pandas as pd
+
+    close_series = pd.Series([100.0, 98.0])
+
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = {"Close": close_series}
+    mock_ticker = MagicMock()
+    mock_ticker.info = {"sector": "Energy"}
+    mock_yf.Ticker.return_value = mock_ticker
+
+    with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
+        from tools.research.tools import get_sector_performance
+        result = asyncio.run(get_sector_performance(timeframe="1mo", symbols=["EWG"]))
+
+    assert len(result["returns"]) == 1
+    assert result["returns"][0]["symbol"] == "EWG"
+    assert result["returns"][0]["sector"] == "Energy"

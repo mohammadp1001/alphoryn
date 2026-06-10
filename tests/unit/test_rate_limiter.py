@@ -47,3 +47,15 @@ def test_acquire_yfinance_callable() -> None:
     from infra.rate_limiter import acquire_yfinance
 
     asyncio.run(acquire_yfinance())
+
+
+def test_acquire_gemini_callable() -> None:
+    from infra.rate_limiter import acquire_gemini
+
+    asyncio.run(acquire_gemini())
+
+
+def test_acquire_oanda_callable() -> None:
+    from infra.rate_limiter import acquire_oanda
+
+    asyncio.run(acquire_oanda())
