@@ -659,6 +659,115 @@ def test_get_ohlcv_yfinance_small_bars_uses_5d_period():
     assert call_kwargs["period"] == "5d"
 
 
+# ── _is_crypto helper ─────────────────────────────────────────────────────────
+
+def test_is_crypto_true_for_crypto_symbol():
+    from tools.market.tools import _is_crypto
+    assert _is_crypto("BTC-USD") is True
+    assert _is_crypto("ETH-USD") is True
+    assert _is_crypto("SOL-USD") is True
+
+
+def test_is_crypto_false_for_stock_symbol():
+    from tools.market.tools import _is_crypto
+    assert _is_crypto("XLK") is False
+    assert _is_crypto("SPY") is False
+    assert _is_crypto("EWG") is False
+
+
+# ── get_ohlcv crypto path ──────────────────────────────────────────────────────
+
+def test_get_ohlcv_crypto_uses_crypto_client():
+    """Crypto symbols (ending in -USD) route through get_crypto_bars, not get_stock_bars.
+    Alpaca crypto API uses BTC/USD format, so the mock response key is BTC/USD."""
+    bars = [_make_bar(close=65000.0)]
+    mock_resp = {"BTC/USD": bars}  # Alpaca crypto uses slash notation
+    mock_crypto_client = MagicMock()
+    mock_crypto_client.get_crypto_bars.return_value = mock_resp
+
+    with _mock_acquire(), patch("tools.market.tools._crypto_client", return_value=mock_crypto_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("BTC-USD", "1Hour", 1))
+
+    assert result["symbol"] == "BTC-USD"
+    assert len(result["bars"]) == 1
+    assert result["bars"][0]["close"] == 65000.0
+    mock_crypto_client.get_crypto_bars.assert_called_once()
+
+
+def test_get_ohlcv_crypto_symbol_translated_to_slash_format():
+    """BTC-USD is translated to BTC/USD when calling Alpaca crypto API."""
+    import alpaca.data.requests as alpaca_reqs
+
+    bars = [_make_bar(close=65000.0)]
+    mock_resp = {"BTC/USD": bars}
+    mock_crypto_client = MagicMock()
+    mock_crypto_client.get_crypto_bars.return_value = mock_resp
+
+    mock_req_class = MagicMock()
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._crypto_client", return_value=mock_crypto_client),
+        patch.object(alpaca_reqs, "CryptoBarsRequest", mock_req_class, create=True),
+    ):
+        from tools.market.tools import get_ohlcv
+        asyncio.run(get_ohlcv("BTC-USD", "1Hour", 1))
+
+    call_kwargs = mock_req_class.call_args[1]
+    assert call_kwargs["symbol_or_symbols"] == "BTC/USD"
+
+
+def test_get_ohlcv_crypto_yfinance_fallback_when_empty():
+    """Crypto Alpaca returns empty → falls back to yfinance."""
+    import pandas as pd
+
+    mock_crypto_client = MagicMock()
+    mock_crypto_client.get_crypto_bars.return_value = {}
+
+    ts = datetime(2025, 1, 2, tzinfo=UTC)
+    hist = pd.DataFrame(
+        {"Open": [60000.0], "High": [61000.0], "Low": [59000.0], "Close": [60500.0], "Volume": [1e4]},
+        index=pd.DatetimeIndex([ts]),
+    )
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._crypto_client", return_value=mock_crypto_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("BTC-USD", "1Day", 1))
+
+    assert result["symbol"] == "BTC-USD"
+    assert len(result["bars"]) == 1
+    assert result["bars"][0]["close"] == pytest.approx(60500.0)
+
+
+# ── _crypto_client factory ─────────────────────────────────────────────────────
+
+def test_crypto_client_factory_returns_instance(monkeypatch):
+    monkeypatch.setenv("ALPACA_DATA_KEY", "data-key")
+    monkeypatch.setenv("ALPACA_DATA_SECRET", "data-secret")
+
+    mock_instance = MagicMock()
+    mock_cls = MagicMock(return_value=mock_instance)
+    mock_data_mod = MagicMock(CryptoHistoricalDataClient=mock_cls)
+
+    with patch.dict("sys.modules", {
+        "alpaca": MagicMock(),
+        "alpaca.data": mock_data_mod,
+    }):
+        import importlib
+
+        import tools.market.tools as market_tools
+        importlib.reload(market_tools)
+        market_tools._crypto_client()
+
+    mock_cls.assert_called_once_with(api_key="data-key", secret_key="data-secret")
+
+
 # ── get_sector_map with custom symbols ────────────────────────────────────────
 
 def test_get_sector_map_custom_symbols(monkeypatch):
@@ -779,8 +888,8 @@ def test_get_market_status_custom_timezone(monkeypatch):
     from tools.market.tools import get_market_status
     result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
 
+    # is_open is time-dependent for Berlin (XETRA); just check timezone field
     assert result["timezone"] == "Europe/Berlin"
-    assert result["is_open"] is False
 
 
 def test_get_market_status_invalid_timezone_falls_back(monkeypatch):
@@ -795,26 +904,125 @@ def test_get_market_status_invalid_timezone_falls_back(monkeypatch):
 
 
 def test_get_market_status_times_expressed_in_requested_tz(monkeypatch):
+    """NYSE times are converted to the requested display timezone (America/Chicago)."""
     monkeypatch.setenv("ALPACA_DATA_KEY", "test-key")
     monkeypatch.setenv("ALPACA_DATA_SECRET", "test-secret")
 
     clock = MagicMock()
     clock.is_open = False
-    clock.next_open = datetime(2025, 6, 10, 13, 30, tzinfo=UTC)   # 09:30 ET = 15:30 Berlin (CEST)
-    clock.next_close = datetime(2025, 6, 10, 20, 0, tzinfo=UTC)   # 16:00 ET = 22:00 Berlin (CEST)
+    clock.next_open = datetime(2025, 6, 10, 13, 30, tzinfo=UTC)   # 09:30 ET = 08:30 Chicago (CDT)
+    clock.next_close = datetime(2025, 6, 10, 20, 0, tzinfo=UTC)   # 16:00 ET = 15:00 Chicago (CDT)
 
     mock_client_cls = MagicMock()
     mock_client_cls.return_value.get_clock.return_value = clock
 
     with _mock_acquire(), patch("alpaca.trading.client.TradingClient", mock_client_cls):
         from tools.market.tools import get_market_status
+        result = asyncio.run(get_market_status(timezone="America/Chicago"))
+
+    assert result["timezone"] == "America/Chicago"
+    # Chicago CDT is UTC-5, so 13:30 UTC → 08:30-05:00
+    assert "08:30" in result["next_open"]
+    # 20:00 UTC → 15:00-05:00
+    assert "15:00" in result["next_close"]
+
+
+# ── get_market_status crypto (UTC) path ──────────────────────────────────────
+
+def test_get_market_status_crypto_always_open():
+    """UTC timezone → crypto universe, always is_open=True, no next_open/close."""
+    from tools.market.tools import get_market_status
+    result = asyncio.run(get_market_status(timezone="UTC"))
+
+    assert result["is_open"] is True
+    assert result["next_open"] is None
+    assert result["next_close"] is None
+    assert result["timezone"] == "UTC"
+
+
+# ── get_market_status XETRA (Europe/Berlin) path ──────────────────────────────
+
+def _make_fake_datetime(fixed):
+    """Return a datetime subclass whose .now() always returns `fixed`."""
+    from datetime import datetime as _real_dt
+
+    class _FakeDt(_real_dt):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed
+
+    return _FakeDt
+
+
+def test_get_market_status_berlin_open_during_xetra():
+    """Wednesday 10:30 CET → XETRA is open."""
+    from datetime import datetime as real_dt
+    from zoneinfo import ZoneInfo as _ZI
+
+    berlin = _ZI("Europe/Berlin")
+    fixed = real_dt(2026, 6, 10, 10, 30, tzinfo=berlin)  # Wednesday
+
+    with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
+        from tools.market.tools import get_market_status
         result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
 
+    assert result["is_open"] is True
     assert result["timezone"] == "Europe/Berlin"
-    # Berlin CEST is UTC+2, so 13:30 UTC → 15:30+02:00
-    assert "15:30" in result["next_open"]
-    # 20:00 UTC → 22:00+02:00
-    assert "22:00" in result["next_close"]
+    assert "17:30" in result["next_close"]
+
+
+def test_get_market_status_berlin_closed_before_open():
+    """Wednesday 08:00 CET → XETRA not yet open."""
+    from datetime import datetime as real_dt
+    from zoneinfo import ZoneInfo as _ZI
+
+    berlin = _ZI("Europe/Berlin")
+    fixed = real_dt(2026, 6, 10, 8, 0, tzinfo=berlin)  # Wednesday before 09:00
+
+    with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
+        from tools.market.tools import get_market_status
+        result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
+
+    assert result["is_open"] is False
+    # next_open should be today at 09:00
+    assert "09:00" in result["next_open"]
+    assert "2026-06-10" in result["next_open"]
+
+
+def test_get_market_status_berlin_closed_after_hours():
+    """Wednesday 18:00 CET → XETRA closed for the day."""
+    from datetime import datetime as real_dt
+    from zoneinfo import ZoneInfo as _ZI
+
+    berlin = _ZI("Europe/Berlin")
+    fixed = real_dt(2026, 6, 10, 18, 0, tzinfo=berlin)  # Wednesday after 17:30
+
+    with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
+        from tools.market.tools import get_market_status
+        result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
+
+    assert result["is_open"] is False
+    # next_open should be Thursday (2026-06-11) at 09:00
+    assert "09:00" in result["next_open"]
+    assert "2026-06-11" in result["next_open"]
+
+
+def test_get_market_status_berlin_closed_weekend():
+    """Saturday 12:00 CET → XETRA closed (weekend)."""
+    from datetime import datetime as real_dt
+    from zoneinfo import ZoneInfo as _ZI
+
+    berlin = _ZI("Europe/Berlin")
+    fixed = real_dt(2026, 6, 13, 12, 0, tzinfo=berlin)  # Saturday
+
+    with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
+        from tools.market.tools import get_market_status
+        result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
+
+    assert result["is_open"] is False
+    # next_open should be Monday (2026-06-15) at 09:00
+    assert "09:00" in result["next_open"]
+    assert "2026-06-15" in result["next_open"]
 
 
 # ── UNIVERSE_EXCHANGE_TZ config ───────────────────────────────────────────────

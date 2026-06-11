@@ -8,6 +8,7 @@ from typing import Any
 
 from google.adk.agents import Agent, SequentialAgent  # type: ignore[import]
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
+from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
 from google.adk.models.llm_response import LlmResponse  # type: ignore[import]
 
 from agent.callbacks import make_agent_log_callbacks
@@ -16,8 +17,8 @@ from tools.schemas import RiskVerdictOutput
 
 logger = logging.getLogger("agent.risk_agents")
 
-_OPENROUTER_OPTIMIST  = "openrouter/qwen/qwen-2.5-72b-instruct"
-_OPENROUTER_PESSIMIST = "openrouter/deepseek/deepseek-chat"
+_OPENROUTER_OPTIMIST  = LiteLlm(model="openrouter/qwen/qwen-2.5-72b-instruct")
+_OPENROUTER_PESSIMIST = LiteLlm(model="openrouter/deepseek/deepseek-chat")
 
 _JSON_BLOCK = re.compile(r"\{.*?\}", re.DOTALL)
 
@@ -56,7 +57,7 @@ def _make_json_validator_callback(model_cls: type[Any]):
 
 def create_risk_optimist(
     calibration_summary: str,
-    model: str = _OPENROUTER_OPTIMIST,
+    model: str | LiteLlm = _OPENROUTER_OPTIMIST,
 ) -> Agent:
     """Factory: returns a fresh optimist risk agent.
 
@@ -83,7 +84,7 @@ def create_risk_optimist(
 
 def create_risk_pessimist(
     calibration_summary: str,
-    model: str = _OPENROUTER_PESSIMIST,
+    model: str | LiteLlm = _OPENROUTER_PESSIMIST,
 ) -> Agent:
     """Factory: returns a fresh pessimist risk agent.
 
@@ -114,8 +115,8 @@ def create_risk_pessimist(
 def create_risk_debate(
     opt_calibration_summary: str,
     pess_calibration_summary: str,
-    optimist_model: str = _OPENROUTER_OPTIMIST,
-    pessimist_model: str = _OPENROUTER_PESSIMIST,
+    optimist_model: str | LiteLlm = _OPENROUTER_OPTIMIST,
+    pessimist_model: str | LiteLlm = _OPENROUTER_PESSIMIST,
 ) -> SequentialAgent:
     """Factory: returns a SequentialAgent that runs optimist then pessimist.
 

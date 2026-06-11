@@ -34,6 +34,18 @@ def _data_client():
     )
 
 
+def _crypto_client():
+    from alpaca.data import CryptoHistoricalDataClient  # type: ignore[import]
+    return CryptoHistoricalDataClient(
+        api_key=os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY"),
+        secret_key=os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET"),
+    )
+
+
+def _is_crypto(symbol: str) -> bool:
+    return symbol.endswith("-USD")
+
+
 @with_retry
 async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     """Fetch OHLCV bar history for an ETF.
@@ -68,13 +80,24 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     start = end - timedelta(days=bars * 2)  # over-fetch, trim to bars
 
     await acquire_alpaca_data()
-    with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
-        resp = _data_client().get_stock_bars(
-            StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
-        )
+    if _is_crypto(symbol):
+        from alpaca.data.requests import CryptoBarsRequest  # type: ignore[import]
+        # Alpaca crypto API requires "BTC/USD" not "BTC-USD" (yfinance format)
+        alpaca_sym = symbol.replace("-", "/")
+        with api_call_span("alpaca_data", "get_crypto_bars", symbol=symbol):
+            resp = _crypto_client().get_crypto_bars(
+                CryptoBarsRequest(symbol_or_symbols=alpaca_sym, timeframe=tf, start=start, end=end)
+            )
+        lookup_key = alpaca_sym
+    else:
+        with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
+            resp = _data_client().get_stock_bars(
+                StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
+            )
+        lookup_key = symbol
 
     try:
-        bar_list = resp[symbol]
+        bar_list = resp[lookup_key]
     except (KeyError, TypeError):
         bar_list = []
     result = [
@@ -438,27 +461,78 @@ async def get_intraday_bars(symbol: str, resolution: str) -> dict:
 
 
 async def get_market_status(timezone: str = "America/New_York") -> dict:
-    """Check if US equities market is currently open.
+    """Check if the relevant exchange is currently open.
+
+    Dispatch rules (by timezone, which maps 1-to-1 with UNIVERSE_EXCHANGE_TZ):
+      - 'UTC'           → crypto universe, trades 24/7, always open.
+      - 'Europe/Berlin' → XETRA (Frankfurt), Mon-Fri 09:00-17:30 CET/CEST.
+      - anything else   → Alpaca NYSE/NASDAQ clock.
 
     Args:
-        timezone: IANA timezone name for display of open/close times.
-            Defaults to 'America/New_York' (NYSE/NASDAQ exchange timezone).
-            Common values: 'Europe/Berlin', 'Asia/Tokyo', 'UTC'.
+        timezone: IANA timezone name — passed from UNIVERSE_EXCHANGE_TZ config.
 
     Returns:
         dict with 'is_open', 'next_open', 'next_close', 'timestamp', 'timezone'.
     """
     logger.info("get_market_status timezone=%s", timezone)
-    from alpaca.trading.client import TradingClient  # type: ignore[import]
+    from datetime import time as dtime
 
     try:
         tz = ZoneInfo(timezone)
     except Exception:
         tz = ZoneInfo("America/New_York")
 
+    now_dt = datetime.now(tz)
+    now_local = now_dt.isoformat()
+
+    # ── Crypto (UTC) — 24/7, never closes ────────────────────────────────────
+    if timezone == "UTC":
+        return MarketStatusResponse(
+            is_open=True, next_open=None, next_close=None,
+            timestamp=now_local, timezone=timezone,
+        ).model_dump()
+
+    # ── European / XETRA (Berlin) — Mon-Fri 09:00-17:30 CET/CEST ─────────────
+    if timezone == "Europe/Berlin":
+        open_t = dtime(9, 0)
+        close_t = dtime(17, 30)
+        wd = now_dt.weekday()   # 0=Mon … 6=Sun
+        t = now_dt.time()
+        is_open = wd < 5 and open_t <= t < close_t
+
+        def _xetra_next_open(ref: datetime) -> str:
+            d = ref.date()
+            if ref.weekday() < 5 and ref.time() < open_t:
+                pass  # today's open hasn't arrived yet
+            else:
+                d += timedelta(days=1)
+                while d.weekday() >= 5:
+                    d += timedelta(days=1)
+            return datetime(d.year, d.month, d.day, 9, 0, tzinfo=tz).isoformat()
+
+        def _xetra_next_close(ref: datetime) -> str:
+            d = ref.date()
+            if ref.weekday() < 5 and ref.time() < close_t:
+                pass  # today's close hasn't arrived yet
+            else:
+                d += timedelta(days=1)
+                while d.weekday() >= 5:
+                    d += timedelta(days=1)
+            return datetime(d.year, d.month, d.day, 17, 30, tzinfo=tz).isoformat()
+
+        return MarketStatusResponse(
+            is_open=is_open,
+            next_open=_xetra_next_open(now_dt),
+            next_close=_xetra_next_close(now_dt),
+            timestamp=now_local,
+            timezone=timezone,
+        ).model_dump()
+
+    # ── US and all other markets — Alpaca NYSE clock ──────────────────────────
+    from alpaca.trading.client import TradingClient  # type: ignore[import]
+
     api_key = os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY")
     api_secret = os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET")
-    now_local = datetime.now(tz).isoformat()
     if not api_key:
         return MarketStatusResponse(
             is_open=False, next_open=None, next_close=None,

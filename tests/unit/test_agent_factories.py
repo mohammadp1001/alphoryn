@@ -91,11 +91,10 @@ def test_create_risk_debate_custom_models():
 
 def test_create_coordinator_returns_agent():
     from agent.coordinator import create_coordinator
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import PlanState, SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -112,11 +111,10 @@ def test_create_coordinator_returns_agent():
 
 def test_coordinator_default_model_is_flash():
     from agent.coordinator import create_coordinator
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import PlanState, SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -132,11 +130,10 @@ def test_coordinator_default_model_is_flash():
 def test_coordinator_does_not_have_execution_tools():
     """Coordinator tool list must not include any execution__* tools."""
     from agent.coordinator import create_coordinator
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import PlanState, SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -157,11 +154,10 @@ def test_coordinator_does_not_have_execution_tools():
 
 def test_build_app_returns_runner_tuple():
     from agent.coordinator import build_app
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.SECTOR_ROTATION,
         mode=OperatingMode.FULL_AUTO,
         loss_limit_eur=1000.0,
         timeframe="1Day",

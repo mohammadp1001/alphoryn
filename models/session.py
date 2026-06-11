@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from pydantic import BaseModel, Field
 
-from models.enums import MarketRegime, OperatingMode, SessionOutcome, SessionTimeframe, Strategy
+from models.enums import MarketRegime, OperatingMode, SessionOutcome, SessionTimeframe
 from models.execution import Portfolio
 from models.memory import CycleRecord
 from models.risk import RiskAssessment
@@ -23,7 +23,6 @@ _TIMEFRAME_DURATION: dict[SessionTimeframe, timedelta] = {
 class SessionParams(BaseModel):
     """Set once via CLI wizard at session start."""
     timeframe: SessionTimeframe = SessionTimeframe.DAY_1  # how long the session runs
-    strategy: Strategy = Strategy.MOMENTUM
     mode: OperatingMode = OperatingMode.SEMI_AUTO
     loss_limit_eur: float = 500.0
     shortlist_n: int = 2                # 1–5, default 2

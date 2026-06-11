@@ -141,10 +141,9 @@ def test_after_callback_warns_when_output_key_missing(caplog):
 # ── agent/coordinator.py: _make_before_callback ──────────────────────────────
 
 def _make_params():
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
     return SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -178,7 +177,7 @@ def test_coordinator_before_callback_initialises_state():
 
     assert ctx.state["session_initialised"] is True
     assert ctx.state["cycle_count"] == 0
-    assert ctx.state["active_strategy"] == "MOMENTUM"
+    assert ctx.state["active_strategy"] == ""
 
 
 def test_coordinator_before_callback_skips_init_on_second_call():
