@@ -36,6 +36,39 @@ load_dotenv()
 app = typer.Typer(name="algotrade", help="Autonomous ETF trading agent", no_args_is_help=True)
 console = Console()
 
+# ── Agent display helpers ──────────────────────────────────────────────────────
+
+_AGENT_COLORS: dict[str, str] = {
+    "coordinator":    "bold cyan",
+    "risk_optimist":  "bold green",
+    "risk_pessimist": "bold red",
+    "research_agent": "bold blue",
+    "analysis_agent": "bold magenta",
+    "execution_agent":"bold yellow",
+}
+
+
+def _agent_color(author: str) -> str:
+    return _AGENT_COLORS.get(author, "bold white")
+
+
+def _agent_tag(author: str) -> str:
+    color = _agent_color(author)
+    return f"[{color}][{author}][/{color}]"
+
+
+def _compress_call_args(args: dict) -> str:
+    """Compress tool call args — collapse long lists, truncate long strings."""
+    parts = []
+    for k, v in (args or {}).items():
+        if isinstance(v, list) and len(v) > 5:
+            parts.append(f"[dim]{k}=[{len(v)} values][/dim]")
+        elif isinstance(v, str) and len(v) > 80:
+            parts.append(f"[dim]{k}[/dim]={v[:77]!r}…")
+        else:
+            parts.append(f"[dim]{k}[/dim]={v!r}")
+    return "  ".join(parts)
+
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
@@ -212,19 +245,43 @@ async def _run_session(params: SessionParams) -> None:
         ):
             if not event.content or not event.content.parts:
                 continue
-            author = getattr(event, "author", None) or "agent"
+            author = (getattr(event, "author", None) or "agent").lower()
+            tag = _agent_tag(author)
             for part in event.content.parts:
                 if hasattr(part, "text") and part.text:
-                    rprint(f"\n[bold cyan][{author}][/bold cyan] {part.text}")
+                    label = (
+                        "[dim italic][verdict][/dim italic]"
+                        if author in ("risk_optimist", "risk_pessimist")
+                        else "[dim italic][reasoning][/dim italic]"
+                    )
+                    rprint(f"\n{tag} {label}")
+                    rprint(f"  {part.text.rstrip()}")
                 elif hasattr(part, "function_call") and part.function_call:
                     fc = part.function_call
-                    args_preview = ", ".join(f"{k}={v!r}" for k, v in (fc.args or {}).items())
-                    rprint(f"[dim yellow]  -> [{author}] {fc.name}({args_preview})[/dim yellow]")
+                    display = fc.name.replace("__", ".")
+                    if fc.name == "coordinator__synthesise_risk":
+                        a = fc.args or {}
+                        opt_tag  = _agent_tag("risk_optimist")
+                        pess_tag = _agent_tag("risk_pessimist")
+                        rprint(f"\n{tag} [dim]⚙[/dim]  [bold]{display}[/bold]")
+                        rprint(
+                            f"  {opt_tag} [dim italic][verdict][/dim italic] "
+                            f"[bold]{a.get('optimist_level', '?')}[/bold] — "
+                            f"{a.get('optimist_reasoning', '')}"
+                        )
+                        rprint(
+                            f"  {pess_tag} [dim italic][verdict][/dim italic] "
+                            f"[bold]{a.get('pessimist_level', '?')}[/bold] — "
+                            f"{a.get('pessimist_reasoning', '')}"
+                        )
+                    else:
+                        args_str = _compress_call_args(fc.args or {})
+                        rprint(f"\n{tag} [dim]⚙[/dim]  [bold]{display}[/bold]  {args_str}")
                 elif hasattr(part, "function_response") and part.function_response:
                     fr = part.function_response
-                    resp = fr.response or {}
-                    summary = _summarise_tool_response(fr.name, resp)
-                    rprint(f"[dim green]  <- [{author}] {fr.name}: {summary}[/dim green]")
+                    summary = _summarise_tool_response(fr.name, fr.response or {})
+                    display = fr.name.replace("__", ".")
+                    rprint(f"{tag} [dim]←[/dim]  [dim]{display}[/dim]  {summary}")
 
     except KeyboardInterrupt:
         _outcome = "interrupted"
@@ -357,10 +414,16 @@ def status_cmd() -> None:
 
 def _summarise_tool_response(tool_name: str, resp: dict) -> str:
     """Return a compact human-readable summary of a tool response for CLI display."""
-    import json as _json
-
     if not resp:
         return "(empty)"
+
+    # ── Market ────────────────────────────────────────────────────────────────
+    if tool_name == "get_market_status":
+        return (
+            f"is_open={resp.get('is_open')}  "
+            f"next_close={resp.get('next_close', '—')}  "
+            f"tz={resp.get('timezone', '—')}"
+        )
 
     if tool_name == "get_ohlcv" and "bars" in resp:
         bars = resp["bars"]
@@ -369,6 +432,20 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
             return f"{resp.get('symbol')} | {len(bars)} bars | last close={last.get('close')}"
         return f"{resp.get('symbol')} | 0 bars"
 
+    if tool_name == "get_benchmark_return":
+        return (
+            f"{resp.get('symbol')} vs {resp.get('benchmark')}  "
+            f"excess={resp.get('excess_return_pct', 0):+.2f}%  "
+            f"({resp.get('symbol_return_pct', 0):+.2f}% vs {resp.get('benchmark_return_pct', 0):+.2f}%)"
+        )
+
+    if tool_name == "get_quote" and "symbol" in resp:
+        return f"{resp['symbol']} bid={resp.get('bid')} ask={resp.get('ask')}"
+
+    if tool_name == "get_sector_performance":
+        return f"timeframe={resp.get('timeframe')}"
+
+    # ── Analysis ──────────────────────────────────────────────────────────────
     if tool_name == "screen_etfs" and "results" in resp:
         results = resp["results"]
         syms = [r["symbol"] for r in results]
@@ -380,6 +457,34 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
             f"signal={resp.get('signal')} regime_fit={resp.get('regime_fit')}"
         )
 
+    if tool_name == "detect_momentum":
+        return (
+            f"{resp.get('symbol')}  score={resp.get('momentum_score', 0):+.4f}  "
+            f"rsi_contrib={resp.get('rsi_contribution', 0):+.3f}  "
+            f"macd_contrib={resp.get('macd_contribution', 0):+.3f}"
+        )
+
+    if tool_name == "compute_rsi":
+        return (
+            f"{resp.get('symbol')}  RSI={resp.get('current', 0):.1f}  "
+            f"overbought={resp.get('is_overbought')}  oversold={resp.get('is_oversold')}"
+        )
+
+    if tool_name == "compute_macd":
+        return (
+            f"{resp.get('symbol')}  macd={resp.get('current_macd', 0):.4f}  "
+            f"signal={resp.get('current_signal', 0):.4f}  "
+            f"hist={resp.get('current_histogram', 0):.4f}"
+        )
+
+    if tool_name == "compute_bollinger":
+        return (
+            f"{resp.get('symbol')}  price={resp.get('current_price', 0):.3f}  "
+            f"upper={resp.get('current_upper', 0):.3f}  "
+            f"lower={resp.get('current_lower', 0):.3f}"
+        )
+
+    # ── Research ──────────────────────────────────────────────────────────────
     if tool_name == "detect_market_regime" and "regime" in resp:
         return (
             f"regime={resp['regime']} vix={resp.get('vix')} "
@@ -389,26 +494,90 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
     if tool_name == "get_macro_data":
         return f"vix={resp.get('vix')} yield_10y={resp.get('yield_10y')} dxy={resp.get('dxy')}"
 
-    if tool_name == "get_quote" and "symbol" in resp:
-        return f"{resp['symbol']} bid={resp.get('bid')} ask={resp.get('ask')}"
+    if tool_name == "get_news":
+        items = resp.get("items") or []
+        return f"{resp.get('symbol')}  {len(items)} item(s)"
 
+    # ── Strategy ──────────────────────────────────────────────────────────────
+    if tool_name == "list_strategies":
+        return f"{resp.get('count', 0)} strategies available"
+
+    if tool_name == "get_strategy":
+        desc = resp.get("description") or ""
+        return f"{resp.get('name')}  {desc[:80]}{'…' if len(desc) > 80 else ''}"
+
+    # ── Coordinator ───────────────────────────────────────────────────────────
+    if tool_name == "check_loss_limit":
+        if resp.get("breached"):
+            return (
+                f"[bold red]BREACHED[/bold red]  "
+                f"consumed={resp.get('consumed_pct', 0):.0%}  "
+                f"remaining=€{resp.get('remaining_eur', 0)}"
+            )
+        return (
+            f"OK  remaining=€{resp.get('remaining_eur', 0)}  "
+            f"consumed={resp.get('consumed_pct', 0):.0%}"
+        )
+
+    if tool_name == "select_shortlist":
+        return (
+            f"n={resp.get('n')}  strategy={resp.get('strategy')}  "
+            f"below_threshold={resp.get('below_threshold_count', 0)}"
+        )
+
+    if tool_name == "synthesise_risk":
+        level = resp.get("risk_level", "?")
+        color = "green" if level == "LOW" else ("yellow" if level == "MEDIUM" else "red")
+        return (
+            f"[bold {color}]{level}[/bold {color}]  "
+            f"score={resp.get('risk_score', 0):.3f}  "
+            f"winner={resp.get('debate_winner', '?')}"
+        )
+
+    if tool_name == "resolve_unresolved_trades":
+        return f"resolved={resp.get('resolved_count', 0)}  failed={resp.get('failed_count', 0)}"
+
+    if tool_name == "abort_cycle":
+        reason = (resp.get("reason") or "")[:60]
+        return f"ABORTED  stage={resp.get('stage')}  reason={reason}"
+
+    if tool_name == "request_hitl":
+        return (
+            f"action={resp.get('action')}  "
+            f"source={resp.get('source')}  "
+            f"latency={resp.get('latency_ms')}ms"
+        )
+
+    if tool_name == "get_session_summary":
+        return (
+            f"cycles={resp.get('cycle_count')}  "
+            f"committed={resp.get('committed_count')}  "
+            f"aborted={resp.get('aborted_count')}  "
+            f"pnl=€{resp.get('session_realised_pnl_eur', 0):.2f}  "
+            f"loss_consumed={resp.get('loss_limit_consumed_pct', 0):.0%}"
+        )
+
+    # ── Memory ────────────────────────────────────────────────────────────────
     if tool_name == "get_calibration":
         return (
-            f"opt_win_rate={resp.get('opt_win_rate'):.0%} "
-            f"pess_win_rate={resp.get('pess_win_rate'):.0%} "
+            f"opt={resp.get('opt_win_rate', 0):.0%}  "
+            f"pess={resp.get('pess_win_rate', 0):.0%}  "
             f"n={resp.get('trade_count')}"
         ) if resp.get("has_data") else "no calibration data yet"
 
     if tool_name == "get_portfolio":
         return (
-            f"{len(resp.get('positions', []))} positions | "
-            f"value=${resp.get('portfolio_value', 0):,.0f} | "
+            f"{len(resp.get('positions', []))} positions  "
+            f"value=${resp.get('portfolio_value', 0):,.0f}  "
             f"cash=${resp.get('cash_usd', 0):,.0f}"
         )
 
     if tool_name in ("write_trade", "record_cycle"):
-        return _json.dumps({k: v for k, v in resp.items() if k in ("trade_id", "written", "cycle_index", "outcome")})
+        return json.dumps(
+            {k: v for k, v in resp.items() if k in ("trade_id", "written", "cycle_index", "outcome")}
+        )
 
+    # ── Generic fallback ──────────────────────────────────────────────────────
     parts = []
     for k, v in resp.items():
         if isinstance(v, (str, int, float, bool)) and len(parts) < 6:

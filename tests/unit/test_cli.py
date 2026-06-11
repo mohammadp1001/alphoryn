@@ -815,3 +815,349 @@ def test_summarise_generic_fallback_all_complex():
     resp = {"nested": {"a": 1}, "list": [1, 2, 3]}
     result = _summarise_tool_response("unknown_tool", resp)
     assert result == "(ok)"
+
+
+# ── _agent_color / _agent_tag helpers ────────────────────────────────────────
+
+def test_agent_color_known_agent():
+    from cli.main import _agent_color
+    assert _agent_color("coordinator") == "bold cyan"
+    assert _agent_color("risk_optimist") == "bold green"
+    assert _agent_color("risk_pessimist") == "bold red"
+    assert _agent_color("research_agent") == "bold blue"
+    assert _agent_color("analysis_agent") == "bold magenta"
+    assert _agent_color("execution_agent") == "bold yellow"
+
+
+def test_agent_color_unknown_agent():
+    from cli.main import _agent_color
+    assert _agent_color("something_else") == "bold white"
+
+
+def test_agent_tag_known_agent():
+    from cli.main import _agent_tag
+    tag = _agent_tag("coordinator")
+    assert "[coordinator]" in tag
+    assert "bold cyan" in tag
+
+
+def test_agent_tag_unknown_agent():
+    from cli.main import _agent_tag
+    tag = _agent_tag("mystery")
+    assert "[mystery]" in tag
+    assert "bold white" in tag
+
+
+# ── _compress_call_args ───────────────────────────────────────────────────────
+
+def test_compress_call_args_empty():
+    from cli.main import _compress_call_args
+    assert _compress_call_args({}) == ""
+
+
+def test_compress_call_args_short_values_unchanged():
+    from cli.main import _compress_call_args
+    result = _compress_call_args({"symbol": "XLK", "bars": 20})
+    assert "symbol" in result
+    assert "XLK" in result
+    assert "bars" in result
+
+
+def test_compress_call_args_compresses_long_list():
+    from cli.main import _compress_call_args
+    result = _compress_call_args({"symbols": ["A", "B", "C", "D", "E", "F", "G"]})
+    assert "7 values" in result
+    assert "symbols" in result
+
+
+def test_compress_call_args_preserves_short_list():
+    from cli.main import _compress_call_args
+    result = _compress_call_args({"symbols": ["A", "B", "C"]})
+    assert "3 values" not in result
+    assert "A" in result
+
+
+def test_compress_call_args_truncates_long_string():
+    from cli.main import _compress_call_args
+    long_val = "x" * 100
+    result = _compress_call_args({"msg": long_val})
+    assert "…" in result
+    assert "msg" in result
+    # Truncated at 77 chars with ellipsis
+    assert len(result) < 120
+
+
+# ── _run_session: risk agent verdict label ────────────────────────────────────
+
+def test_run_session_risk_agent_verdict_label(tmp_db, monkeypatch):
+    """Events from risk_optimist show [verdict] label instead of [reasoning]."""
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
+
+    params = _make_session_params()
+
+    mock_part = MagicMock(spec=["text"])
+    mock_part.text = "MEDIUM — upward momentum."
+
+    event = MagicMock()
+    event.author = "risk_optimist"
+    event.content = MagicMock()
+    event.content.parts = [mock_part]
+
+    async def fake_run_async(*args, **kwargs):
+        yield event
+
+    mock_runner = MagicMock()
+    mock_runner.run_async = fake_run_async
+    mock_session_service = AsyncMock()
+
+    with (
+        patch("cli.main.build_app",
+              return_value=(mock_runner, "verdict-sess", MagicMock(), mock_session_service)),
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))  # must not raise
+
+
+def test_run_session_synthesise_risk_event(tmp_db, monkeypatch):
+    """coordinator__synthesise_risk shows both debate verdicts inline."""
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
+
+    params = _make_session_params()
+
+    part_fc = MagicMock(spec=["function_call"])
+    part_fc.function_call = MagicMock()
+    part_fc.function_call.name = "coordinator__synthesise_risk"
+    part_fc.function_call.args = {
+        "optimist_level": "MEDIUM",
+        "optimist_reasoning": "slight upward momentum",
+        "pessimist_level": "HIGH",
+        "pessimist_reasoning": "negative technical score",
+        "opt_win_rate": 0.5,
+        "pess_win_rate": 0.5,
+    }
+
+    event = MagicMock()
+    event.content = MagicMock()
+    event.content.parts = [part_fc]
+
+    async def fake_run_async(*args, **kwargs):
+        yield event
+
+    mock_runner = MagicMock()
+    mock_runner.run_async = fake_run_async
+    mock_session_service = AsyncMock()
+
+    with (
+        patch("cli.main.build_app",
+              return_value=(mock_runner, "synth-sess", MagicMock(), mock_session_service)),
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))  # must not raise
+
+
+# ── _summarise_tool_response: new tool cases ──────────────────────────────────
+
+def test_summarise_get_market_status():
+    from cli.main import _summarise_tool_response
+    resp = {"is_open": True, "next_close": "16:00", "timezone": "America/New_York"}
+    result = _summarise_tool_response("get_market_status", resp)
+    assert "True" in result
+    assert "16:00" in result
+
+
+def test_summarise_get_benchmark_return():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "symbol": "EWG",
+        "benchmark": "SPY",
+        "excess_return_pct": 1.5,
+        "symbol_return_pct": 3.0,
+        "benchmark_return_pct": 1.5,
+    }
+    result = _summarise_tool_response("get_benchmark_return", resp)
+    assert "EWG" in result
+    assert "SPY" in result
+    assert "+1.50%" in result
+
+
+def test_summarise_get_sector_performance():
+    from cli.main import _summarise_tool_response
+    resp = {"timeframe": "1M", "sectors": {}}
+    result = _summarise_tool_response("get_sector_performance", resp)
+    assert "1M" in result
+
+
+def test_summarise_detect_momentum():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "symbol": "XLK",
+        "momentum_score": 0.42,
+        "rsi_contribution": 0.15,
+        "macd_contribution": 0.27,
+    }
+    result = _summarise_tool_response("detect_momentum", resp)
+    assert "XLK" in result
+    assert "0.4200" in result
+
+
+def test_summarise_compute_rsi():
+    from cli.main import _summarise_tool_response
+    resp = {"symbol": "XLK", "current": 68.5, "is_overbought": False, "is_oversold": False}
+    result = _summarise_tool_response("compute_rsi", resp)
+    assert "XLK" in result
+    assert "68.5" in result
+
+
+def test_summarise_compute_macd():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "symbol": "XLK",
+        "current_macd": 0.123,
+        "current_signal": 0.100,
+        "current_histogram": 0.023,
+    }
+    result = _summarise_tool_response("compute_macd", resp)
+    assert "XLK" in result
+    assert "0.1230" in result
+
+
+def test_summarise_compute_bollinger():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "symbol": "XLK",
+        "current_price": 185.5,
+        "current_upper": 190.0,
+        "current_lower": 181.0,
+    }
+    result = _summarise_tool_response("compute_bollinger", resp)
+    assert "XLK" in result
+    assert "185.500" in result
+
+
+def test_summarise_check_loss_limit_ok():
+    from cli.main import _summarise_tool_response
+    resp = {"breached": False, "remaining_eur": 450.0, "consumed_pct": 0.1}
+    result = _summarise_tool_response("check_loss_limit", resp)
+    assert "OK" in result
+    assert "450" in result
+
+
+def test_summarise_check_loss_limit_breached():
+    from cli.main import _summarise_tool_response
+    resp = {"breached": True, "remaining_eur": 0.0, "consumed_pct": 1.0}
+    result = _summarise_tool_response("check_loss_limit", resp)
+    assert "BREACHED" in result
+    assert "100%" in result
+
+
+def test_summarise_select_shortlist():
+    from cli.main import _summarise_tool_response
+    resp = {"n": 3, "strategy": "MOMENTUM", "below_threshold_count": 2}
+    result = _summarise_tool_response("select_shortlist", resp)
+    assert "n=3" in result
+    assert "MOMENTUM" in result
+
+
+def test_summarise_synthesise_risk_low():
+    from cli.main import _summarise_tool_response
+    resp = {"risk_level": "LOW", "risk_score": 0.2, "debate_winner": "optimist"}
+    result = _summarise_tool_response("synthesise_risk", resp)
+    assert "LOW" in result
+    assert "0.200" in result
+
+
+def test_summarise_synthesise_risk_medium():
+    from cli.main import _summarise_tool_response
+    resp = {"risk_level": "MEDIUM", "risk_score": 0.5, "debate_winner": "tie"}
+    result = _summarise_tool_response("synthesise_risk", resp)
+    assert "MEDIUM" in result
+    assert "yellow" in result
+
+
+def test_summarise_synthesise_risk_high():
+    from cli.main import _summarise_tool_response
+    resp = {"risk_level": "HIGH", "risk_score": 0.8, "debate_winner": "pessimist"}
+    result = _summarise_tool_response("synthesise_risk", resp)
+    assert "HIGH" in result
+    assert "red" in result
+
+
+def test_summarise_resolve_unresolved_trades():
+    from cli.main import _summarise_tool_response
+    resp = {"resolved_count": 2, "failed_count": 0}
+    result = _summarise_tool_response("resolve_unresolved_trades", resp)
+    assert "resolved=2" in result
+    assert "failed=0" in result
+
+
+def test_summarise_abort_cycle():
+    from cli.main import _summarise_tool_response
+    resp = {"stage": "risk", "reason": "loss limit exceeded"}
+    result = _summarise_tool_response("abort_cycle", resp)
+    assert "ABORTED" in result
+    assert "risk" in result
+
+
+def test_summarise_request_hitl():
+    from cli.main import _summarise_tool_response
+    resp = {"action": "approve", "source": "user", "latency_ms": 1200}
+    result = _summarise_tool_response("request_hitl", resp)
+    assert "approve" in result
+    assert "1200ms" in result
+
+
+def test_summarise_get_session_summary():
+    from cli.main import _summarise_tool_response
+    resp = {
+        "cycle_count": 5,
+        "committed_count": 3,
+        "aborted_count": 2,
+        "session_realised_pnl_eur": 12.50,
+        "loss_limit_consumed_pct": 0.25,
+    }
+    result = _summarise_tool_response("get_session_summary", resp)
+    assert "cycles=5" in result
+    assert "25%" in result
+
+
+def test_summarise_list_strategies():
+    from cli.main import _summarise_tool_response
+    resp = {"count": 3, "strategies": ["MOMENTUM", "MEAN_REVERSION", "BREAKOUT"]}
+    result = _summarise_tool_response("list_strategies", resp)
+    assert "3 strategies" in result
+
+
+def test_summarise_get_strategy_short_desc():
+    from cli.main import _summarise_tool_response
+    resp = {"name": "MOMENTUM", "description": "Buy high, sell higher."}
+    result = _summarise_tool_response("get_strategy", resp)
+    assert "MOMENTUM" in result
+    assert "Buy high" in result
+    assert "…" not in result
+
+
+def test_summarise_get_strategy_long_desc():
+    from cli.main import _summarise_tool_response
+    long_desc = "A" * 100
+    resp = {"name": "COMPLEX", "description": long_desc}
+    result = _summarise_tool_response("get_strategy", resp)
+    assert "COMPLEX" in result
+    assert "…" in result
+
+
+def test_summarise_get_news():
+    from cli.main import _summarise_tool_response
+    resp = {"symbol": "EWG", "items": [{"title": "news1"}, {"title": "news2"}]}
+    result = _summarise_tool_response("get_news", resp)
+    assert "EWG" in result
+    assert "2 item(s)" in result
