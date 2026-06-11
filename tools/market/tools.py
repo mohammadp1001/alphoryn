@@ -82,18 +82,22 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     await acquire_alpaca_data()
     if _is_crypto(symbol):
         from alpaca.data.requests import CryptoBarsRequest  # type: ignore[import]
+        # Alpaca crypto API requires "BTC/USD" not "BTC-USD" (yfinance format)
+        alpaca_sym = symbol.replace("-", "/")
         with api_call_span("alpaca_data", "get_crypto_bars", symbol=symbol):
             resp = _crypto_client().get_crypto_bars(
-                CryptoBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end)
+                CryptoBarsRequest(symbol_or_symbols=alpaca_sym, timeframe=tf, start=start, end=end)
             )
+        lookup_key = alpaca_sym
     else:
         with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
             resp = _data_client().get_stock_bars(
                 StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
             )
+        lookup_key = symbol
 
     try:
-        bar_list = resp[symbol]
+        bar_list = resp[lookup_key]
     except (KeyError, TypeError):
         bar_list = []
     result = [

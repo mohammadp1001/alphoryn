@@ -678,9 +678,10 @@ def test_is_crypto_false_for_stock_symbol():
 # ── get_ohlcv crypto path ──────────────────────────────────────────────────────
 
 def test_get_ohlcv_crypto_uses_crypto_client():
-    """Crypto symbols (ending in -USD) route through get_crypto_bars, not get_stock_bars."""
+    """Crypto symbols (ending in -USD) route through get_crypto_bars, not get_stock_bars.
+    Alpaca crypto API uses BTC/USD format, so the mock response key is BTC/USD."""
     bars = [_make_bar(close=65000.0)]
-    mock_resp = {"BTC-USD": bars}
+    mock_resp = {"BTC/USD": bars}  # Alpaca crypto uses slash notation
     mock_crypto_client = MagicMock()
     mock_crypto_client.get_crypto_bars.return_value = mock_resp
 
@@ -692,6 +693,28 @@ def test_get_ohlcv_crypto_uses_crypto_client():
     assert len(result["bars"]) == 1
     assert result["bars"][0]["close"] == 65000.0
     mock_crypto_client.get_crypto_bars.assert_called_once()
+
+
+def test_get_ohlcv_crypto_symbol_translated_to_slash_format():
+    """BTC-USD is translated to BTC/USD when calling Alpaca crypto API."""
+    import alpaca.data.requests as alpaca_reqs
+
+    bars = [_make_bar(close=65000.0)]
+    mock_resp = {"BTC/USD": bars}
+    mock_crypto_client = MagicMock()
+    mock_crypto_client.get_crypto_bars.return_value = mock_resp
+
+    mock_req_class = MagicMock()
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._crypto_client", return_value=mock_crypto_client),
+        patch.object(alpaca_reqs, "CryptoBarsRequest", mock_req_class, create=True),
+    ):
+        from tools.market.tools import get_ohlcv
+        asyncio.run(get_ohlcv("BTC-USD", "1Hour", 1))
+
+    call_kwargs = mock_req_class.call_args[1]
+    assert call_kwargs["symbol_or_symbols"] == "BTC/USD"
 
 
 def test_get_ohlcv_crypto_yfinance_fallback_when_empty():
