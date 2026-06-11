@@ -72,6 +72,7 @@ def create_coordinator(
         timeframe=params.timeframe.value,
         session_expires_at=session_expires_at,
         max_strategy_cycles=MAX_STRATEGY_CYCLES,
+        allow_closed_market=str(params.allow_closed_market).lower(),
     )
 
     before_cb = _make_before_callback(params, plan_state)

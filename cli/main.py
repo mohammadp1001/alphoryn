@@ -79,7 +79,9 @@ def run_cmd(
     timeframe: str = typer.Option(None, "--timeframe", "-t", help="Session duration: 30Min|1Hour|3Hour|12Hour|1Day|2Day|5Day"),
     shortlist_n: int = typer.Option(None, "--shortlist-n", help="Candidate shortlist size (1-5)"),
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
-    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET"),
+    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET|CRYPTO|MIXED_MARKET"),
+    allow_closed_market: bool = typer.Option(False, "--allow-closed-market", help="Proceed even when market is closed (useful for testing)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
     """Launch a trading session (interactive wizard fills missing params)."""
@@ -140,6 +142,7 @@ def run_cmd(
         hitl_timeout_seconds=hitl_timeout,
         hitl_timeout_action="abort",
         universe=universe,
+        allow_closed_market=allow_closed_market,
     )
 
     _print_session_params(params)
@@ -148,7 +151,7 @@ def run_cmd(
         rprint("[yellow]Dry run — session not started.[/yellow]")
         return
 
-    if not Confirm.ask("\nStart session?", default=True):
+    if not yes and not Confirm.ask("\nStart session?", default=True):
         rprint("[yellow]Cancelled.[/yellow]")
         return
 
@@ -216,6 +219,7 @@ async def _run_session(params: SessionParams) -> None:
         f"Execute the decision cycle flow as per your instructions."
     )
 
+    _outcome = "completed"
     try:
         from google.genai.types import Content, Part  # type: ignore[import]
 
@@ -242,15 +246,33 @@ async def _run_session(params: SessionParams) -> None:
                     rprint(f"[dim green]  <- [{author}] {fr.name}: {summary}[/dim green]")
 
     except KeyboardInterrupt:
+        _outcome = "interrupted"
         rprint("\n[yellow]Session interrupted by user.[/yellow]")
     except Exception as exc:
+        _outcome = "error"
         rprint(f"[red]Session error: {exc}[/red]")
         logger.error("session_error", extra={"trading_session_id": session_id, "error": str(exc)})
         raise
     finally:
-        # Clear credentials from environment
         os.environ.pop("ALPACA_API_KEY", None)
         os.environ.pop("ALPACA_API_SECRET", None)
+        from db.schema import _connect, close_session  # type: ignore[attr-defined]
+        try:
+            with _connect() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS cycle_count, "
+                    "COALESCE(SUM(realised_pnl_pct), 0.0) AS total_pnl "
+                    "FROM cycle_records WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+            close_session(
+                session_id,
+                outcome=_outcome,
+                realised_pnl=float(row["total_pnl"] or 0.0),
+                cycle_count=int(row["cycle_count"] or 0),
+            )
+        except Exception:
+            pass
         rprint(f"\n[bold]Session {session_id} ended.[/bold]")
 
 
@@ -436,6 +458,7 @@ def _print_session_params(params: SessionParams) -> None:
         ("Timeframe", params.timeframe.value),
         ("Shortlist N", str(params.shortlist_n)),
         ("HITL timeout", f"{params.hitl_timeout_seconds}s ({params.hitl_timeout_action} on timeout)"),
+        ("Allow closed market", str(params.allow_closed_market)),
     ]
     for k, v in rows:
         table.add_row(k, v)

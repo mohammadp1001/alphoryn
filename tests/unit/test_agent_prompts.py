@@ -81,6 +81,7 @@ _COORD_BASE_KWARGS = dict(
     timeframe="1Day",
     session_expires_at="2026-06-11T20:00:00",
     max_strategy_cycles=3,
+    allow_closed_market="false",
 )
 
 
@@ -210,6 +211,13 @@ def test_coordinator_market_closed_abort_stage():
     from agent.prompts import COORDINATOR_INSTRUCTION
     formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
     assert "stage='market_closed'" in formatted
+
+
+def test_coordinator_allow_closed_market_override():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+    formatted = COORDINATOR_INSTRUCTION.format(**{**_COORD_BASE_KWARGS, "allow_closed_market": "true"})
+    assert "allow_closed_market is true" in formatted
+    assert "override active" in formatted
 
 
 # ── Execution agent (BaseAgent — no LLM prompt) ───────────────────────────────

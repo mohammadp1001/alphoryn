@@ -341,5 +341,19 @@ async def abort_cycle(
         dict with 'outcome' ('ABORTED'), 'reason', 'stage'.
     """
     logger.info("abort_cycle session_id=%s cycle=%d stage=%s reason=%s", session_id, cycle_index, stage, reason)
+    from db.schema import _connect  # type: ignore[attr-defined]
+    try:
+        with _connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO cycle_records
+                  (session_id, cycle_index, outcome, shortlisted_symbols, risk_level,
+                   abort_reason, abort_stage, trade_id, realised_pnl_pct)
+                VALUES (?, ?, 'ABORTED', '', '', ?, ?, NULL, 0.0)
+                """,
+                (session_id, cycle_index, reason, stage),
+            )
+    except Exception as exc:
+        logger.warning("abort_cycle: failed to write cycle record — %s", exc)
     return {"outcome": "ABORTED", "reason": reason, "stage": stage,
             "session_id": session_id, "cycle_index": cycle_index}

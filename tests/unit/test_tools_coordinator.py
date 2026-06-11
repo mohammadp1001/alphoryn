@@ -197,7 +197,10 @@ def test_update_plan_state_returns_correct_response():
 
 # ── abort_cycle ───────────────────────────────────────────────────────────────
 
-def test_abort_cycle_returns_aborted_outcome():
+def test_abort_cycle_returns_aborted_outcome(tmp_db):
+    from db.schema import upsert_session
+    upsert_session("sess-1", "MOMENTUM", "SEMI_AUTO")
+
     from tools.coordinator.tools import abort_cycle
     result = asyncio.run(abort_cycle("sess-1", 2, "risk too high", "risk_gate"))
 
@@ -206,6 +209,34 @@ def test_abort_cycle_returns_aborted_outcome():
     assert result["stage"] == "risk_gate"
     assert result["session_id"] == "sess-1"
     assert result["cycle_index"] == 2
+
+
+def test_abort_cycle_writes_cycle_record_to_db(tmp_db):
+    from db.schema import upsert_session
+    upsert_session("sess-ab", "MOMENTUM", "SEMI_AUTO")
+
+    from tools.coordinator.tools import abort_cycle
+    asyncio.run(abort_cycle("sess-ab", 0, "loss limit breached", "loss_limit"))
+
+    conn = sqlite3.connect(str(tmp_db))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT outcome, abort_reason, abort_stage FROM cycle_records WHERE session_id = ?",
+        ("sess-ab",),
+    ).fetchone()
+    conn.close()
+
+    assert row["outcome"] == "ABORTED"
+    assert row["abort_reason"] == "loss limit breached"
+    assert row["abort_stage"] == "loss_limit"
+
+
+def test_abort_cycle_db_failure_still_returns_result(monkeypatch):
+    from unittest.mock import patch
+    with patch("db.schema._connect", side_effect=Exception("db gone")):
+        from tools.coordinator.tools import abort_cycle
+        result = asyncio.run(abort_cycle("sess-x", 0, "test", "test_stage"))
+    assert result["outcome"] == "ABORTED"
 
 
 # ── get_session_summary ───────────────────────────────────────────────────────
