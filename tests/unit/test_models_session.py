@@ -7,7 +7,6 @@ from models.enums import (
     CycleOutcome,
     OperatingMode,
     SessionTimeframe,
-    Strategy,
 )
 from models.memory import CycleRecord
 from models.session import PlanState, SessionParams
@@ -16,7 +15,6 @@ from models.session import PlanState, SessionParams
 
 def test_session_params_defaults():
     params = SessionParams()
-    assert params.strategy == Strategy.MOMENTUM
     assert params.mode == OperatingMode.SEMI_AUTO
     assert params.loss_limit_eur == 500.0
     assert params.timeframe == SessionTimeframe.DAY_1
@@ -27,7 +25,6 @@ def test_session_params_defaults():
 
 def test_session_params_custom_values():
     params = SessionParams(
-        strategy=Strategy.MEAN_REVERSION,
         mode=OperatingMode.FULL_AUTO,
         loss_limit_eur=1000.0,
         timeframe=SessionTimeframe.DAY_5,
@@ -35,7 +32,6 @@ def test_session_params_custom_values():
         hitl_timeout_seconds=120,
         hitl_timeout_action="confirm",
     )
-    assert params.strategy == Strategy.MEAN_REVERSION
     assert params.mode == OperatingMode.FULL_AUTO
     assert params.loss_limit_eur == 1000.0
     assert params.timeframe == SessionTimeframe.DAY_5
@@ -49,12 +45,6 @@ def test_session_params_duration_property():
     assert SessionParams(timeframe=SessionTimeframe.DAY_1).duration == timedelta(days=1)
     assert SessionParams(timeframe=SessionTimeframe.DAY_2).duration == timedelta(days=2)
     assert SessionParams(timeframe=SessionTimeframe.DAY_5).duration == timedelta(days=5)
-
-
-def test_session_params_all_strategies():
-    for s in Strategy:
-        params = SessionParams(strategy=s)
-        assert params.strategy == s
 
 
 # ── PlanState ─────────────────────────────────────────────────────────────────

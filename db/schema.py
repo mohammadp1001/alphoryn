@@ -118,7 +118,6 @@ def _connect(path: Path | None = None) -> Generator[sqlite3.Connection, None, No
 
 def upsert_session(
     session_id: str,
-    strategy: str,
     mode: str,
     market_regime: str | None = None,
     started_at: datetime | None = None,
@@ -131,7 +130,7 @@ def upsert_session(
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET market_regime = excluded.market_regime
             """,
-            (session_id, now, strategy, mode, market_regime),
+            (session_id, now, "", mode, market_regime),
         )
 
 

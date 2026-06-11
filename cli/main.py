@@ -2,10 +2,9 @@
 CLI entrypoint — `algotrade` command.
 
 Usage:
-  algotrade run                      # launch session wizard
-  algotrade run --strategy MOMENTUM  # skip strategy prompt
-  algotrade setup                    # configure credentials
-  algotrade history                  # show recent sessions
+  algotrade run                  # launch session wizard
+  algotrade setup                # configure credentials
+  algotrade history              # show recent sessions
 """
 from __future__ import annotations
 
@@ -15,14 +14,22 @@ import os
 
 import typer
 from dotenv import load_dotenv
+from google.genai.types import Content, Part  # type: ignore[import]
 from rich import print as rprint
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from agent.coordinator import build_app
+from config import CONFIG_DIR, CONFIG_FILE, ETF_UNIVERSES, UNIVERSE_EXCHANGE_TZ
+from db.schema import _connect, close_session, get_unresolved_trades, init_db, upsert_session
 from infra.log_setup import configure_console_logging
+from infra.observability import get_logger, setup_observability
+from infra.secrets import get_alpaca_credentials
+from models.enums import OperatingMode, SessionTimeframe
 from models.session import SessionParams
+from tools.execution.tools import get_portfolio
 
 load_dotenv()
 
@@ -35,8 +42,6 @@ console = Console()
 @app.command("setup")
 def setup_cmd() -> None:
     """Configure API credentials and default settings."""
-    from config import CONFIG_DIR, CONFIG_FILE
-
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
     rprint(Panel("[bold]AlgoTrade Setup[/bold]", expand=False))
@@ -73,7 +78,6 @@ def setup_cmd() -> None:
 
 @app.command("run")
 def run_cmd(
-    strategy: str = typer.Option(None, "--strategy", "-s", help="MOMENTUM|MEAN_REVERSION|SECTOR_ROTATION"),
     mode: str = typer.Option(None, "--mode", "-m", help="SEMI_AUTO|FULL_AUTO"),
     loss_limit: float = typer.Option(None, "--loss-limit", help="Max loss in EUR"),
     timeframe: str = typer.Option(None, "--timeframe", "-t", help="Session duration: 30Min|1Hour|3Hour|12Hour|1Day|2Day|5Day"),
@@ -85,19 +89,9 @@ def run_cmd(
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
     """Launch a trading session (interactive wizard fills missing params)."""
-    from models.enums import OperatingMode, SessionTimeframe, Strategy
-    from models.session import SessionParams
-
     rprint(Panel("[bold cyan]AlgoTrade Session[/bold cyan]", expand=False))
 
     # ── Wizard: fill in any missing params ───────────────────────────────────
-    if not strategy:
-        strategy = Prompt.ask(
-            "Strategy",
-            choices=["MOMENTUM", "MEAN_REVERSION", "SECTOR_ROTATION"],
-            default="MOMENTUM",
-        )
-
     if not mode:
         mode = Prompt.ask(
             "Operating mode",
@@ -125,7 +119,6 @@ def run_cmd(
         hitl_timeout = 60
 
     if not universe:
-        from config import ETF_UNIVERSES
         universe_choices = list(ETF_UNIVERSES.keys())
         universe = Prompt.ask(
             "Market universe",
@@ -135,7 +128,6 @@ def run_cmd(
 
     params = SessionParams(
         timeframe=SessionTimeframe(timeframe),
-        strategy=Strategy(strategy),
         mode=OperatingMode(mode),
         loss_limit_eur=loss_limit,
         shortlist_n=shortlist_n,
@@ -161,19 +153,13 @@ def run_cmd(
 async def _run_session(params: SessionParams) -> None:
     configure_console_logging()
 
-    from agent.coordinator import build_app
-    from db.schema import init_db
-    from infra.observability import get_logger, setup_observability
-
     init_db()
 
     runner, session_id, plan_state, session_service = build_app(params)
     setup_observability(session_id)
 
-    from db.schema import upsert_session
     upsert_session(
         session_id=session_id,
-        strategy=params.strategy.value,
         mode=params.mode.value,
     )
 
@@ -193,7 +179,6 @@ async def _run_session(params: SessionParams) -> None:
         os.environ["ALPACA_API_KEY"] = api_key
         os.environ["ALPACA_API_SECRET"] = api_secret
 
-        from tools.execution.tools import get_portfolio
         portfolio_data = await get_portfolio()
         rprint(
             f"[dim]Loaded existing portfolio: "
@@ -204,12 +189,10 @@ async def _run_session(params: SessionParams) -> None:
         rprint(f"[yellow]Could not load portfolio: {exc}[/yellow]")
 
     # ── Main session loop ─────────────────────────────────────────────────────
-    from config import ETF_UNIVERSES, UNIVERSE_EXCHANGE_TZ
     universe_symbols = ETF_UNIVERSES.get(params.universe, ETF_UNIVERSES["US_SECTOR_ETFS"])
     exchange_tz = UNIVERSE_EXCHANGE_TZ.get(params.universe, "America/New_York")
     initial_message = (
         f"Start trading session {session_id}. "
-        f"Strategy: {params.strategy.value}. "
         f"Mode: {params.mode.value}. "
         f"Loss limit: {params.loss_limit_eur} EUR. "
         f"Market universe: {params.universe} — symbols: {', '.join(universe_symbols)}. "
@@ -221,8 +204,6 @@ async def _run_session(params: SessionParams) -> None:
 
     _outcome = "completed"
     try:
-        from google.genai.types import Content, Part  # type: ignore[import]
-
         content = Content(role="user", parts=[Part(text=initial_message)])
         async for event in runner.run_async(
             user_id="user",
@@ -256,7 +237,6 @@ async def _run_session(params: SessionParams) -> None:
     finally:
         os.environ.pop("ALPACA_API_KEY", None)
         os.environ.pop("ALPACA_API_SECRET", None)
-        from db.schema import _connect, close_session  # type: ignore[attr-defined]
         try:
             with _connect() as conn:
                 row = conn.execute(
@@ -278,14 +258,11 @@ async def _run_session(params: SessionParams) -> None:
 
 async def _load_alpaca_credentials() -> tuple[str, str]:
     """Load Alpaca credentials from GCP Secret Manager or local env fallback."""
-    # Try env vars first (development/test override)
     key = os.environ.get("ALPACA_API_KEY")
     secret = os.environ.get("ALPACA_API_SECRET")
     if key and secret:
         return key, secret
 
-    # Try GCP Secret Manager
-    from infra.secrets import get_alpaca_credentials
     return await get_alpaca_credentials()
 
 
@@ -296,8 +273,6 @@ def history_cmd(
     limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions to show"),
 ) -> None:
     """Show recent trading session history."""
-    from db.schema import _connect, init_db
-
     init_db()
 
     with _connect() as conn:
@@ -344,8 +319,6 @@ def history_cmd(
 @app.command("status")
 def status_cmd() -> None:
     """Show calibration stats and unresolved trades."""
-    from db.schema import _connect, get_unresolved_trades, init_db
-
     init_db()
 
     unresolved = get_unresolved_trades()
@@ -389,7 +362,6 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
     if not resp:
         return "(empty)"
 
-    # Tool-specific compact summaries
     if tool_name == "get_ohlcv" and "bars" in resp:
         bars = resp["bars"]
         if bars:
@@ -437,7 +409,6 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
     if tool_name in ("write_trade", "record_cycle"):
         return _json.dumps({k: v for k, v in resp.items() if k in ("trade_id", "written", "cycle_index", "outcome")})
 
-    # Generic fallback: show top-level keys and scalar values only
     parts = []
     for k, v in resp.items():
         if isinstance(v, (str, int, float, bool)) and len(parts) < 6:
@@ -451,7 +422,6 @@ def _print_session_params(params: SessionParams) -> None:
     table.add_column("")
 
     rows = [
-        ("Strategy", params.strategy.value),
         ("Mode", params.mode.value),
         ("Universe", params.universe),
         ("Loss limit", f"€{params.loss_limit_eur:,.0f}"),

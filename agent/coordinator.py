@@ -60,7 +60,6 @@ def create_coordinator(
     from config import MAX_STRATEGY_CYCLES
     instruction = COORDINATOR_INSTRUCTION.format(
         session_id=plan_state.session_id,
-        strategy=params.strategy.value,
         mode=params.mode.value,
         loss_limit_eur=params.loss_limit_eur,
         shortlist_n=params.shortlist_n,
@@ -109,7 +108,7 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
             init_db()
             state["session_initialised"] = True
             state["cycle_count"] = 0
-            state["active_strategy"] = params.strategy.value
+            state["active_strategy"] = ""
 
         # Pre-fetch portfolio and account snapshots before each coordinator turn.
         # Credentials must be present in env; if not, snapshots are skipped (paper mode).

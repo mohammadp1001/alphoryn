@@ -73,7 +73,6 @@ placement to the execution_agent.
 
 ## Session parameters
 - Session ID      : {session_id}
-- Initial strategy: {strategy}
 - Mode            : {mode}
 - Loss limit      : {loss_limit_eur} EUR
 - Shortlist N     : {shortlist_n}

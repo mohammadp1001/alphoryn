@@ -38,6 +38,7 @@ def tmp_db(tmp_path, monkeypatch):
             conn.close()
 
     monkeypatch.setattr("db.schema._connect", _connect)
+    monkeypatch.setattr("cli.main._connect", _connect)
     from db.schema import init_db
     init_db(db_file)
     return db_file
@@ -50,6 +51,8 @@ def tmp_config(tmp_path, monkeypatch):
     config_file = config_dir / "config.json"
     monkeypatch.setattr("config.CONFIG_DIR", config_dir)
     monkeypatch.setattr("config.CONFIG_FILE", config_file)
+    monkeypatch.setattr("cli.main.CONFIG_DIR", config_dir)
+    monkeypatch.setattr("cli.main.CONFIG_FILE", config_file)
     return config_file
 
 
@@ -86,7 +89,7 @@ def test_setup_cmd_prompts_for_project_if_not_in_env(tmp_config, monkeypatch):
 def test_run_cmd_dry_run_does_not_start_session():
     result = runner.invoke(
         app,
-        ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
+        ["run", "--mode", "SEMI_AUTO",
          "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
          "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS", "--dry-run"],
     )
@@ -94,23 +97,11 @@ def test_run_cmd_dry_run_does_not_start_session():
     assert "Dry run" in result.output
 
 
-def test_run_cmd_dry_run_all_strategies():
-    for strategy in ["MOMENTUM", "MEAN_REVERSION", "SECTOR_ROTATION"]:
-        result = runner.invoke(
-            app,
-            ["run", "--strategy", strategy, "--mode", "FULL_AUTO",
-             "--loss-limit", "1000", "--timeframe", "1Day",
-             "--shortlist-n", "1", "--hitl-timeout", "30",
-             "--universe", "US_SECTOR_ETFS", "--dry-run"],
-        )
-        assert result.exit_code == 0, f"Strategy {strategy} failed: {result.output}"
-
-
 def test_run_cmd_cancelled_by_user():
     """User says 'no' at confirm prompt — session should not start."""
     result = runner.invoke(
         app,
-        ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
+        ["run", "--mode", "SEMI_AUTO",
          "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
          "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
         input="n\n",  # decline to start
@@ -124,7 +115,7 @@ def test_run_cmd_wizard_fills_missing_params():
     result = runner.invoke(
         app,
         ["run", "--dry-run"],
-        input="MOMENTUM\nSEMI_AUTO\n500\n1Day\n2\n60\nUS_SECTOR_ETFS\n",
+        input="SEMI_AUTO\n500\n1Day\n2\n60\nUS_SECTOR_ETFS\n",
     )
     assert result.exit_code == 0
     assert "Dry run" in result.output
@@ -134,7 +125,7 @@ def test_run_cmd_full_auto_skips_hitl_prompt():
     """FULL_AUTO mode doesn't prompt for HITL timeout when given directly."""
     result = runner.invoke(
         app,
-        ["run", "--strategy", "MOMENTUM", "--mode", "FULL_AUTO",
+        ["run", "--mode", "FULL_AUTO",
          "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
          "--universe", "US_SECTOR_ETFS", "--dry-run"],
     )
@@ -151,18 +142,18 @@ def test_history_cmd_empty_db(tmp_db):
 
 def test_history_cmd_with_sessions(tmp_db):
     from db.schema import close_session, upsert_session
-    upsert_session("sess-hist-1", "MOMENTUM", "SEMI_AUTO")
+    upsert_session("sess-hist-1", "SEMI_AUTO")
     close_session("sess-hist-1", "clean", 50.0, 3)
 
     result = runner.invoke(app, ["history"])
     assert result.exit_code == 0
-    assert "sess-hist-1"[:8] in result.output or "MOMENTUM" in result.output
+    assert "sess-hist-1"[:8] in result.output
 
 
 def test_history_cmd_limit_option(tmp_db):
     from db.schema import upsert_session
     for i in range(5):
-        upsert_session(f"sess-lim-{i}", "MOMENTUM", "SEMI_AUTO")
+        upsert_session(f"sess-lim-{i}", "SEMI_AUTO")
 
     result = runner.invoke(app, ["history", "--limit", "2"])
     assert result.exit_code == 0
@@ -208,7 +199,7 @@ def test_load_alpaca_credentials_from_secret_manager(monkeypatch):
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_API_SECRET", raising=False)
 
-    with patch("infra.secrets.get_alpaca_credentials",
+    with patch("cli.main.get_alpaca_credentials",
                new=AsyncMock(return_value=("sm-key", "sm-secret"))):
         from cli.main import _load_alpaca_credentials
         key, secret = asyncio.run(_load_alpaca_credentials())
@@ -221,11 +212,10 @@ def test_load_alpaca_credentials_from_secret_manager(monkeypatch):
 
 def test_print_session_params_does_not_raise():
     from cli.main import _print_session_params
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -244,11 +234,10 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -269,11 +258,11 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "mock-session-id", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
         pytest.raises(RuntimeError),
     ):
@@ -290,11 +279,10 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -319,11 +307,11 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "run-session-id", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={
                   "positions": [{"symbol": "XLK"}],
                   "portfolio_value": 10000.0,
@@ -340,11 +328,10 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.FULL_AUTO,
         loss_limit_eur=1000.0,
         timeframe="1Day",
@@ -364,11 +351,11 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
 
     # Should NOT raise — KeyboardInterrupt is caught internally
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "ki-session-id", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
     ):
         from cli.main import _run_session
@@ -386,7 +373,7 @@ def test_run_cmd_confirms_and_runs(tmp_db, monkeypatch):
     with patch("cli.main._run_session", new=noop_run_session):
         result = runner.invoke(
             app,
-            ["run", "--strategy", "MOMENTUM", "--mode", "SEMI_AUTO",
+            ["run", "--mode", "SEMI_AUTO",
              "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
              "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
             input="y\n",  # confirm
@@ -400,7 +387,7 @@ def test_status_cmd_with_unresolved_trade(tmp_db):
 
     from db.schema import upsert_session
 
-    upsert_session("sess-status-unresolved", "MOMENTUM", "SEMI_AUTO")
+    upsert_session("sess-status-unresolved", "SEMI_AUTO")
 
     conn = sqlite3.connect(str(tmp_db))
     conn.execute("""
@@ -432,11 +419,10 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -456,11 +442,11 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "exc-sess-id", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(side_effect=RuntimeError("connection refused"))),
     ):
         from cli.main import _run_session
@@ -473,11 +459,10 @@ def test_run_session_close_session_db_failure_is_swallowed(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -495,13 +480,13 @@ def test_run_session_close_session_db_failure_is_swallowed(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "fail-close-id", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
-        patch("db.schema.close_session", side_effect=Exception("db broken")),
+        patch("cli.main.close_session", side_effect=Exception("db broken")),
     ):
         from cli.main import _run_session
         asyncio.run(_run_session(params))  # must not raise
@@ -512,11 +497,10 @@ def test_run_session_sets_outcome_completed_in_db(tmp_db, monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
 
     params = SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -534,11 +518,11 @@ def test_run_session_sets_outcome_completed_in_db(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "outcome-sess-id", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
     ):
         from cli.main import _run_session
@@ -567,10 +551,9 @@ def test_cli_main_entrypoint_calls_app():
 # ── _run_session: event type coverage ────────────────────────────────────────
 
 def _make_session_params():
-    from models.enums import OperatingMode, Strategy
+    from models.enums import OperatingMode
     from models.session import SessionParams
     return SessionParams(
-        strategy=Strategy.MOMENTUM,
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
         timeframe="1Day",
@@ -605,11 +588,11 @@ def test_run_session_empty_content_skipped(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "skip-sess", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
     ):
         from cli.main import _run_session
@@ -640,11 +623,11 @@ def test_run_session_function_call_event(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "fc-sess", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
     ):
         from cli.main import _run_session
@@ -679,11 +662,11 @@ def test_run_session_function_response_event(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("agent.coordinator.build_app",
+        patch("cli.main.build_app",
               return_value=(mock_runner, "fr-sess", MagicMock(), mock_session_service)),
-        patch("db.schema.init_db"),
-        patch("infra.observability.setup_observability"),
-        patch("tools.execution.tools.get_portfolio",
+        patch("cli.main.init_db"),
+        patch("cli.main.setup_observability"),
+        patch("cli.main.get_portfolio",
               new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
     ):
         from cli.main import _run_session

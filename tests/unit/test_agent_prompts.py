@@ -69,7 +69,6 @@ def test_risk_pessimist_reads_optimist_verdict():
 
 _COORD_BASE_KWARGS = dict(
     session_id="test-session-id",
-    strategy="MOMENTUM",
     mode="SEMI_AUTO",
     loss_limit_eur=500.0,
     shortlist_n=2,
@@ -89,18 +88,10 @@ def test_coordinator_instruction_formats_without_error():
     from agent.prompts import COORDINATOR_INSTRUCTION
     formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
     assert "test-session-id" in formatted
-    assert "MOMENTUM" in formatted
     assert "SEMI_AUTO" in formatted
     assert "500.0" in formatted
     assert "US_SECTOR_ETFS" in formatted
     assert "XLK" in formatted
-
-
-def test_coordinator_instruction_all_strategies():
-    from agent.prompts import COORDINATOR_INSTRUCTION
-    for strategy in ["MOMENTUM", "MEAN_REVERSION", "SECTOR_ROTATION"]:
-        formatted = COORDINATOR_INSTRUCTION.format(**{**_COORD_BASE_KWARGS, "strategy": strategy})
-        assert strategy in formatted
 
 
 def test_coordinator_instruction_all_modes():
