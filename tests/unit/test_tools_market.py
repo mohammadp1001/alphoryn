@@ -659,6 +659,92 @@ def test_get_ohlcv_yfinance_small_bars_uses_5d_period():
     assert call_kwargs["period"] == "5d"
 
 
+# ── _is_crypto helper ─────────────────────────────────────────────────────────
+
+def test_is_crypto_true_for_crypto_symbol():
+    from tools.market.tools import _is_crypto
+    assert _is_crypto("BTC-USD") is True
+    assert _is_crypto("ETH-USD") is True
+    assert _is_crypto("SOL-USD") is True
+
+
+def test_is_crypto_false_for_stock_symbol():
+    from tools.market.tools import _is_crypto
+    assert _is_crypto("XLK") is False
+    assert _is_crypto("SPY") is False
+    assert _is_crypto("EWG") is False
+
+
+# ── get_ohlcv crypto path ──────────────────────────────────────────────────────
+
+def test_get_ohlcv_crypto_uses_crypto_client():
+    """Crypto symbols (ending in -USD) route through get_crypto_bars, not get_stock_bars."""
+    bars = [_make_bar(close=65000.0)]
+    mock_resp = {"BTC-USD": bars}
+    mock_crypto_client = MagicMock()
+    mock_crypto_client.get_crypto_bars.return_value = mock_resp
+
+    with _mock_acquire(), patch("tools.market.tools._crypto_client", return_value=mock_crypto_client):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("BTC-USD", "1Hour", 1))
+
+    assert result["symbol"] == "BTC-USD"
+    assert len(result["bars"]) == 1
+    assert result["bars"][0]["close"] == 65000.0
+    mock_crypto_client.get_crypto_bars.assert_called_once()
+
+
+def test_get_ohlcv_crypto_yfinance_fallback_when_empty():
+    """Crypto Alpaca returns empty → falls back to yfinance."""
+    import pandas as pd
+
+    mock_crypto_client = MagicMock()
+    mock_crypto_client.get_crypto_bars.return_value = {}
+
+    ts = datetime(2025, 1, 2, tzinfo=UTC)
+    hist = pd.DataFrame(
+        {"Open": [60000.0], "High": [61000.0], "Low": [59000.0], "Close": [60500.0], "Volume": [1e4]},
+        index=pd.DatetimeIndex([ts]),
+    )
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = hist
+
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._crypto_client", return_value=mock_crypto_client),
+        patch.dict("sys.modules", {"yfinance": mock_yf}),
+    ):
+        from tools.market.tools import get_ohlcv
+        result = asyncio.run(get_ohlcv("BTC-USD", "1Day", 1))
+
+    assert result["symbol"] == "BTC-USD"
+    assert len(result["bars"]) == 1
+    assert result["bars"][0]["close"] == pytest.approx(60500.0)
+
+
+# ── _crypto_client factory ─────────────────────────────────────────────────────
+
+def test_crypto_client_factory_returns_instance(monkeypatch):
+    monkeypatch.setenv("ALPACA_DATA_KEY", "data-key")
+    monkeypatch.setenv("ALPACA_DATA_SECRET", "data-secret")
+
+    mock_instance = MagicMock()
+    mock_cls = MagicMock(return_value=mock_instance)
+    mock_data_mod = MagicMock(CryptoHistoricalDataClient=mock_cls)
+
+    with patch.dict("sys.modules", {
+        "alpaca": MagicMock(),
+        "alpaca.data": mock_data_mod,
+    }):
+        import importlib
+
+        import tools.market.tools as market_tools
+        importlib.reload(market_tools)
+        market_tools._crypto_client()
+
+    mock_cls.assert_called_once_with(api_key="data-key", secret_key="data-secret")
+
+
 # ── get_sector_map with custom symbols ────────────────────────────────────────
 
 def test_get_sector_map_custom_symbols(monkeypatch):

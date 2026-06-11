@@ -34,6 +34,18 @@ def _data_client():
     )
 
 
+def _crypto_client():
+    from alpaca.data import CryptoHistoricalDataClient  # type: ignore[import]
+    return CryptoHistoricalDataClient(
+        api_key=os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY"),
+        secret_key=os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET"),
+    )
+
+
+def _is_crypto(symbol: str) -> bool:
+    return symbol.endswith("-USD")
+
+
 @with_retry
 async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     """Fetch OHLCV bar history for an ETF.
@@ -68,10 +80,17 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     start = end - timedelta(days=bars * 2)  # over-fetch, trim to bars
 
     await acquire_alpaca_data()
-    with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
-        resp = _data_client().get_stock_bars(
-            StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
-        )
+    if _is_crypto(symbol):
+        from alpaca.data.requests import CryptoBarsRequest  # type: ignore[import]
+        with api_call_span("alpaca_data", "get_crypto_bars", symbol=symbol):
+            resp = _crypto_client().get_crypto_bars(
+                CryptoBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end)
+            )
+    else:
+        with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
+            resp = _data_client().get_stock_bars(
+                StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
+            )
 
     try:
         bar_list = resp[symbol]
