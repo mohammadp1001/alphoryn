@@ -132,6 +132,32 @@ def test_run_cmd_full_auto_skips_hitl_prompt():
     assert result.exit_code == 0
 
 
+def test_run_cmd_coordinator_model_openrouter_shown_in_dry_run():
+    """--coordinator-model OpenRouter string is displayed in session params table."""
+    result = runner.invoke(
+        app,
+        ["run", "--mode", "FULL_AUTO",
+         "--loss-limit", "100", "--timeframe", "1Day", "--shortlist-n", "1",
+         "--universe", "US_SECTOR_ETFS",
+         "--coordinator-model", "openrouter/qwen/qwen-2.5-72b-instruct",
+         "--dry-run"],
+    )
+    assert result.exit_code == 0
+    assert "openrouter/qwen/qwen-2.5-72b-instruct" in result.output
+
+
+def test_run_cmd_no_coordinator_model_shows_default_in_dry_run():
+    """When --coordinator-model is omitted, table shows the Gemini default."""
+    result = runner.invoke(
+        app,
+        ["run", "--mode", "FULL_AUTO",
+         "--loss-limit", "100", "--timeframe", "1Day", "--shortlist-n", "1",
+         "--universe", "US_SECTOR_ETFS", "--dry-run"],
+    )
+    assert result.exit_code == 0
+    assert "gemini-2.5-flash" in result.output
+
+
 # ── history_cmd ───────────────────────────────────────────────────────────────
 
 def test_history_cmd_empty_db(tmp_db):

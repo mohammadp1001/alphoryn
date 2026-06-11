@@ -21,6 +21,7 @@ from typing import Any
 
 from google.adk.agents import Agent  # type: ignore[import]
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
+from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
 from google.adk.tools import AgentTool  # type: ignore[import]
 
 from agent.execution_agent import create_execution_agent
@@ -31,19 +32,33 @@ from tools.registry import ALL_COORDINATOR_TOOLS
 
 logger = logging.getLogger("agent.coordinator")
 
+_DEFAULT_COORDINATOR_MODEL = "gemini-2.5-flash"
+
+
+def _resolve_model(model_str: str | None) -> str | LiteLlm:
+    """Return a bare string for Gemini models, LiteLlm wrapper for OpenRouter."""
+    if not model_str:
+        return _DEFAULT_COORDINATOR_MODEL
+    if model_str.startswith("openrouter/"):
+        return LiteLlm(model=model_str)
+    return model_str
+
 
 def create_coordinator(
     params: SessionParams,
     plan_state: PlanState,
-    model: str = "gemini-2.5-flash",
+    model: str | LiteLlm | None = None,
 ) -> Agent:
     """Factory: returns a fully wired coordinator agent for one session.
 
     Args:
         params: Session configuration (strategy, mode, limits, etc.).
         plan_state: Initial PlanState for this session.
-        model: Gemini model ID for the coordinator. Default: gemini-2.5-flash.
+        model: Model for the coordinator. None → use params.coordinator_model or default
+               Gemini 2.5 Flash. Pass a bare string for Gemini, or LiteLlm() for others.
     """
+    if model is None:
+        model = _resolve_model(params.coordinator_model)
     _placeholder_cal = "Calibration data will be loaded at the start of each cycle."
 
     risk_debate_tool = AgentTool(

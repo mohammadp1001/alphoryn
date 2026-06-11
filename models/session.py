@@ -30,6 +30,8 @@ class SessionParams(BaseModel):
     hitl_timeout_action: str = "abort"  # "abort" | "proceed"
     universe: str = "US_SECTOR_ETFS"   # key into config.ETF_UNIVERSES
     allow_closed_market: bool = False  # skip market-closed abort when True
+    # None → use default Gemini 2.5 Flash; "openrouter/…" strings are auto-wrapped in LiteLlm
+    coordinator_model: str | None = None
 
     @property
     def duration(self) -> timedelta:
