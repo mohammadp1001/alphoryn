@@ -172,3 +172,86 @@ def test_build_app_returns_runner_tuple():
     assert len(session_id) > 0
     assert plan_state is not None
     assert session_service is not None
+
+
+# ── coordinator: OpenRouter / _resolve_model ──────────────────────────────────
+
+def test_resolve_model_none_returns_default():
+    from agent.coordinator import _resolve_model
+    assert _resolve_model(None) == "gemini-2.5-flash"
+
+
+def test_resolve_model_gemini_string_passes_through():
+    from agent.coordinator import _resolve_model
+    assert _resolve_model("gemini-2.5-pro") == "gemini-2.5-pro"
+
+
+def test_resolve_model_openrouter_returns_litellm():
+    from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
+
+    from agent.coordinator import _resolve_model
+    result = _resolve_model("openrouter/qwen/qwen-2.5-72b-instruct")
+    assert isinstance(result, LiteLlm)
+
+
+def test_coordinator_params_openrouter_model_uses_litellm():
+    from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
+
+    from agent.coordinator import create_coordinator
+    from models.enums import OperatingMode
+    from models.session import PlanState, SessionParams
+
+    params = SessionParams(
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe="1Day",
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+        coordinator_model="openrouter/qwen/qwen-2.5-72b-instruct",
+    )
+    plan_state = PlanState(session_id="test-openrouter-coord", params=params)
+    agent = create_coordinator(params, plan_state)
+    assert isinstance(agent.model, LiteLlm)
+
+
+def test_coordinator_params_gemini_model_passes_through():
+    from agent.coordinator import create_coordinator
+    from models.enums import OperatingMode
+    from models.session import PlanState, SessionParams
+
+    params = SessionParams(
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe="1Day",
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+        coordinator_model="gemini-2.5-pro",
+    )
+    plan_state = PlanState(session_id="test-gemini-pro-coord", params=params)
+    agent = create_coordinator(params, plan_state)
+    assert agent.model == "gemini-2.5-pro"
+
+
+def test_coordinator_explicit_model_arg_overrides_params():
+    """Explicit model= kwarg wins over params.coordinator_model."""
+    from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
+
+    from agent.coordinator import create_coordinator
+    from models.enums import OperatingMode
+    from models.session import PlanState, SessionParams
+
+    params = SessionParams(
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe="1Day",
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+        coordinator_model="gemini-2.5-flash",
+    )
+    plan_state = PlanState(session_id="test-explicit-model", params=params)
+    explicit = LiteLlm(model="openrouter/qwen/qwen-2.5-72b-instruct")
+    agent = create_coordinator(params, plan_state, model=explicit)
+    assert agent.model == explicit

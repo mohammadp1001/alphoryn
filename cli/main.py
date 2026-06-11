@@ -118,6 +118,7 @@ def run_cmd(
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
     universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET|CRYPTO|MIXED_MARKET"),
     allow_closed_market: bool = typer.Option(False, "--allow-closed-market", help="Proceed even when market is closed (useful for testing)"),
+    coordinator_model: str = typer.Option(None, "--coordinator-model", help="Override coordinator LLM. Use 'openrouter/<provider>/<model>' for OpenRouter models, or a Gemini model ID. Default: gemini-2.5-flash"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
@@ -168,6 +169,7 @@ def run_cmd(
         hitl_timeout_action="abort",
         universe=universe,
         allow_closed_market=allow_closed_market,
+        coordinator_model=coordinator_model or None,
     )
 
     _print_session_params(params)
@@ -598,6 +600,7 @@ def _print_session_params(params: SessionParams) -> None:
         ("Shortlist N", str(params.shortlist_n)),
         ("HITL timeout", f"{params.hitl_timeout_seconds}s ({params.hitl_timeout_action} on timeout)"),
         ("Allow closed market", str(params.allow_closed_market)),
+        ("Coordinator model", params.coordinator_model or "gemini-2.5-flash (default)"),
     ]
     for k, v in rows:
         table.add_row(k, v)
