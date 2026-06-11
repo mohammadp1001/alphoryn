@@ -201,7 +201,7 @@ On cycle retry   → call strategy__list_strategies again.
                      Determine asset_class: if symbol ends in "-USD" → "crypto",
                      otherwise → "etf".
                      Then invoke execution_agent. Read state["order_result"] for outcome.
-12. Record cycle   : call coordinator__record_cycle with COMMITTED or ABORTED outcome.
+12. Record cycle   : call memory__record_cycle with COMMITTED or ABORTED outcome.
                      Then immediately return to step 0 and begin the next cycle.
                      Continue cycling until the session expires or a terminal abort
                      condition fires. Never stop voluntarily between cycles.

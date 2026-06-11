@@ -468,6 +468,93 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
         asyncio.run(_run_session(params))
 
 
+def test_run_session_close_session_db_failure_is_swallowed(tmp_db, monkeypatch):
+    """DB failure in close_session during finally does not prevent clean exit."""
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
+
+    from models.enums import OperatingMode, Strategy
+    from models.session import SessionParams
+
+    params = SessionParams(
+        strategy=Strategy.MOMENTUM,
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe="1Day",
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+    )
+
+    async def no_events(*args, **kwargs):
+        return
+        yield  # make it an async generator
+
+    mock_runner = MagicMock()
+    mock_runner.run_async = no_events
+    mock_session_service = AsyncMock()
+
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "fail-close-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch("db.schema.close_session", side_effect=Exception("db broken")),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))  # must not raise
+
+
+def test_run_session_sets_outcome_completed_in_db(tmp_db, monkeypatch):
+    """On clean session end, close_session writes outcome='completed' to DB."""
+    monkeypatch.setenv("ALPACA_API_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
+
+    from models.enums import OperatingMode, Strategy
+    from models.session import SessionParams
+
+    params = SessionParams(
+        strategy=Strategy.MOMENTUM,
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe="1Day",
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+    )
+
+    async def no_events(*args, **kwargs):
+        return
+        yield  # make it an async generator
+
+    mock_runner = MagicMock()
+    mock_runner.run_async = no_events
+    mock_session_service = AsyncMock()
+
+    with (
+        patch("agent.coordinator.build_app",
+              return_value=(mock_runner, "outcome-sess-id", MagicMock(), mock_session_service)),
+        patch("db.schema.init_db"),
+        patch("infra.observability.setup_observability"),
+        patch("tools.execution.tools.get_portfolio",
+              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+    ):
+        from cli.main import _run_session
+        asyncio.run(_run_session(params))
+
+    import sqlite3 as _sqlite3
+    conn = _sqlite3.connect(str(tmp_db))
+    conn.row_factory = _sqlite3.Row
+    row = conn.execute(
+        "SELECT outcome, cycle_count FROM sessions WHERE id = 'outcome-sess-id'"
+    ).fetchone()
+    conn.close()
+    assert row["outcome"] == "completed"
+    assert row["cycle_count"] == 0
+
+
 def test_cli_main_entrypoint_calls_app():
     """Line 337: __main__ block invokes app()."""
     import runpy

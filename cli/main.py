@@ -219,6 +219,7 @@ async def _run_session(params: SessionParams) -> None:
         f"Execute the decision cycle flow as per your instructions."
     )
 
+    _outcome = "completed"
     try:
         from google.genai.types import Content, Part  # type: ignore[import]
 
@@ -245,15 +246,33 @@ async def _run_session(params: SessionParams) -> None:
                     rprint(f"[dim green]  <- [{author}] {fr.name}: {summary}[/dim green]")
 
     except KeyboardInterrupt:
+        _outcome = "interrupted"
         rprint("\n[yellow]Session interrupted by user.[/yellow]")
     except Exception as exc:
+        _outcome = "error"
         rprint(f"[red]Session error: {exc}[/red]")
         logger.error("session_error", extra={"trading_session_id": session_id, "error": str(exc)})
         raise
     finally:
-        # Clear credentials from environment
         os.environ.pop("ALPACA_API_KEY", None)
         os.environ.pop("ALPACA_API_SECRET", None)
+        from db.schema import _connect, close_session  # type: ignore[attr-defined]
+        try:
+            with _connect() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS cycle_count, "
+                    "COALESCE(SUM(realised_pnl_pct), 0.0) AS total_pnl "
+                    "FROM cycle_records WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+            close_session(
+                session_id,
+                outcome=_outcome,
+                realised_pnl=float(row["total_pnl"] or 0.0),
+                cycle_count=int(row["cycle_count"] or 0),
+            )
+        except Exception:
+            pass
         rprint(f"\n[bold]Session {session_id} ended.[/bold]")
 
 
