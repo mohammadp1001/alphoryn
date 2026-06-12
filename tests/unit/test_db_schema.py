@@ -1,4 +1,5 @@
 """Unit tests for SQLite schema — write-ahead pattern, calibration, outcome resolution."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -17,10 +18,13 @@ def tmp_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Patch DB_PATH to use a temporary file."""
     db = tmp_path / "test.db"
     import config
+
     monkeypatch.setattr(config, "DB_PATH", db)
     import db.schema as schema
+
     monkeypatch.setattr(schema, "DB_PATH", db)
     from db.schema import init_db
+
     init_db(db)
     return db
 
@@ -58,6 +62,7 @@ def _make_record(**overrides: object) -> TradeRecord:
 
 # ── Write-ahead ───────────────────────────────────────────────────────────────
 
+
 def test_write_trade_record_persists(tmp_db: Path) -> None:
     from db.schema import _connect, write_trade_record
 
@@ -91,6 +96,7 @@ def test_write_trade_record_is_idempotent_within_session(tmp_db: Path) -> None:
 
 
 # ── Outcome resolution ────────────────────────────────────────────────────────
+
 
 def test_resolve_outcome_profitable_trade_optimist_wins(tmp_db: Path) -> None:
     from db.schema import _connect, resolve_outcome, write_trade_record
@@ -139,6 +145,7 @@ def test_resolve_outcome_tie_in_deadzone(tmp_db: Path) -> None:
 
 # ── Calibration ───────────────────────────────────────────────────────────────
 
+
 def test_calibration_cold_start_has_no_data(tmp_db: Path) -> None:
     from db.schema import get_calibration
 
@@ -164,6 +171,7 @@ def test_calibration_updates_after_outcome(tmp_db: Path) -> None:
 
 
 # ── Unresolved trades ─────────────────────────────────────────────────────────
+
 
 def test_get_unresolved_trades_returns_unresolved(tmp_db: Path) -> None:
     from db.schema import _connect, get_unresolved_trades, write_trade_record
@@ -214,6 +222,7 @@ def test_get_unresolved_trades_with_session_id_filter(tmp_db: Path) -> None:
 
 # ── mark_outcome_timed_out ────────────────────────────────────────────────────
 
+
 def test_mark_outcome_timed_out_sets_flag(tmp_db: Path) -> None:
     from db.schema import _connect, mark_outcome_timed_out, write_trade_record
 
@@ -232,6 +241,7 @@ def test_mark_outcome_timed_out_sets_flag(tmp_db: Path) -> None:
 
 
 # ── get_cycle_history ─────────────────────────────────────────────────────────
+
 
 def test_get_cycle_history_empty(tmp_db: Path) -> None:
     from db.schema import _connect, get_cycle_history
@@ -260,6 +270,7 @@ def test_get_cycle_history_with_resolved_trade(tmp_db: Path) -> None:
 
 # ── _update_regime_stats update branch ───────────────────────────────────────
 
+
 def test_update_regime_stats_update_branch_triggered(tmp_db: Path) -> None:
     """Resolving two trades with same regime exercises the UPDATE branch."""
     from db.schema import _connect, resolve_outcome, write_trade_record
@@ -273,7 +284,7 @@ def test_update_regime_stats_update_branch_triggered(tmp_db: Path) -> None:
     write_trade_record(r1)
     write_trade_record(r2)
 
-    resolve_outcome(r1.id, 1.5)   # INSERT branch — creates row
+    resolve_outcome(r1.id, 1.5)  # INSERT branch — creates row
     resolve_outcome(r2.id, -0.5)  # UPDATE branch — updates row
 
     with _connect(tmp_db) as conn:
@@ -285,6 +296,7 @@ def test_update_regime_stats_update_branch_triggered(tmp_db: Path) -> None:
 
 
 # ── _connect rollback on exception ───────────────────────────────────────────
+
 
 def test_connect_rollback_reraises_exception(tmp_db: Path) -> None:
     """_connect must rollback and re-raise the exception."""

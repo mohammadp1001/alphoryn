@@ -5,6 +5,7 @@ and output dict at DEBUG level.
 Applied in tools/registry.py via the _tool() helper so no individual tool
 file needs to be touched.
 """
+
 from __future__ import annotations
 
 import functools

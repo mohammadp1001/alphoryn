@@ -1,4 +1,5 @@
 """Unit tests for the Alpaca outcome webhook."""
+
 import hashlib
 import hmac
 import json
@@ -14,7 +15,10 @@ from webhook.main import _compute_pnl_pct, _debate_winner, _verify_signature, ap
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_payload(event: str, order_id: str = "ord-001", filled_avg_price: float = 210.0, side: str = "buy") -> dict:
+
+def _make_payload(
+    event: str, order_id: str = "ord-001", filled_avg_price: float = 210.0, side: str = "buy"
+) -> dict:
     return {
         "event": event,
         "order": {
@@ -30,7 +34,9 @@ def _sign(body: bytes, secret: str) -> str:
     return f"v1={sig}"
 
 
-def _make_trade(order_id: str = "ord-001", entry_price: float = 200.0, side: str = "buy") -> TradeRecord:
+def _make_trade(
+    order_id: str = "ord-001", entry_price: float = 200.0, side: str = "buy"
+) -> TradeRecord:
     return TradeRecord(
         id="trade-001",
         session_id="sess-001",
@@ -52,6 +58,7 @@ def _make_trade(order_id: str = "ord-001", entry_price: float = 200.0, side: str
 # Signature verification
 # ---------------------------------------------------------------------------
 
+
 def test_verify_signature_valid():
     secret = "my-secret"
     body = b'{"event": "fill"}'
@@ -59,6 +66,7 @@ def test_verify_signature_valid():
     class _FakeReq:
         def get_data(self):
             return body
+
         headers = {"Alpaca-Signature": _sign(body, secret)}
 
     req = _FakeReq()
@@ -71,6 +79,7 @@ def test_verify_signature_wrong_secret():
     class _FakeReq:
         def get_data(self):
             return body
+
         headers = {"Alpaca-Signature": _sign(body, "correct")}
 
     assert _verify_signature(_FakeReq(), "wrong") is False
@@ -80,6 +89,7 @@ def test_verify_signature_missing_header():
     class _FakeReq:
         def get_data(self):
             return b"{}"
+
         headers = {}
 
     assert _verify_signature(_FakeReq(), "secret") is False
@@ -88,6 +98,7 @@ def test_verify_signature_missing_header():
 # ---------------------------------------------------------------------------
 # P&L helpers
 # ---------------------------------------------------------------------------
+
 
 def test_pnl_buy_profit():
     pnl = _compute_pnl_pct(filled_avg_price=210.0, entry_price=200.0, side="buy")
@@ -127,6 +138,7 @@ def test_debate_winner_exactly_at_threshold():
 # ---------------------------------------------------------------------------
 # HTTP endpoint
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def client():
@@ -168,8 +180,10 @@ def test_fill_resolves_trade(client):
     trade = _make_trade(order_id="ord-fill", entry_price=200.0)
     payload = _make_payload("fill", order_id="ord-fill", filled_avg_price=201.0)
 
-    with patch("webhook.main.get_unresolved_trades", return_value=[trade]), \
-         patch("webhook.main.resolve_outcome") as mock_resolve:
+    with (
+        patch("webhook.main.get_unresolved_trades", return_value=[trade]),
+        patch("webhook.main.resolve_outcome") as mock_resolve,
+    ):
         resp = client.post(
             "/webhook/alpaca",
             data=json.dumps(payload),
@@ -190,8 +204,10 @@ def test_canceled_resolves_as_tie(client):
     trade = _make_trade(order_id="ord-cancel")
     payload = _make_payload("canceled", order_id="ord-cancel")
 
-    with patch("webhook.main.get_unresolved_trades", return_value=[trade]), \
-         patch("webhook.main.resolve_outcome") as mock_resolve:
+    with (
+        patch("webhook.main.get_unresolved_trades", return_value=[trade]),
+        patch("webhook.main.resolve_outcome") as mock_resolve,
+    ):
         resp = client.post(
             "/webhook/alpaca",
             data=json.dumps(payload),
@@ -227,6 +243,7 @@ def test_invalid_json(client):
 def test_signature_failure_returns_403(client):
     """Line 83-84: when _WEBHOOK_SECRET is set and signature is wrong, return 403."""
     import webhook.main as wm
+
     payload = json.dumps({"event": "fill", "order": {"id": "x"}}).encode()
     with patch.object(wm, "_WEBHOOK_SECRET", "real-secret"):
         # Send with no Alpaca-Signature header — verification fails

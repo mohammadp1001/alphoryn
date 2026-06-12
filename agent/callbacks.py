@@ -1,4 +1,5 @@
 """Shared before/after agent callbacks for structured logging of sub-agent I/O."""
+
 from __future__ import annotations
 
 import json
@@ -39,9 +40,10 @@ def make_agent_log_callbacks(
         try:
             content = callback_context.user_content
             if content and content.parts:
-                request_text = " ".join(
-                    p.text for p in content.parts if hasattr(p, "text") and p.text
-                ) or "<empty>"
+                request_text = (
+                    " ".join(p.text for p in content.parts if hasattr(p, "text") and p.text)
+                    or "<empty>"
+                )
         except Exception:
             pass
         logger.debug(

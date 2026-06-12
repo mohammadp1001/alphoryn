@@ -2,6 +2,7 @@
 Exponential backoff with jitter for external API calls.
 NOT applied to trading order placement (risk of double-execution).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,6 +28,7 @@ def with_retry(func: F) -> F:
     Retries on HTTP 429 / 5xx up to RETRY_MAX_ATTEMPTS times with exponential backoff + jitter.
     Do NOT apply to execution.place_* tools.
     """
+
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         last_exc: Exception | None = None
@@ -42,7 +44,11 @@ def with_retry(func: F) -> F:
                 delay = _backoff(attempt)
                 logger.warning(
                     "retry attempt=%d/%d func=%s delay=%.1fs error=%s",
-                    attempt, RETRY_MAX_ATTEMPTS, func.__qualname__, delay, exc,
+                    attempt,
+                    RETRY_MAX_ATTEMPTS,
+                    func.__qualname__,
+                    delay,
+                    exc,
                 )
                 await asyncio.sleep(delay)
         raise last_exc  # type: ignore[misc]

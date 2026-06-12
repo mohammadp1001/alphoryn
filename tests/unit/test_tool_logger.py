@@ -1,4 +1,5 @@
 """Unit tests for infra.tool_logger — _serialise, log_io decorator."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,8 +8,10 @@ from unittest.mock import patch
 
 # ── _serialise ────────────────────────────────────────────────────────────────
 
+
 def test_serialise_simple_value():
     from infra.tool_logger import _serialise
+
     result = _serialise({"symbol": "XLK", "bars": 20})
     assert "XLK" in result
 
@@ -35,11 +38,13 @@ def test_serialise_long_output_truncated():
 
 def test_serialise_short_output_not_truncated():
     from infra.tool_logger import _serialise
+
     result = _serialise("short")
     assert "…(truncated)" not in result
 
 
 # ── log_io decorator ──────────────────────────────────────────────────────────
+
 
 def test_log_io_returns_result():
     from infra.tool_logger import log_io

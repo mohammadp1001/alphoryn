@@ -1,4 +1,5 @@
 """Unit tests for tools.market.tools — 12 market data tools."""
+
 from __future__ import annotations
 
 import asyncio
@@ -35,6 +36,7 @@ def _make_quote(bid=100.0, ask=100.05, bid_size=100.0, ask_size=200.0, ts=None):
 
 # ── get_ohlcv ─────────────────────────────────────────────────────────────────
 
+
 def test_get_ohlcv_returns_correct_structure():
     bars = [_make_bar(close=103.0 + i) for i in range(5)]
     mock_resp = {"XLK": bars}
@@ -43,6 +45,7 @@ def test_get_ohlcv_returns_correct_structure():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("XLK", "1Day", 5))
 
     assert result["symbol"] == "XLK"
@@ -61,6 +64,7 @@ def test_get_ohlcv_symbol_not_in_response():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("MISSING", "1Day", 10))
 
     assert result["bars"] == []
@@ -74,6 +78,7 @@ def test_get_ohlcv_4hour_timeframe():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("SPY", "4Hour", 1))
 
     assert result["symbol"] == "SPY"
@@ -87,12 +92,14 @@ def test_get_ohlcv_unknown_timeframe_defaults_to_day():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("QQQ", "WeeklyX", 1))
 
     assert result["symbol"] == "QQQ"
 
 
 # ── get_quote ─────────────────────────────────────────────────────────────────
+
 
 def test_get_quote_returns_bid_ask():
     quote = _make_quote(bid=180.0, ask=180.05)
@@ -102,6 +109,7 @@ def test_get_quote_returns_bid_ask():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_quote
+
         result = asyncio.run(get_quote("XLK"))
 
     assert result["symbol"] == "XLK"
@@ -112,6 +120,7 @@ def test_get_quote_returns_bid_ask():
 
 # ── get_spread ────────────────────────────────────────────────────────────────
 
+
 def test_get_spread_calculates_correctly():
     quote = _make_quote(bid=100.0, ask=100.10)
     mock_resp = {"SPY": quote}
@@ -120,6 +129,7 @@ def test_get_spread_calculates_correctly():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_spread
+
         result = asyncio.run(get_spread("SPY"))
 
     assert result["symbol"] == "SPY"
@@ -135,12 +145,14 @@ def test_get_spread_zero_mid_returns_zero_pct():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_spread
+
         result = asyncio.run(get_spread("XYZ"))
 
     assert result["spread_pct"] == 0.0
 
 
 # ── get_order_book ────────────────────────────────────────────────────────────
+
 
 def test_get_order_book_returns_bids_asks():
     import alpaca.data.requests as alpaca_reqs
@@ -169,6 +181,7 @@ def test_get_order_book_returns_bids_asks():
         patch("tools.market.tools._data_client", return_value=mock_client),
     ):
         from tools.market.tools import get_order_book
+
         result = asyncio.run(get_order_book("XLK", depth=5))
 
     assert result["symbol"] == "XLK"
@@ -179,6 +192,7 @@ def test_get_order_book_returns_bids_asks():
 
 
 # ── screen_etfs ───────────────────────────────────────────────────────────────
+
 
 def test_screen_etfs_returns_filtered_results():
     mock_ticker = MagicMock()
@@ -193,6 +207,7 @@ def test_screen_etfs_returns_filtered_results():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import screen_etfs
+
         result = asyncio.run(screen_etfs(min_avg_volume=1_000_000, min_price=50.0))
 
     assert "results" in result
@@ -212,6 +227,7 @@ def test_screen_etfs_filters_below_min_price():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import screen_etfs
+
         result = asyncio.run(screen_etfs(min_avg_volume=1_000_000, min_price=100.0))
 
     assert result["results"] == []
@@ -226,6 +242,7 @@ def test_screen_etfs_skips_erroring_tickers():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import screen_etfs
+
         result = asyncio.run(screen_etfs(min_avg_volume=0, min_price=0.0))
 
     assert result["results"] == []
@@ -245,14 +262,14 @@ def test_screen_etfs_uses_explicit_symbols():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import screen_etfs
-        result = asyncio.run(
-            screen_etfs(min_avg_volume=0, min_price=0.0, symbols=["EWG", "FEZ"])
-        )
+
+        result = asyncio.run(screen_etfs(min_avg_volume=0, min_price=0.0, symbols=["EWG", "FEZ"]))
 
     assert [r["symbol"] for r in result["results"]] == ["EWG", "FEZ"]
 
 
 # ── get_etf_holdings ──────────────────────────────────────────────────────────
+
 
 def test_get_etf_holdings_returns_list():
     import pandas as pd
@@ -270,6 +287,7 @@ def test_get_etf_holdings_returns_list():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import get_etf_holdings
+
         result = asyncio.run(get_etf_holdings("XLK"))
 
     assert result["symbol"] == "XLK"
@@ -292,6 +310,7 @@ def test_get_etf_holdings_exception_returns_empty():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import get_etf_holdings
+
         result = asyncio.run(get_etf_holdings("XLK"))
 
     assert result["symbol"] == "XLK"
@@ -300,8 +319,10 @@ def test_get_etf_holdings_exception_returns_empty():
 
 # ── get_sector_map ────────────────────────────────────────────────────────────
 
+
 def test_get_sector_map_contains_xlk():
     from tools.market.tools import get_sector_map
+
     result = asyncio.run(get_sector_map())
 
     assert "etf_to_sector" in result
@@ -312,6 +333,7 @@ def test_get_sector_map_contains_xlk():
 
 def test_get_sector_map_spy_in_broad_market():
     from tools.market.tools import get_sector_map
+
     result = asyncio.run(get_sector_map())
 
     assert result["etf_to_sector"]["SPY"] == "Broad Market"
@@ -319,6 +341,7 @@ def test_get_sector_map_spy_in_broad_market():
 
 
 # ── get_52w_range ─────────────────────────────────────────────────────────────
+
 
 def test_get_52w_range_returns_correct_fields():
     mock_ticker = MagicMock()
@@ -332,6 +355,7 @@ def test_get_52w_range_returns_correct_fields():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import get_52w_range
+
         result = asyncio.run(get_52w_range("SPY"))
 
     assert result["symbol"] == "SPY"
@@ -354,6 +378,7 @@ def test_get_52w_range_zero_high_returns_zero_pct():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import get_52w_range
+
         result = asyncio.run(get_52w_range("ZZZ"))
 
     assert result["pct_from_high"] == 0.0
@@ -361,6 +386,7 @@ def test_get_52w_range_zero_high_returns_zero_pct():
 
 
 # ── get_volume_profile ────────────────────────────────────────────────────────
+
 
 def test_get_volume_profile_empty_bars():
     mock_resp = {}  # no bars for symbol
@@ -370,6 +396,7 @@ def test_get_volume_profile_empty_bars():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_volume_profile
+
         result = asyncio.run(get_volume_profile("MISS", 5))
 
     assert result["symbol"] == "MISS"
@@ -385,6 +412,7 @@ def test_get_volume_profile_with_bars():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_volume_profile
+
         result = asyncio.run(get_volume_profile("XLK", 10))
 
     assert result["symbol"] == "XLK"
@@ -394,6 +422,7 @@ def test_get_volume_profile_with_bars():
 
 
 # ── get_benchmark_return ──────────────────────────────────────────────────────
+
 
 def test_get_benchmark_return_empty_data():
     import pandas as pd
@@ -410,6 +439,7 @@ def test_get_benchmark_return_empty_data():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import get_benchmark_return
+
         result = asyncio.run(get_benchmark_return("XLK", "1mo"))
 
     assert result["symbol"] == "XLK"
@@ -421,10 +451,13 @@ def test_get_benchmark_return_with_data():
     import pandas as pd
 
     dates = pd.date_range("2025-01-01", periods=5)
-    data = pd.DataFrame({
-        "XLK": [100.0, 101.0, 102.0, 103.0, 105.0],
-        "SPY": [400.0, 401.0, 402.0, 403.0, 404.0],
-    }, index=dates)
+    data = pd.DataFrame(
+        {
+            "XLK": [100.0, 101.0, 102.0, 103.0, 105.0],
+            "SPY": [400.0, 401.0, 402.0, 403.0, 404.0],
+        },
+        index=dates,
+    )
 
     mock_yf = MagicMock()
     download_mock = MagicMock()
@@ -435,6 +468,7 @@ def test_get_benchmark_return_with_data():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.market.tools import get_benchmark_return
+
         result = asyncio.run(get_benchmark_return("XLK", "1mo"))
 
     assert result["symbol"] == "XLK"
@@ -444,6 +478,7 @@ def test_get_benchmark_return_with_data():
 
 # ── get_intraday_bars ─────────────────────────────────────────────────────────
 
+
 def test_get_intraday_bars_delegates_to_get_ohlcv():
     bars = [_make_bar()]
     mock_resp = {"SPY": bars}
@@ -452,6 +487,7 @@ def test_get_intraday_bars_delegates_to_get_ohlcv():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_intraday_bars
+
         result = asyncio.run(get_intraday_bars("SPY", "5Min"))
 
     assert result["symbol"] == "SPY"
@@ -460,11 +496,13 @@ def test_get_intraday_bars_delegates_to_get_ohlcv():
 
 # ── get_market_status ─────────────────────────────────────────────────────────
 
+
 def test_get_market_status_no_api_key(monkeypatch):
     monkeypatch.delenv("ALPACA_DATA_KEY", raising=False)
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
 
     from tools.market.tools import get_market_status
+
     result = asyncio.run(get_market_status())
 
     assert result["is_open"] is False
@@ -486,6 +524,7 @@ def test_get_market_status_with_api_key(monkeypatch):
 
     with _mock_acquire(), patch("alpaca.trading.client.TradingClient", mock_client_cls):
         from tools.market.tools import get_market_status
+
         result = asyncio.run(get_market_status())
 
     assert result["is_open"] is True
@@ -493,9 +532,54 @@ def test_get_market_status_with_api_key(monkeypatch):
     assert result["next_close"] is not None
 
 
+def test_get_market_status_none_open_close(monkeypatch):
+    """_to_tz(None) returns None — covers line 608."""
+    monkeypatch.setenv("ALPACA_DATA_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_DATA_SECRET", "test-secret")
+
+    clock = MagicMock()
+    clock.is_open = True
+    clock.next_open = None
+    clock.next_close = None
+
+    mock_client_cls = MagicMock()
+    mock_client_cls.return_value.get_clock.return_value = clock
+
+    with _mock_acquire(), patch("alpaca.trading.client.TradingClient", mock_client_cls):
+        from tools.market.tools import get_market_status
+
+        result = asyncio.run(get_market_status())
+
+    assert result["next_open"] is None
+    assert result["next_close"] is None
+
+
+def test_get_market_status_naive_datetime_gets_utc(monkeypatch):
+    """_to_tz with tzinfo=None adds UTC — covers line 610."""
+    monkeypatch.setenv("ALPACA_DATA_KEY", "test-key")
+    monkeypatch.setenv("ALPACA_DATA_SECRET", "test-secret")
+
+    clock = MagicMock()
+    clock.is_open = False
+    clock.next_open = datetime(2025, 1, 2, 9, 30)   # naive — no tzinfo
+    clock.next_close = datetime(2025, 1, 2, 16, 0)  # naive — no tzinfo
+
+    mock_client_cls = MagicMock()
+    mock_client_cls.return_value.get_clock.return_value = clock
+
+    with _mock_acquire(), patch("alpaca.trading.client.TradingClient", mock_client_cls):
+        from tools.market.tools import get_market_status
+
+        result = asyncio.run(get_market_status())
+
+    assert result["next_open"] is not None
+    assert result["next_close"] is not None
+
+
 # ── _data_client factory ──────────────────────────────────────────────────────
 
 # ── get_ohlcv yfinance fallback ───────────────────────────────────────────────
+
 
 def test_get_ohlcv_yfinance_fallback_single_level_bars():
     """Lines 85-121: when IEX returns empty, yfinance is used (single-level DataFrame)."""
@@ -518,6 +602,7 @@ def test_get_ohlcv_yfinance_fallback_single_level_bars():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("EWG", "1Day", 1))
 
     assert result["symbol"] == "EWG"
@@ -533,9 +618,15 @@ def test_get_ohlcv_yfinance_fallback_multiindex_columns():
     mock_client.get_stock_bars.return_value = {}
 
     ts = datetime(2025, 1, 2, tzinfo=UTC)
-    cols = pd.MultiIndex.from_tuples([
-        ("Open", "XLK"), ("High", "XLK"), ("Low", "XLK"), ("Close", "XLK"), ("Volume", "XLK"),
-    ])
+    cols = pd.MultiIndex.from_tuples(
+        [
+            ("Open", "XLK"),
+            ("High", "XLK"),
+            ("Low", "XLK"),
+            ("Close", "XLK"),
+            ("Volume", "XLK"),
+        ]
+    )
     hist = pd.DataFrame(
         [[100.0, 105.0, 99.0, 103.0, 1e6]],
         index=pd.DatetimeIndex([ts]),
@@ -550,6 +641,7 @@ def test_get_ohlcv_yfinance_fallback_multiindex_columns():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("XLK", "1Day", 1))
 
     assert len(result["bars"]) == 1
@@ -577,6 +669,7 @@ def test_get_ohlcv_yfinance_fallback_medium_bars():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
+
         asyncio.run(get_ohlcv("EWG", "1Day", 20))
 
     mock_yf.download.assert_called_once()
@@ -605,6 +698,7 @@ def test_get_ohlcv_yfinance_fallback_large_bars():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
+
         asyncio.run(get_ohlcv("EWG", "1Day", 50))
 
     mock_yf.download.assert_called_once()
@@ -630,6 +724,7 @@ def test_get_ohlcv_yfinance_fallback_empty_returns_empty():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("EWG", "1Day", 5))
 
     assert result["bars"] == []
@@ -652,6 +747,7 @@ def test_get_ohlcv_yfinance_small_bars_uses_5d_period():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
+
         asyncio.run(get_ohlcv("EWG", "1Day", 1))
 
     mock_yf.download.assert_called_once()
@@ -661,8 +757,10 @@ def test_get_ohlcv_yfinance_small_bars_uses_5d_period():
 
 # ── _is_crypto helper ─────────────────────────────────────────────────────────
 
+
 def test_is_crypto_true_for_crypto_symbol():
     from tools.market.tools import _is_crypto
+
     assert _is_crypto("BTC-USD") is True
     assert _is_crypto("ETH-USD") is True
     assert _is_crypto("SOL-USD") is True
@@ -670,12 +768,14 @@ def test_is_crypto_true_for_crypto_symbol():
 
 def test_is_crypto_false_for_stock_symbol():
     from tools.market.tools import _is_crypto
+
     assert _is_crypto("XLK") is False
     assert _is_crypto("SPY") is False
     assert _is_crypto("EWG") is False
 
 
 # ── get_ohlcv crypto path ──────────────────────────────────────────────────────
+
 
 def test_get_ohlcv_crypto_uses_crypto_client():
     """Crypto symbols (ending in -USD) route through get_crypto_bars, not get_stock_bars.
@@ -685,8 +785,12 @@ def test_get_ohlcv_crypto_uses_crypto_client():
     mock_crypto_client = MagicMock()
     mock_crypto_client.get_crypto_bars.return_value = mock_resp
 
-    with _mock_acquire(), patch("tools.market.tools._crypto_client", return_value=mock_crypto_client):
+    with (
+        _mock_acquire(),
+        patch("tools.market.tools._crypto_client", return_value=mock_crypto_client),
+    ):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("BTC-USD", "1Hour", 1))
 
     assert result["symbol"] == "BTC-USD"
@@ -711,6 +815,7 @@ def test_get_ohlcv_crypto_symbol_translated_to_slash_format():
         patch.object(alpaca_reqs, "CryptoBarsRequest", mock_req_class, create=True),
     ):
         from tools.market.tools import get_ohlcv
+
         asyncio.run(get_ohlcv("BTC-USD", "1Hour", 1))
 
     call_kwargs = mock_req_class.call_args[1]
@@ -726,7 +831,13 @@ def test_get_ohlcv_crypto_yfinance_fallback_when_empty():
 
     ts = datetime(2025, 1, 2, tzinfo=UTC)
     hist = pd.DataFrame(
-        {"Open": [60000.0], "High": [61000.0], "Low": [59000.0], "Close": [60500.0], "Volume": [1e4]},
+        {
+            "Open": [60000.0],
+            "High": [61000.0],
+            "Low": [59000.0],
+            "Close": [60500.0],
+            "Volume": [1e4],
+        },
         index=pd.DatetimeIndex([ts]),
     )
     mock_yf = MagicMock()
@@ -738,6 +849,7 @@ def test_get_ohlcv_crypto_yfinance_fallback_when_empty():
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("BTC-USD", "1Day", 1))
 
     assert result["symbol"] == "BTC-USD"
@@ -747,6 +859,7 @@ def test_get_ohlcv_crypto_yfinance_fallback_when_empty():
 
 # ── _crypto_client factory ─────────────────────────────────────────────────────
 
+
 def test_crypto_client_factory_returns_instance(monkeypatch):
     monkeypatch.setenv("ALPACA_DATA_KEY", "data-key")
     monkeypatch.setenv("ALPACA_DATA_SECRET", "data-secret")
@@ -755,13 +868,17 @@ def test_crypto_client_factory_returns_instance(monkeypatch):
     mock_cls = MagicMock(return_value=mock_instance)
     mock_data_mod = MagicMock(CryptoHistoricalDataClient=mock_cls)
 
-    with patch.dict("sys.modules", {
-        "alpaca": MagicMock(),
-        "alpaca.data": mock_data_mod,
-    }):
+    with patch.dict(
+        "sys.modules",
+        {
+            "alpaca": MagicMock(),
+            "alpaca.data": mock_data_mod,
+        },
+    ):
         import importlib
 
         import tools.market.tools as market_tools
+
         importlib.reload(market_tools)
         market_tools._crypto_client()
 
@@ -769,6 +886,7 @@ def test_crypto_client_factory_returns_instance(monkeypatch):
 
 
 # ── get_sector_map with custom symbols ────────────────────────────────────────
+
 
 def test_get_sector_map_custom_symbols(monkeypatch):
     """Lines 292-300: custom symbols use yfinance for sector lookup."""
@@ -782,6 +900,7 @@ def test_get_sector_map_custom_symbols(monkeypatch):
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_sector_map
+
         result = asyncio.run(get_sector_map(["TSLA", "NVDA"]))
 
     assert "TSLA" in result["etf_to_sector"]
@@ -799,12 +918,14 @@ def test_get_sector_map_custom_symbols_yfinance_error(monkeypatch):
         patch.dict("sys.modules", {"yfinance": mock_yf}),
     ):
         from tools.market.tools import get_sector_map
+
         result = asyncio.run(get_sector_map(["TSLA"]))
 
     assert result["etf_to_sector"]["TSLA"] == "Unknown"
 
 
 # ── _data_client factory ──────────────────────────────────────────────────────
+
 
 def test_data_client_factory_returns_instance(monkeypatch):
     """Lines 13-14: _data_client() builds a StockHistoricalDataClient from env vars."""
@@ -815,13 +936,17 @@ def test_data_client_factory_returns_instance(monkeypatch):
     mock_cls = MagicMock(return_value=mock_instance)
     mock_data_mod = MagicMock(StockHistoricalDataClient=mock_cls)
 
-    with patch.dict("sys.modules", {
-        "alpaca": MagicMock(),
-        "alpaca.data": mock_data_mod,
-    }):
+    with patch.dict(
+        "sys.modules",
+        {
+            "alpaca": MagicMock(),
+            "alpaca.data": mock_data_mod,
+        },
+    ):
         import importlib
 
         import tools.market.tools as market_tools
+
         importlib.reload(market_tools)
         market_tools._data_client()
 
@@ -830,6 +955,7 @@ def test_data_client_factory_returns_instance(monkeypatch):
 
 # ── New timeframes (30Min, 3Hour, 12Hour) ─────────────────────────────────────
 
+
 def test_get_ohlcv_30min_timeframe():
     bars = [_make_bar()]
     mock_client = MagicMock()
@@ -837,6 +963,7 @@ def test_get_ohlcv_30min_timeframe():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("SPY", "30Min", 1))
 
     assert result["symbol"] == "SPY"
@@ -850,6 +977,7 @@ def test_get_ohlcv_3hour_timeframe():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("SPY", "3Hour", 1))
 
     assert result["symbol"] == "SPY"
@@ -863,6 +991,7 @@ def test_get_ohlcv_12hour_timeframe():
 
     with _mock_acquire(), patch("tools.market.tools._data_client", return_value=mock_client):
         from tools.market.tools import get_ohlcv
+
         result = asyncio.run(get_ohlcv("SPY", "12Hour", 1))
 
     assert result["symbol"] == "SPY"
@@ -871,11 +1000,13 @@ def test_get_ohlcv_12hour_timeframe():
 
 # ── Timezone-aware market status ──────────────────────────────────────────────
 
+
 def test_get_market_status_default_timezone_in_response(monkeypatch):
     monkeypatch.delenv("ALPACA_DATA_KEY", raising=False)
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
 
     from tools.market.tools import get_market_status
+
     result = asyncio.run(get_market_status())
 
     assert result["timezone"] == "America/New_York"
@@ -886,6 +1017,7 @@ def test_get_market_status_custom_timezone(monkeypatch):
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
 
     from tools.market.tools import get_market_status
+
     result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
 
     # is_open is time-dependent for Berlin (XETRA); just check timezone field
@@ -897,6 +1029,7 @@ def test_get_market_status_invalid_timezone_falls_back(monkeypatch):
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
 
     from tools.market.tools import get_market_status
+
     # Should not raise — falls back to America/New_York
     result = asyncio.run(get_market_status(timezone="Not/A_Real_Zone"))
 
@@ -910,14 +1043,15 @@ def test_get_market_status_times_expressed_in_requested_tz(monkeypatch):
 
     clock = MagicMock()
     clock.is_open = False
-    clock.next_open = datetime(2025, 6, 10, 13, 30, tzinfo=UTC)   # 09:30 ET = 08:30 Chicago (CDT)
-    clock.next_close = datetime(2025, 6, 10, 20, 0, tzinfo=UTC)   # 16:00 ET = 15:00 Chicago (CDT)
+    clock.next_open = datetime(2025, 6, 10, 13, 30, tzinfo=UTC)  # 09:30 ET = 08:30 Chicago (CDT)
+    clock.next_close = datetime(2025, 6, 10, 20, 0, tzinfo=UTC)  # 16:00 ET = 15:00 Chicago (CDT)
 
     mock_client_cls = MagicMock()
     mock_client_cls.return_value.get_clock.return_value = clock
 
     with _mock_acquire(), patch("alpaca.trading.client.TradingClient", mock_client_cls):
         from tools.market.tools import get_market_status
+
         result = asyncio.run(get_market_status(timezone="America/Chicago"))
 
     assert result["timezone"] == "America/Chicago"
@@ -929,9 +1063,11 @@ def test_get_market_status_times_expressed_in_requested_tz(monkeypatch):
 
 # ── get_market_status crypto (UTC) path ──────────────────────────────────────
 
+
 def test_get_market_status_crypto_always_open():
     """UTC timezone → crypto universe, always is_open=True, no next_open/close."""
     from tools.market.tools import get_market_status
+
     result = asyncio.run(get_market_status(timezone="UTC"))
 
     assert result["is_open"] is True
@@ -941,6 +1077,7 @@ def test_get_market_status_crypto_always_open():
 
 
 # ── get_market_status XETRA (Europe/Berlin) path ──────────────────────────────
+
 
 def _make_fake_datetime(fixed):
     """Return a datetime subclass whose .now() always returns `fixed`."""
@@ -964,6 +1101,7 @@ def test_get_market_status_berlin_open_during_xetra():
 
     with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
         from tools.market.tools import get_market_status
+
         result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
 
     assert result["is_open"] is True
@@ -981,6 +1119,7 @@ def test_get_market_status_berlin_closed_before_open():
 
     with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
         from tools.market.tools import get_market_status
+
         result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
 
     assert result["is_open"] is False
@@ -999,6 +1138,7 @@ def test_get_market_status_berlin_closed_after_hours():
 
     with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
         from tools.market.tools import get_market_status
+
         result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
 
     assert result["is_open"] is False
@@ -1017,6 +1157,7 @@ def test_get_market_status_berlin_closed_weekend():
 
     with patch("tools.market.tools.datetime", _make_fake_datetime(fixed)):
         from tools.market.tools import get_market_status
+
         result = asyncio.run(get_market_status(timezone="Europe/Berlin"))
 
     assert result["is_open"] is False
@@ -1027,17 +1168,21 @@ def test_get_market_status_berlin_closed_weekend():
 
 # ── UNIVERSE_EXCHANGE_TZ config ───────────────────────────────────────────────
 
+
 def test_universe_exchange_tz_german_market():
     from config import UNIVERSE_EXCHANGE_TZ
+
     assert UNIVERSE_EXCHANGE_TZ["GERMAN_MARKET"] == "Europe/Berlin"
 
 
 def test_universe_exchange_tz_us_market():
     from config import UNIVERSE_EXCHANGE_TZ
+
     assert UNIVERSE_EXCHANGE_TZ["US_SECTOR_ETFS"] == "America/New_York"
 
 
 def test_universe_exchange_tz_covers_all_universes():
     from config import ETF_UNIVERSES, UNIVERSE_EXCHANGE_TZ
+
     missing = [k for k in ETF_UNIVERSES if k not in UNIVERSE_EXCHANGE_TZ]
     assert missing == [], f"Universes missing from UNIVERSE_EXCHANGE_TZ: {missing}"

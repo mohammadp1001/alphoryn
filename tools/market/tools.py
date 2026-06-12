@@ -1,4 +1,5 @@
 """market.* tools — 12 tools, analysis agent scope."""
+
 from __future__ import annotations
 
 import os
@@ -28,6 +29,7 @@ logger = get_logger("tools.market")
 
 def _data_client():
     from alpaca.data import StockHistoricalDataClient  # type: ignore[import]
+
     return StockHistoricalDataClient(
         api_key=os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY"),
         secret_key=os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET"),
@@ -36,6 +38,7 @@ def _data_client():
 
 def _crypto_client():
     from alpaca.data import CryptoHistoricalDataClient  # type: ignore[import]
+
     return CryptoHistoricalDataClient(
         api_key=os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY"),
         secret_key=os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET"),
@@ -67,11 +70,11 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
 
     logger.info("get_ohlcv symbol=%s timeframe=%s bars=%d", symbol, timeframe, bars)
     tf_map = {
-        "1Day":   TimeFrame.Day,
-        "30Min":  TimeFrame(30, TimeFrameUnit.Minute),
-        "1Hour":  TimeFrame.Hour,
-        "3Hour":  TimeFrame(3, TimeFrameUnit.Hour),
-        "4Hour":  TimeFrame(4, TimeFrameUnit.Hour),
+        "1Day": TimeFrame.Day,
+        "30Min": TimeFrame(30, TimeFrameUnit.Minute),
+        "1Hour": TimeFrame.Hour,
+        "3Hour": TimeFrame(3, TimeFrameUnit.Hour),
+        "4Hour": TimeFrame(4, TimeFrameUnit.Hour),
         "12Hour": TimeFrame(12, TimeFrameUnit.Hour),
     }
     tf = tf_map.get(timeframe, TimeFrame.Day)
@@ -82,6 +85,7 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     await acquire_alpaca_data()
     if _is_crypto(symbol):
         from alpaca.data.requests import CryptoBarsRequest  # type: ignore[import]
+
         # Alpaca crypto API requires "BTC/USD" not "BTC-USD" (yfinance format)
         alpaca_sym = symbol.replace("-", "/")
         with api_call_span("alpaca_data", "get_crypto_bars", symbol=symbol):
@@ -92,7 +96,9 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     else:
         with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
             resp = _data_client().get_stock_bars(
-                StockBarsRequest(symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex")
+                StockBarsRequest(
+                    symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex"
+                )
             )
         lookup_key = symbol
 
@@ -131,11 +137,16 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
         yf_period = "1y"
 
     yf_interval = {
-        "1Day": "1d", "12Hour": "1d",
-        "4Hour": "1h", "3Hour": "1h",
-        "1Hour": "1h", "30Min": "30m",
+        "1Day": "1d",
+        "12Hour": "1d",
+        "4Hour": "1h",
+        "3Hour": "1h",
+        "1Hour": "1h",
+        "30Min": "30m",
     }.get(timeframe, "1d")
-    hist = yf.download(symbol, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True)
+    hist = yf.download(
+        symbol, period=yf_period, interval=yf_interval, progress=False, auto_adjust=True
+    )
     if hist.empty:
         return OhlcvResponse(symbol=symbol, timeframe=timeframe, bars=[]).model_dump()
 
@@ -148,14 +159,16 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
 
     result = []
     for idx, row in hist.tail(bars).iterrows():
-        result.append({
-            "timestamp": idx.isoformat(),
-            "open": float(row["Open"]),
-            "high": float(row["High"]),
-            "low": float(row["Low"]),
-            "close": float(row["Close"]),
-            "volume": float(row["Volume"]),
-        })
+        result.append(
+            {
+                "timestamp": idx.isoformat(),
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+                "volume": float(row["Volume"]),
+            }
+        )
     return OhlcvResponse(symbol=symbol, timeframe=timeframe, bars=result).model_dump()
 
 
@@ -174,7 +187,9 @@ async def get_quote(symbol: str) -> dict:
     logger.info("get_quote symbol=%s", symbol)
     await acquire_alpaca_data()
     with api_call_span("alpaca_data", "get_latest_quote", symbol=symbol):
-        resp = _data_client().get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol, feed="iex"))
+        resp = _data_client().get_stock_latest_quote(
+            StockLatestQuoteRequest(symbol_or_symbols=symbol, feed="iex")
+        )
 
     q = resp[symbol]
     return QuoteResponse(
@@ -239,7 +254,9 @@ async def get_order_book(symbol: str, depth: int) -> dict:
     ).model_dump()
 
 
-async def screen_etfs(min_avg_volume: float, min_price: float, symbols: list[str] | None = None) -> dict:
+async def screen_etfs(
+    min_avg_volume: float, min_price: float, symbols: list[str] | None = None
+) -> dict:
     """Screen ETFs by volume and price filters.
 
     Args:
@@ -250,9 +267,12 @@ async def screen_etfs(min_avg_volume: float, min_price: float, symbols: list[str
     Returns:
         dict with 'results' — list of {symbol, price, avg_volume_30d, ytd_return_pct, sector}.
     """
-    logger.info("screen_etfs min_avg_volume=%s min_price=%s symbols=%s", min_avg_volume, min_price, symbols)
+    logger.info(
+        "screen_etfs min_avg_volume=%s min_price=%s symbols=%s", min_avg_volume, min_price, symbols
+    )
     if symbols is None:
         from config import DEFAULT_ETF_UNIVERSE
+
         symbols = DEFAULT_ETF_UNIVERSE
 
     results = []
@@ -260,18 +280,21 @@ async def screen_etfs(min_avg_volume: float, min_price: float, symbols: list[str
         try:
             await acquire_yfinance()
             import yfinance as yf  # type: ignore[import]
+
             ticker = yf.Ticker(symbol)
             info = ticker.info
             price = info.get("regularMarketPrice") or info.get("currentPrice", 0.0)
             avg_vol = info.get("averageVolume", 0)
             if price >= min_price and avg_vol >= min_avg_volume:
-                results.append({
-                    "symbol": symbol,
-                    "price": float(price),
-                    "avg_volume_30d": float(avg_vol),
-                    "ytd_return_pct": float(info.get("52WeekChange", 0.0) * 100),
-                    "sector": info.get("sector") or "Unknown",
-                })
+                results.append(
+                    {
+                        "symbol": symbol,
+                        "price": float(price),
+                        "avg_volume_30d": float(avg_vol),
+                        "ytd_return_pct": float(info.get("52WeekChange", 0.0) * 100),
+                        "sector": info.get("sector") or "Unknown",
+                    }
+                )
         except Exception:
             continue
     return ScreenEtfsResponse(results=results).model_dump()
@@ -296,11 +319,13 @@ async def get_etf_holdings(symbol: str) -> dict:
     try:
         df = ticker.funds_data.top_holdings
         for idx, row in df.iterrows():
-            holdings.append({
-                "ticker": str(idx),
-                "weight_pct": float(row.get("Holding Percent", 0)) * 100,
-                "name": str(row.get("Name", "")),
-            })
+            holdings.append(
+                {
+                    "ticker": str(idx),
+                    "weight_pct": float(row.get("Holding Percent", 0)) * 100,
+                    "name": str(row.get("Name", "")),
+                }
+            )
     except Exception:
         pass
     return EtfHoldingsResponse(symbol=symbol, top_holdings=holdings[:10]).model_dump()
@@ -319,16 +344,28 @@ async def get_sector_map(symbols: list[str] | None = None) -> dict:
     logger.info("get_sector_map symbols=%s", symbols)
     if symbols is None:
         etf_to_sector: dict[str, str] = {
-            "XLK": "Technology", "XLE": "Energy", "XLF": "Financials",
-            "XLV": "Healthcare", "XLY": "Consumer Discretionary", "XLP": "Consumer Staples",
-            "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities",
-            "XLRE": "Real Estate", "XLC": "Communication Services",
-            "SPY": "Broad Market", "QQQ": "Broad Market", "IWM": "Broad Market",
-            "GLD": "Commodities", "TLT": "Fixed Income", "VNQ": "Real Estate",
+            "XLK": "Technology",
+            "XLE": "Energy",
+            "XLF": "Financials",
+            "XLV": "Healthcare",
+            "XLY": "Consumer Discretionary",
+            "XLP": "Consumer Staples",
+            "XLI": "Industrials",
+            "XLB": "Materials",
+            "XLU": "Utilities",
+            "XLRE": "Real Estate",
+            "XLC": "Communication Services",
+            "SPY": "Broad Market",
+            "QQQ": "Broad Market",
+            "IWM": "Broad Market",
+            "GLD": "Commodities",
+            "TLT": "Fixed Income",
+            "VNQ": "Real Estate",
         }
     else:
         await acquire_yfinance()
         import yfinance as yf  # type: ignore[import]
+
         etf_to_sector = {}
         for sym in symbols:
             try:
@@ -340,7 +377,9 @@ async def get_sector_map(symbols: list[str] | None = None) -> dict:
     sector_to_etfs: dict[str, list[str]] = {}
     for etf, sector in etf_to_sector.items():
         sector_to_etfs.setdefault(sector, []).append(etf)
-    return SectorMapResponse(etf_to_sector=etf_to_sector, sector_to_etfs=sector_to_etfs).model_dump()
+    return SectorMapResponse(
+        etf_to_sector=etf_to_sector, sector_to_etfs=sector_to_etfs
+    ).model_dump()
 
 
 @with_retry
@@ -389,7 +428,9 @@ async def get_volume_profile(symbol: str, days: int) -> dict:
     closes = [b["close"] for b in ohlcv["bars"]]
     volumes = [b["volume"] for b in ohlcv["bars"]]
     if not closes:
-        return VolumeProfileResponse(symbol=symbol, buckets=[], point_of_control=0.0, days=days).model_dump()
+        return VolumeProfileResponse(
+            symbol=symbol, buckets=[], point_of_control=0.0, days=days
+        ).model_dump()
 
     bins = np.linspace(min(closes), max(closes), 20)
     bucket_vols = [0.0] * (len(bins) - 1)
@@ -399,10 +440,15 @@ async def get_volume_profile(symbol: str, days: int) -> dict:
 
     poc = float(bins[int(np.argmax(bucket_vols))])
     buckets = [
-        {"price_level": round(float((bins[i] + bins[i + 1]) / 2), 2), "volume": round(bucket_vols[i], 0)}
+        {
+            "price_level": round(float((bins[i] + bins[i + 1]) / 2), 2),
+            "volume": round(bucket_vols[i], 0),
+        }
         for i in range(len(bucket_vols))
     ]
-    return VolumeProfileResponse(symbol=symbol, buckets=buckets, point_of_control=poc, days=days).model_dump()
+    return VolumeProfileResponse(
+        symbol=symbol, buckets=buckets, point_of_control=poc, days=days
+    ).model_dump()
 
 
 @with_retry
@@ -427,15 +473,23 @@ async def get_benchmark_return(symbol: str, period: str, benchmark: str = "SPY")
     hist = yf.download(tickers, period=period, progress=False)["Close"]
     if hist.empty:
         return BenchmarkReturnResponse(
-            symbol=symbol, benchmark=benchmark, period=period,
-            symbol_return_pct=0.0, benchmark_return_pct=0.0, excess_return_pct=0.0,
+            symbol=symbol,
+            benchmark=benchmark,
+            period=period,
+            symbol_return_pct=0.0,
+            benchmark_return_pct=0.0,
+            excess_return_pct=0.0,
         ).model_dump()
     sym_ret = float((hist[symbol].iloc[-1] / hist[symbol].iloc[0] - 1) * 100)
-    bench_ret = 0.0 if symbol == benchmark else float(
-        (hist[benchmark].iloc[-1] / hist[benchmark].iloc[0] - 1) * 100
+    bench_ret = (
+        0.0
+        if symbol == benchmark
+        else float((hist[benchmark].iloc[-1] / hist[benchmark].iloc[0] - 1) * 100)
     )
     return BenchmarkReturnResponse(
-        symbol=symbol, benchmark=benchmark, period=period,
+        symbol=symbol,
+        benchmark=benchmark,
+        period=period,
         symbol_return_pct=round(sym_ret, 2),
         benchmark_return_pct=round(bench_ret, 2),
         excess_return_pct=round(sym_ret - bench_ret, 2),
@@ -488,15 +542,18 @@ async def get_market_status(timezone: str = "America/New_York") -> dict:
     # ── Crypto (UTC) — 24/7, never closes ────────────────────────────────────
     if timezone == "UTC":
         return MarketStatusResponse(
-            is_open=True, next_open=None, next_close=None,
-            timestamp=now_local, timezone=timezone,
+            is_open=True,
+            next_open=None,
+            next_close=None,
+            timestamp=now_local,
+            timezone=timezone,
         ).model_dump()
 
     # ── European / XETRA (Berlin) — Mon-Fri 09:00-17:30 CET/CEST ─────────────
     if timezone == "Europe/Berlin":
         open_t = dtime(9, 0)
         close_t = dtime(17, 30)
-        wd = now_dt.weekday()   # 0=Mon … 6=Sun
+        wd = now_dt.weekday()  # 0=Mon … 6=Sun
         t = now_dt.time()
         is_open = wd < 5 and open_t <= t < close_t
 
@@ -535,8 +592,11 @@ async def get_market_status(timezone: str = "America/New_York") -> dict:
     api_secret = os.environ.get("ALPACA_DATA_SECRET") or os.environ.get("ALPACA_API_SECRET")
     if not api_key:
         return MarketStatusResponse(
-            is_open=False, next_open=None, next_close=None,
-            timestamp=now_local, timezone=timezone,
+            is_open=False,
+            next_open=None,
+            next_close=None,
+            timestamp=now_local,
+            timezone=timezone,
         ).model_dump()
 
     await acquire_alpaca_data()

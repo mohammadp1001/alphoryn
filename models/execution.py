@@ -15,7 +15,7 @@ class OrderSpec(BaseModel):
     limit_price: float | None = None
     stop_price: float | None = None
     client_order_id: str | None = None
-    time_in_force: str = "day"      # "day" | "gtc" | "ioc"
+    time_in_force: str = "day"  # "day" | "gtc" | "ioc"
 
 
 class OrderResult(BaseModel):
@@ -27,7 +27,7 @@ class OrderResult(BaseModel):
     qty: float
     filled_qty: float = 0.0
     filled_avg_price: float | None = None
-    status: str                     # "new" | "filled" | "partially_filled" | "cancelled"
+    status: str  # "new" | "filled" | "partially_filled" | "cancelled"
     submitted_at: datetime
     filled_at: datetime | None = None
 
@@ -46,16 +46,16 @@ class Position(BaseModel):
     market_value: float
     unrealised_pnl: float
     unrealised_pnl_pct: float
-    side: str                       # "long" | "short"
+    side: str  # "long" | "short"
 
 
 class Portfolio(BaseModel):
     account_id: str
-    equity: float                   # total account value
+    equity: float  # total account value
     cash: float
     buying_power: float
     positions: list[Position] = Field(default_factory=list)
-    portfolio_value: float          # cash + market value of all positions
+    portfolio_value: float  # cash + market value of all positions
     day_pnl: float = 0.0
     day_pnl_pct: float = 0.0
 
@@ -88,7 +88,7 @@ class BuyingPower(BaseModel):
 
 class AccountStatus(BaseModel):
     account_id: str
-    status: str                     # "ACTIVE" | "INACTIVE" | "ACCOUNT_UPDATED"
+    status: str  # "ACTIVE" | "INACTIVE" | "ACCOUNT_UPDATED"
     trading_blocked: bool
     pattern_day_trader: bool
     equity: float

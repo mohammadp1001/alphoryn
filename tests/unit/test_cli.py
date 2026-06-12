@@ -1,4 +1,5 @@
 """Unit tests for cli.main — Typer CLI commands."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +18,7 @@ runner = CliRunner()
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def tmp_db(tmp_path, monkeypatch):
@@ -40,6 +42,7 @@ def tmp_db(tmp_path, monkeypatch):
     monkeypatch.setattr("db.schema._connect", _connect)
     monkeypatch.setattr("cli.main._connect", _connect)
     from db.schema import init_db
+
     init_db(db_file)
     return db_file
 
@@ -58,6 +61,7 @@ def tmp_config(tmp_path, monkeypatch):
 
 # ── setup_cmd ─────────────────────────────────────────────────────────────────
 
+
 def test_setup_cmd_creates_config_file(tmp_config, monkeypatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
 
@@ -75,8 +79,7 @@ def test_setup_cmd_creates_config_file(tmp_config, monkeypatch):
 def test_setup_cmd_prompts_for_project_if_not_in_env(tmp_config, monkeypatch):
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
 
-    result = runner.invoke(app, ["setup"],
-                           input="my-gcp-project\nPK_test_key\nSK_test_secret\n")
+    result = runner.invoke(app, ["setup"], input="my-gcp-project\nPK_test_key\nSK_test_secret\n")
 
     assert result.exit_code == 0
     assert tmp_config.exists()
@@ -86,12 +89,26 @@ def test_setup_cmd_prompts_for_project_if_not_in_env(tmp_config, monkeypatch):
 
 # ── run_cmd (dry_run) ─────────────────────────────────────────────────────────
 
+
 def test_run_cmd_dry_run_does_not_start_session():
     result = runner.invoke(
         app,
-        ["run", "--mode", "SEMI_AUTO",
-         "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
-         "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS", "--dry-run"],
+        [
+            "run",
+            "--mode",
+            "SEMI_AUTO",
+            "--loss-limit",
+            "500",
+            "--timeframe",
+            "1Day",
+            "--shortlist-n",
+            "2",
+            "--hitl-timeout",
+            "60",
+            "--universe",
+            "US_SECTOR_ETFS",
+            "--dry-run",
+        ],
     )
     assert result.exit_code == 0
     assert "Dry run" in result.output
@@ -101,9 +118,21 @@ def test_run_cmd_cancelled_by_user():
     """User says 'no' at confirm prompt — session should not start."""
     result = runner.invoke(
         app,
-        ["run", "--mode", "SEMI_AUTO",
-         "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
-         "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
+        [
+            "run",
+            "--mode",
+            "SEMI_AUTO",
+            "--loss-limit",
+            "500",
+            "--timeframe",
+            "1Day",
+            "--shortlist-n",
+            "2",
+            "--hitl-timeout",
+            "60",
+            "--universe",
+            "US_SECTOR_ETFS",
+        ],
         input="n\n",  # decline to start
     )
     assert result.exit_code == 0
@@ -125,9 +154,20 @@ def test_run_cmd_full_auto_skips_hitl_prompt():
     """FULL_AUTO mode doesn't prompt for HITL timeout when given directly."""
     result = runner.invoke(
         app,
-        ["run", "--mode", "FULL_AUTO",
-         "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
-         "--universe", "US_SECTOR_ETFS", "--dry-run"],
+        [
+            "run",
+            "--mode",
+            "FULL_AUTO",
+            "--loss-limit",
+            "500",
+            "--timeframe",
+            "1Day",
+            "--shortlist-n",
+            "2",
+            "--universe",
+            "US_SECTOR_ETFS",
+            "--dry-run",
+        ],
     )
     assert result.exit_code == 0
 
@@ -136,11 +176,22 @@ def test_run_cmd_coordinator_model_openrouter_shown_in_dry_run():
     """--coordinator-model OpenRouter string is displayed in session params table."""
     result = runner.invoke(
         app,
-        ["run", "--mode", "FULL_AUTO",
-         "--loss-limit", "100", "--timeframe", "1Day", "--shortlist-n", "1",
-         "--universe", "US_SECTOR_ETFS",
-         "--coordinator-model", "openrouter/qwen/qwen-2.5-72b-instruct",
-         "--dry-run"],
+        [
+            "run",
+            "--mode",
+            "FULL_AUTO",
+            "--loss-limit",
+            "100",
+            "--timeframe",
+            "1Day",
+            "--shortlist-n",
+            "1",
+            "--universe",
+            "US_SECTOR_ETFS",
+            "--coordinator-model",
+            "openrouter/qwen/qwen-2.5-72b-instruct",
+            "--dry-run",
+        ],
     )
     assert result.exit_code == 0
     assert "openrouter/qwen/qwen-2.5-72b-instruct" in result.output
@@ -150,15 +201,27 @@ def test_run_cmd_no_coordinator_model_shows_default_in_dry_run():
     """When --coordinator-model is omitted, table shows the Gemini default."""
     result = runner.invoke(
         app,
-        ["run", "--mode", "FULL_AUTO",
-         "--loss-limit", "100", "--timeframe", "1Day", "--shortlist-n", "1",
-         "--universe", "US_SECTOR_ETFS", "--dry-run"],
+        [
+            "run",
+            "--mode",
+            "FULL_AUTO",
+            "--loss-limit",
+            "100",
+            "--timeframe",
+            "1Day",
+            "--shortlist-n",
+            "1",
+            "--universe",
+            "US_SECTOR_ETFS",
+            "--dry-run",
+        ],
     )
     assert result.exit_code == 0
     assert "gemini-2.5-flash" in result.output
 
 
 # ── history_cmd ───────────────────────────────────────────────────────────────
+
 
 def test_history_cmd_empty_db(tmp_db):
     result = runner.invoke(app, ["history"])
@@ -168,6 +231,7 @@ def test_history_cmd_empty_db(tmp_db):
 
 def test_history_cmd_with_sessions(tmp_db):
     from db.schema import close_session, upsert_session
+
     upsert_session("sess-hist-1", "SEMI_AUTO")
     close_session("sess-hist-1", "clean", 50.0, 3)
 
@@ -178,6 +242,7 @@ def test_history_cmd_with_sessions(tmp_db):
 
 def test_history_cmd_limit_option(tmp_db):
     from db.schema import upsert_session
+
     for i in range(5):
         upsert_session(f"sess-lim-{i}", "SEMI_AUTO")
 
@@ -186,6 +251,7 @@ def test_history_cmd_limit_option(tmp_db):
 
 
 # ── status_cmd ────────────────────────────────────────────────────────────────
+
 
 def test_status_cmd_no_unresolved_trades(tmp_db):
     result = runner.invoke(app, ["status"])
@@ -210,11 +276,13 @@ def test_status_cmd_with_calibration_data(tmp_db):
 
 # ── _load_alpaca_credentials ──────────────────────────────────────────────────
 
+
 def test_load_alpaca_credentials_from_env(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "env-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "env-secret")
 
     from cli.main import _load_alpaca_credentials
+
     key, secret = asyncio.run(_load_alpaca_credentials())
 
     assert key == "env-key"
@@ -225,9 +293,11 @@ def test_load_alpaca_credentials_from_secret_manager(monkeypatch):
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_API_SECRET", raising=False)
 
-    with patch("cli.main.get_alpaca_credentials",
-               new=AsyncMock(return_value=("sm-key", "sm-secret"))):
+    with patch(
+        "cli.main.get_alpaca_credentials", new=AsyncMock(return_value=("sm-key", "sm-secret"))
+    ):
         from cli.main import _load_alpaca_credentials
+
         key, secret = asyncio.run(_load_alpaca_credentials())
 
     assert key == "sm-key"
@@ -235,6 +305,7 @@ def test_load_alpaca_credentials_from_secret_manager(monkeypatch):
 
 
 # ── _print_session_params (helper) ───────────────────────────────────────────
+
 
 def test_print_session_params_does_not_raise():
     from cli.main import _print_session_params
@@ -254,6 +325,7 @@ def test_print_session_params_does_not_raise():
 
 
 # ── _run_session integration ──────────────────────────────────────────────────
+
 
 def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
     """Credentials must be cleared from env even if session errors."""
@@ -284,15 +356,20 @@ def test_run_session_clears_credentials_on_exception(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "mock-session-id", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "mock-session-id", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
         pytest.raises(RuntimeError),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))
 
     # Credentials must be cleared
@@ -333,17 +410,24 @@ def test_run_session_portfolio_load_success(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "run-session-id", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "run-session-id", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={
-                  "positions": [{"symbol": "XLK"}],
-                  "portfolio_value": 10000.0,
-              })),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(
+                return_value={
+                    "positions": [{"symbol": "XLK"}],
+                    "portfolio_value": 10000.0,
+                }
+            ),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))
 
     # If we get here without raising, the portfolio load success path ran
@@ -377,14 +461,19 @@ def test_run_session_keyboard_interrupt(tmp_db, monkeypatch):
 
     # Should NOT raise — KeyboardInterrupt is caught internally
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "ki-session-id", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "ki-session-id", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))
 
 
@@ -399,9 +488,21 @@ def test_run_cmd_confirms_and_runs(tmp_db, monkeypatch):
     with patch("cli.main._run_session", new=noop_run_session):
         result = runner.invoke(
             app,
-            ["run", "--mode", "SEMI_AUTO",
-             "--loss-limit", "500", "--timeframe", "1Day", "--shortlist-n", "2",
-             "--hitl-timeout", "60", "--universe", "US_SECTOR_ETFS"],
+            [
+                "run",
+                "--mode",
+                "SEMI_AUTO",
+                "--loss-limit",
+                "500",
+                "--timeframe",
+                "1Day",
+                "--shortlist-n",
+                "2",
+                "--hitl-timeout",
+                "60",
+                "--universe",
+                "US_SECTOR_ETFS",
+            ],
             input="y\n",  # confirm
         )
     assert result.exit_code == 0
@@ -468,14 +569,18 @@ def test_run_session_portfolio_exception_path(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "exc-sess-id", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "exc-sess-id", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(side_effect=RuntimeError("connection refused"))),
+        patch(
+            "cli.main.get_portfolio", new=AsyncMock(side_effect=RuntimeError("connection refused"))
+        ),
     ):
         from cli.main import _run_session
+
         # Should NOT raise — the portfolio exception is caught internally
         asyncio.run(_run_session(params))
 
@@ -506,15 +611,20 @@ def test_run_session_close_session_db_failure_is_swallowed(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "fail-close-id", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "fail-close-id", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
         patch("cli.main.close_session", side_effect=Exception("db broken")),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))  # must not raise
 
 
@@ -544,17 +654,23 @@ def test_run_session_sets_outcome_completed_in_db(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "outcome-sess-id", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "outcome-sess-id", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))
 
     import sqlite3 as _sqlite3
+
     conn = _sqlite3.connect(str(tmp_db))
     conn.row_factory = _sqlite3.Row
     row = conn.execute(
@@ -568,6 +684,7 @@ def test_run_session_sets_outcome_completed_in_db(tmp_db, monkeypatch):
 def test_cli_main_entrypoint_calls_app():
     """Line 337: __main__ block invokes app()."""
     import runpy
+
     # Patch Typer.__call__ at the class level so the re-imported app instance is intercepted
     with patch("typer.Typer.__call__") as mock_call:
         runpy.run_module("cli.main", run_name="__main__", alter_sys=False)
@@ -576,9 +693,11 @@ def test_cli_main_entrypoint_calls_app():
 
 # ── _run_session: event type coverage ────────────────────────────────────────
 
+
 def _make_session_params():
     from models.enums import OperatingMode
     from models.session import SessionParams
+
     return SessionParams(
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
@@ -614,14 +733,19 @@ def test_run_session_empty_content_skipped(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "skip-sess", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "skip-sess", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))  # must not raise
 
 
@@ -649,14 +773,19 @@ def test_run_session_function_call_event(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "fc-sess", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "fc-sess", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))  # must not raise
 
 
@@ -688,26 +817,34 @@ def test_run_session_function_response_event(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "fr-sess", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "fr-sess", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))  # must not raise
 
 
 # ── _summarise_tool_response ──────────────────────────────────────────────────
 
+
 def test_summarise_empty_resp():
     from cli.main import _summarise_tool_response
+
     assert _summarise_tool_response("anything", {}) == "(empty)"
 
 
 def test_summarise_get_ohlcv_with_bars():
     from cli.main import _summarise_tool_response
+
     resp = {
         "symbol": "XLK",
         "bars": [{"close": 185.0}, {"close": 186.0}],
@@ -720,6 +857,7 @@ def test_summarise_get_ohlcv_with_bars():
 
 def test_summarise_get_ohlcv_zero_bars():
     from cli.main import _summarise_tool_response
+
     resp = {"symbol": "XLK", "bars": []}
     result = _summarise_tool_response("get_ohlcv", resp)
     assert "0 bars" in result
@@ -727,6 +865,7 @@ def test_summarise_get_ohlcv_zero_bars():
 
 def test_summarise_screen_etfs():
     from cli.main import _summarise_tool_response
+
     resp = {
         "results": [
             {"symbol": "XLK"},
@@ -740,6 +879,7 @@ def test_summarise_screen_etfs():
 
 def test_summarise_score_technical():
     from cli.main import _summarise_tool_response
+
     resp = {"symbol": "XLK", "score": 0.75, "signal": "buy", "regime_fit": 0.9}
     result = _summarise_tool_response("score_technical", resp)
     assert "XLK" in result
@@ -748,6 +888,7 @@ def test_summarise_score_technical():
 
 def test_summarise_score_momentum():
     from cli.main import _summarise_tool_response
+
     resp = {"symbol": "SPY", "score": 0.6, "signal": "hold", "regime_fit": 0.7}
     result = _summarise_tool_response("score_momentum", resp)
     assert "SPY" in result
@@ -755,6 +896,7 @@ def test_summarise_score_momentum():
 
 def test_summarise_detect_market_regime():
     from cli.main import _summarise_tool_response
+
     resp = {
         "regime": "BULL_TREND",
         "vix": 15.2,
@@ -768,6 +910,7 @@ def test_summarise_detect_market_regime():
 
 def test_summarise_get_macro_data():
     from cli.main import _summarise_tool_response
+
     resp = {"vix": 18.5, "yield_10y": 4.2, "dxy": 104.3}
     result = _summarise_tool_response("get_macro_data", resp)
     assert "18.5" in result
@@ -776,6 +919,7 @@ def test_summarise_get_macro_data():
 
 def test_summarise_get_quote():
     from cli.main import _summarise_tool_response
+
     resp = {"symbol": "XLK", "bid": 180.0, "ask": 180.05}
     result = _summarise_tool_response("get_quote", resp)
     assert "XLK" in result
@@ -784,6 +928,7 @@ def test_summarise_get_quote():
 
 def test_summarise_get_calibration_with_data():
     from cli.main import _summarise_tool_response
+
     resp = {
         "has_data": True,
         "opt_win_rate": 0.6,
@@ -797,6 +942,7 @@ def test_summarise_get_calibration_with_data():
 
 def test_summarise_get_calibration_no_data():
     from cli.main import _summarise_tool_response
+
     resp = {"has_data": False}
     result = _summarise_tool_response("get_calibration", resp)
     assert "no calibration" in result
@@ -804,6 +950,7 @@ def test_summarise_get_calibration_no_data():
 
 def test_summarise_get_portfolio():
     from cli.main import _summarise_tool_response
+
     resp = {
         "positions": [{"symbol": "XLK"}],
         "portfolio_value": 10000.0,
@@ -816,6 +963,7 @@ def test_summarise_get_portfolio():
 
 def test_summarise_write_trade():
     from cli.main import _summarise_tool_response
+
     resp = {"trade_id": "t-123", "written": True, "extra": "ignored"}
     result = _summarise_tool_response("write_trade", resp)
     assert "t-123" in result
@@ -823,6 +971,7 @@ def test_summarise_write_trade():
 
 def test_summarise_record_cycle():
     from cli.main import _summarise_tool_response
+
     resp = {"cycle_index": 1, "outcome": "completed"}
     result = _summarise_tool_response("record_cycle", resp)
     assert "1" in result
@@ -830,6 +979,7 @@ def test_summarise_record_cycle():
 
 def test_summarise_generic_fallback():
     from cli.main import _summarise_tool_response
+
     resp = {"status": "ok", "count": 5, "nested": {"ignored": True}}
     result = _summarise_tool_response("unknown_tool", resp)
     assert "status" in result
@@ -838,6 +988,7 @@ def test_summarise_generic_fallback():
 
 def test_summarise_generic_fallback_all_complex():
     from cli.main import _summarise_tool_response
+
     resp = {"nested": {"a": 1}, "list": [1, 2, 3]}
     result = _summarise_tool_response("unknown_tool", resp)
     assert result == "(ok)"
@@ -845,8 +996,10 @@ def test_summarise_generic_fallback_all_complex():
 
 # ── _agent_color / _agent_tag helpers ────────────────────────────────────────
 
+
 def test_agent_color_known_agent():
     from cli.main import _agent_color
+
     assert _agent_color("coordinator") == "bold cyan"
     assert _agent_color("risk_optimist") == "bold green"
     assert _agent_color("risk_pessimist") == "bold red"
@@ -857,11 +1010,13 @@ def test_agent_color_known_agent():
 
 def test_agent_color_unknown_agent():
     from cli.main import _agent_color
+
     assert _agent_color("something_else") == "bold white"
 
 
 def test_agent_tag_known_agent():
     from cli.main import _agent_tag
+
     tag = _agent_tag("coordinator")
     assert "[coordinator]" in tag
     assert "bold cyan" in tag
@@ -869,6 +1024,7 @@ def test_agent_tag_known_agent():
 
 def test_agent_tag_unknown_agent():
     from cli.main import _agent_tag
+
     tag = _agent_tag("mystery")
     assert "[mystery]" in tag
     assert "bold white" in tag
@@ -876,13 +1032,16 @@ def test_agent_tag_unknown_agent():
 
 # ── _compress_call_args ───────────────────────────────────────────────────────
 
+
 def test_compress_call_args_empty():
     from cli.main import _compress_call_args
+
     assert _compress_call_args({}) == ""
 
 
 def test_compress_call_args_short_values_unchanged():
     from cli.main import _compress_call_args
+
     result = _compress_call_args({"symbol": "XLK", "bars": 20})
     assert "symbol" in result
     assert "XLK" in result
@@ -891,6 +1050,7 @@ def test_compress_call_args_short_values_unchanged():
 
 def test_compress_call_args_compresses_long_list():
     from cli.main import _compress_call_args
+
     result = _compress_call_args({"symbols": ["A", "B", "C", "D", "E", "F", "G"]})
     assert "7 values" in result
     assert "symbols" in result
@@ -898,6 +1058,7 @@ def test_compress_call_args_compresses_long_list():
 
 def test_compress_call_args_preserves_short_list():
     from cli.main import _compress_call_args
+
     result = _compress_call_args({"symbols": ["A", "B", "C"]})
     assert "3 values" not in result
     assert "A" in result
@@ -905,6 +1066,7 @@ def test_compress_call_args_preserves_short_list():
 
 def test_compress_call_args_truncates_long_string():
     from cli.main import _compress_call_args
+
     long_val = "x" * 100
     result = _compress_call_args({"msg": long_val})
     assert "…" in result
@@ -914,6 +1076,7 @@ def test_compress_call_args_truncates_long_string():
 
 
 # ── _run_session: risk agent verdict label ────────────────────────────────────
+
 
 def test_run_session_risk_agent_verdict_label(tmp_db, monkeypatch):
     """Events from risk_optimist show [verdict] label instead of [reasoning]."""
@@ -938,14 +1101,19 @@ def test_run_session_risk_agent_verdict_label(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "verdict-sess", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "verdict-sess", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))  # must not raise
 
 
@@ -980,21 +1148,28 @@ def test_run_session_synthesise_risk_event(tmp_db, monkeypatch):
     mock_session_service = AsyncMock()
 
     with (
-        patch("cli.main.build_app",
-              return_value=(mock_runner, "synth-sess", MagicMock(), mock_session_service)),
+        patch(
+            "cli.main.build_app",
+            return_value=(mock_runner, "synth-sess", MagicMock(), mock_session_service),
+        ),
         patch("cli.main.init_db"),
         patch("cli.main.setup_observability"),
-        patch("cli.main.get_portfolio",
-              new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0})),
+        patch(
+            "cli.main.get_portfolio",
+            new=AsyncMock(return_value={"positions": [], "portfolio_value": 0.0}),
+        ),
     ):
         from cli.main import _run_session
+
         asyncio.run(_run_session(params))  # must not raise
 
 
 # ── _summarise_tool_response: new tool cases ──────────────────────────────────
 
+
 def test_summarise_get_market_status():
     from cli.main import _summarise_tool_response
+
     resp = {"is_open": True, "next_close": "16:00", "timezone": "America/New_York"}
     result = _summarise_tool_response("get_market_status", resp)
     assert "True" in result
@@ -1003,6 +1178,7 @@ def test_summarise_get_market_status():
 
 def test_summarise_get_benchmark_return():
     from cli.main import _summarise_tool_response
+
     resp = {
         "symbol": "EWG",
         "benchmark": "SPY",
@@ -1018,6 +1194,7 @@ def test_summarise_get_benchmark_return():
 
 def test_summarise_get_sector_performance():
     from cli.main import _summarise_tool_response
+
     resp = {"timeframe": "1M", "sectors": {}}
     result = _summarise_tool_response("get_sector_performance", resp)
     assert "1M" in result
@@ -1025,6 +1202,7 @@ def test_summarise_get_sector_performance():
 
 def test_summarise_detect_momentum():
     from cli.main import _summarise_tool_response
+
     resp = {
         "symbol": "XLK",
         "momentum_score": 0.42,
@@ -1038,6 +1216,7 @@ def test_summarise_detect_momentum():
 
 def test_summarise_compute_rsi():
     from cli.main import _summarise_tool_response
+
     resp = {"symbol": "XLK", "current": 68.5, "is_overbought": False, "is_oversold": False}
     result = _summarise_tool_response("compute_rsi", resp)
     assert "XLK" in result
@@ -1046,6 +1225,7 @@ def test_summarise_compute_rsi():
 
 def test_summarise_compute_macd():
     from cli.main import _summarise_tool_response
+
     resp = {
         "symbol": "XLK",
         "current_macd": 0.123,
@@ -1059,6 +1239,7 @@ def test_summarise_compute_macd():
 
 def test_summarise_compute_bollinger():
     from cli.main import _summarise_tool_response
+
     resp = {
         "symbol": "XLK",
         "current_price": 185.5,
@@ -1072,6 +1253,7 @@ def test_summarise_compute_bollinger():
 
 def test_summarise_check_loss_limit_ok():
     from cli.main import _summarise_tool_response
+
     resp = {"breached": False, "remaining_eur": 450.0, "consumed_pct": 0.1}
     result = _summarise_tool_response("check_loss_limit", resp)
     assert "OK" in result
@@ -1080,6 +1262,7 @@ def test_summarise_check_loss_limit_ok():
 
 def test_summarise_check_loss_limit_breached():
     from cli.main import _summarise_tool_response
+
     resp = {"breached": True, "remaining_eur": 0.0, "consumed_pct": 1.0}
     result = _summarise_tool_response("check_loss_limit", resp)
     assert "BREACHED" in result
@@ -1088,6 +1271,7 @@ def test_summarise_check_loss_limit_breached():
 
 def test_summarise_select_shortlist():
     from cli.main import _summarise_tool_response
+
     resp = {"n": 3, "strategy": "MOMENTUM", "below_threshold_count": 2}
     result = _summarise_tool_response("select_shortlist", resp)
     assert "n=3" in result
@@ -1096,6 +1280,7 @@ def test_summarise_select_shortlist():
 
 def test_summarise_synthesise_risk_low():
     from cli.main import _summarise_tool_response
+
     resp = {"risk_level": "LOW", "risk_score": 0.2, "debate_winner": "optimist"}
     result = _summarise_tool_response("synthesise_risk", resp)
     assert "LOW" in result
@@ -1104,6 +1289,7 @@ def test_summarise_synthesise_risk_low():
 
 def test_summarise_synthesise_risk_medium():
     from cli.main import _summarise_tool_response
+
     resp = {"risk_level": "MEDIUM", "risk_score": 0.5, "debate_winner": "tie"}
     result = _summarise_tool_response("synthesise_risk", resp)
     assert "MEDIUM" in result
@@ -1112,6 +1298,7 @@ def test_summarise_synthesise_risk_medium():
 
 def test_summarise_synthesise_risk_high():
     from cli.main import _summarise_tool_response
+
     resp = {"risk_level": "HIGH", "risk_score": 0.8, "debate_winner": "pessimist"}
     result = _summarise_tool_response("synthesise_risk", resp)
     assert "HIGH" in result
@@ -1120,6 +1307,7 @@ def test_summarise_synthesise_risk_high():
 
 def test_summarise_resolve_unresolved_trades():
     from cli.main import _summarise_tool_response
+
     resp = {"resolved_count": 2, "failed_count": 0}
     result = _summarise_tool_response("resolve_unresolved_trades", resp)
     assert "resolved=2" in result
@@ -1128,6 +1316,7 @@ def test_summarise_resolve_unresolved_trades():
 
 def test_summarise_abort_cycle():
     from cli.main import _summarise_tool_response
+
     resp = {"stage": "risk", "reason": "loss limit exceeded"}
     result = _summarise_tool_response("abort_cycle", resp)
     assert "ABORTED" in result
@@ -1136,6 +1325,7 @@ def test_summarise_abort_cycle():
 
 def test_summarise_request_hitl():
     from cli.main import _summarise_tool_response
+
     resp = {"action": "approve", "source": "user", "latency_ms": 1200}
     result = _summarise_tool_response("request_hitl", resp)
     assert "approve" in result
@@ -1144,6 +1334,7 @@ def test_summarise_request_hitl():
 
 def test_summarise_get_session_summary():
     from cli.main import _summarise_tool_response
+
     resp = {
         "cycle_count": 5,
         "committed_count": 3,
@@ -1158,6 +1349,7 @@ def test_summarise_get_session_summary():
 
 def test_summarise_list_strategies():
     from cli.main import _summarise_tool_response
+
     resp = {"count": 3, "strategies": ["MOMENTUM", "MEAN_REVERSION", "BREAKOUT"]}
     result = _summarise_tool_response("list_strategies", resp)
     assert "3 strategies" in result
@@ -1165,6 +1357,7 @@ def test_summarise_list_strategies():
 
 def test_summarise_get_strategy_short_desc():
     from cli.main import _summarise_tool_response
+
     resp = {"name": "MOMENTUM", "description": "Buy high, sell higher."}
     result = _summarise_tool_response("get_strategy", resp)
     assert "MOMENTUM" in result
@@ -1174,6 +1367,7 @@ def test_summarise_get_strategy_short_desc():
 
 def test_summarise_get_strategy_long_desc():
     from cli.main import _summarise_tool_response
+
     long_desc = "A" * 100
     resp = {"name": "COMPLEX", "description": long_desc}
     result = _summarise_tool_response("get_strategy", resp)
@@ -1183,6 +1377,7 @@ def test_summarise_get_strategy_long_desc():
 
 def test_summarise_get_news():
     from cli.main import _summarise_tool_response
+
     resp = {"symbol": "EWG", "items": [{"title": "news1"}, {"title": "news2"}]}
     result = _summarise_tool_response("get_news", resp)
     assert "EWG" in result

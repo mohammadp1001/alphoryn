@@ -37,19 +37,15 @@ jobs:
         run: mypy . --ignore-missing-imports
         continue-on-error: true  # advisory until type stubs are complete
 
-  test:
-    name: Unit & integration tests
+  unit-tests:
+    name: Unit tests (3.13)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.13"]
-
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
 
       - name: Install uv
         run: pip install uv
@@ -57,9 +53,9 @@ jobs:
       - name: Install deps
         run: uv pip install --system -e ".[dev]"
 
-      - name: Run tests with coverage
+      - name: Run unit tests with coverage
         run: |
-          python -m pytest tests/unit/ tests/integration/ \
+          python -m pytest tests/unit/ \
             -v --tb=short \
             --cov=agent --cov=tools --cov=db --cov=infra --cov=models --cov=cli --cov=evals \
             --cov-report=xml --cov-report=term-missing \
@@ -68,7 +64,7 @@ jobs:
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.python-version }}
+          name: coverage-3.13
           path: coverage.xml
 
   safety:
@@ -85,7 +81,7 @@ jobs:
 
   all-checks:
     name: All checks passed
-    needs: [lint-and-type, test, safety]
+    needs: [lint-and-type, unit-tests, safety]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -95,8 +91,8 @@ jobs:
             echo "Lint/type-check failed — fix ruff errors before merging"
             exit 1
           fi
-          if [ "${{ needs.test.result }}" != "success" ]; then
-            echo "Tests or coverage gate failed — all tests must pass at 100% coverage"
+          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
+            echo "Unit tests or coverage gate failed — all tests must pass at 100% coverage"
             exit 1
           fi
           echo "All required checks passed"

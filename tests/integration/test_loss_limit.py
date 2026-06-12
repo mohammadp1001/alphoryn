@@ -1,4 +1,5 @@
 """Integration tests for loss limit checking logic."""
+
 from __future__ import annotations
 
 import asyncio

@@ -17,6 +17,7 @@ Pre-requisites:
     - The runner + session_id are accessible (run in the same process, or pass
       a previously serialised session file with --events-file)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -203,9 +204,7 @@ def record_from_events_file(
 
 
 def _main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(
-        description="Record a coordinator session as an eval fixture"
-    )
+    parser = argparse.ArgumentParser(description="Record a coordinator session as an eval fixture")
     parser.add_argument("--case-id", required=True, help="eval_case_id for the fixture")
     parser.add_argument("--output", required=True, help="Output JSON file path")
     parser.add_argument(

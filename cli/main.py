@@ -6,6 +6,7 @@ Usage:
   algotrade setup                # configure credentials
   algotrade history              # show recent sessions
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -39,12 +40,12 @@ console = Console()
 # ── Agent display helpers ──────────────────────────────────────────────────────
 
 _AGENT_COLORS: dict[str, str] = {
-    "coordinator":    "bold cyan",
-    "risk_optimist":  "bold green",
+    "coordinator": "bold cyan",
+    "risk_optimist": "bold green",
     "risk_pessimist": "bold red",
     "research_agent": "bold blue",
     "analysis_agent": "bold magenta",
-    "execution_agent":"bold yellow",
+    "execution_agent": "bold yellow",
 }
 
 
@@ -71,6 +72,7 @@ def _compress_call_args(args: dict) -> str:
 
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
+
 
 @app.command("setup")
 def setup_cmd() -> None:
@@ -109,16 +111,32 @@ def setup_cmd() -> None:
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 
+
 @app.command("run")
 def run_cmd(
     mode: str = typer.Option(None, "--mode", "-m", help="SEMI_AUTO|FULL_AUTO"),
     loss_limit: float = typer.Option(None, "--loss-limit", help="Max loss in EUR"),
-    timeframe: str = typer.Option(None, "--timeframe", "-t", help="Session duration: 30Min|1Hour|3Hour|12Hour|1Day|2Day|5Day"),
+    timeframe: str = typer.Option(
+        None, "--timeframe", "-t", help="Session duration: 30Min|1Hour|3Hour|12Hour|1Day|2Day|5Day"
+    ),
     shortlist_n: int = typer.Option(None, "--shortlist-n", help="Candidate shortlist size (1-5)"),
     hitl_timeout: int = typer.Option(None, "--hitl-timeout", help="HITL prompt timeout seconds"),
-    universe: str = typer.Option(None, "--universe", "-u", help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET|CRYPTO|MIXED_MARKET"),
-    allow_closed_market: bool = typer.Option(False, "--allow-closed-market", help="Proceed even when market is closed (useful for testing)"),
-    coordinator_model: str = typer.Option(None, "--coordinator-model", help="Override coordinator LLM. Use 'openrouter/<provider>/<model>' for OpenRouter models, or a Gemini model ID. Default: gemini-2.5-flash"),
+    universe: str = typer.Option(
+        None,
+        "--universe",
+        "-u",
+        help="US_SECTOR_ETFS|US_TECH_ETFS|US_BROAD_MARKET|COMMODITIES|FIXED_INCOME|INTERNATIONAL_DEVELOPED|EMERGING_MARKETS|DIVIDEND|HEALTHCARE|ENERGY|REAL_ESTATE|EU_MARKET|GERMAN_MARKET|CRYPTO|MIXED_MARKET",
+    ),
+    allow_closed_market: bool = typer.Option(
+        False,
+        "--allow-closed-market",
+        help="Proceed even when market is closed (useful for testing)",
+    ),
+    coordinator_model: str = typer.Option(
+        None,
+        "--coordinator-model",
+        help="Override coordinator LLM. Use 'openrouter/<provider>/<model>' for OpenRouter models, or a Gemini model ID. Default: gemini-2.5-flash",
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print session params, don't execute"),
 ) -> None:
@@ -263,7 +281,7 @@ async def _run_session(params: SessionParams) -> None:
                     display = fc.name.replace("__", ".")
                     if fc.name == "coordinator__synthesise_risk":
                         a = fc.args or {}
-                        opt_tag  = _agent_tag("risk_optimist")
+                        opt_tag = _agent_tag("risk_optimist")
                         pess_tag = _agent_tag("risk_pessimist")
                         rprint(f"\n{tag} [dim]>>[/dim]  [bold]{display}[/bold]")
                         rprint(
@@ -327,6 +345,7 @@ async def _load_alpaca_credentials() -> tuple[str, str]:
 
 # ── History ───────────────────────────────────────────────────────────────────
 
+
 @app.command("history")
 def history_cmd(
     limit: int = typer.Option(20, "--limit", "-n", help="Number of sessions to show"),
@@ -375,6 +394,7 @@ def history_cmd(
 
 # ── Status ────────────────────────────────────────────────────────────────────
 
+
 @app.command("status")
 def status_cmd() -> None:
     """Show calibration stats and unresolved trades."""
@@ -402,10 +422,15 @@ def status_cmd() -> None:
             table.add_column(col)
         for r in rows:
             total = r["wins"] + r["losses"]
-            wr = f"{r['wins']/total:.0%}" if total > 0 else "—"
+            wr = f"{r['wins'] / total:.0%}" if total > 0 else "—"
             table.add_row(
-                r["agent"], r["market_regime"], r["strategy"],
-                str(r["wins"]), str(r["losses"]), str(r["ties"]), wr,
+                r["agent"],
+                r["market_regime"],
+                r["strategy"],
+                str(r["wins"]),
+                str(r["losses"]),
+                str(r["ties"]),
+                wr,
             )
         console.print(table)
     else:
@@ -413,6 +438,7 @@ def status_cmd() -> None:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _summarise_tool_response(tool_name: str, resp: dict) -> str:
     """Return a compact human-readable summary of a tool response for CLI display."""
@@ -562,10 +588,14 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
     # ── Memory ────────────────────────────────────────────────────────────────
     if tool_name == "get_calibration":
         return (
-            f"opt={resp.get('opt_win_rate', 0):.0%}  "
-            f"pess={resp.get('pess_win_rate', 0):.0%}  "
-            f"n={resp.get('trade_count')}"
-        ) if resp.get("has_data") else "no calibration data yet"
+            (
+                f"opt={resp.get('opt_win_rate', 0):.0%}  "
+                f"pess={resp.get('pess_win_rate', 0):.0%}  "
+                f"n={resp.get('trade_count')}"
+            )
+            if resp.get("has_data")
+            else "no calibration data yet"
+        )
 
     if tool_name == "get_portfolio":
         return (
@@ -576,13 +606,17 @@ def _summarise_tool_response(tool_name: str, resp: dict) -> str:
 
     if tool_name in ("write_trade", "record_cycle"):
         return json.dumps(
-            {k: v for k, v in resp.items() if k in ("trade_id", "written", "cycle_index", "outcome")}
+            {
+                k: v
+                for k, v in resp.items()
+                if k in ("trade_id", "written", "cycle_index", "outcome")
+            }
         )
 
     # ── Generic fallback ──────────────────────────────────────────────────────
     parts = []
     for k, v in resp.items():
-        if isinstance(v, (str, int, float, bool)) and len(parts) < 6:
+        if isinstance(v, str | int | float | bool) and len(parts) < 6:
             parts.append(f"{k}={v!r}")
     return ", ".join(parts) if parts else "(ok)"
 
@@ -598,7 +632,10 @@ def _print_session_params(params: SessionParams) -> None:
         ("Loss limit", f"€{params.loss_limit_eur:,.0f}"),
         ("Timeframe", params.timeframe.value),
         ("Shortlist N", str(params.shortlist_n)),
-        ("HITL timeout", f"{params.hitl_timeout_seconds}s ({params.hitl_timeout_action} on timeout)"),
+        (
+            "HITL timeout",
+            f"{params.hitl_timeout_seconds}s ({params.hitl_timeout_action} on timeout)",
+        ),
         ("Allow closed market", str(params.allow_closed_market)),
         ("Coordinator model", params.coordinator_model or "gemini-2.5-flash (default)"),
     ]

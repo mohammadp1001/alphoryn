@@ -10,6 +10,7 @@ Asset class routing:
 Recovery guarantee: every path through _run_async_impl writes state["order_result"]
 before yielding the final Event, so the coordinator can always read the outcome.
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,9 +29,7 @@ logger = logging.getLogger("agent.execution")
 class ExecutionAgent(BaseAgent):
     """Thin execution layer — no LLM, just deterministic order routing."""
 
-    async def _run_async_impl(
-        self, ctx: InvocationContext
-    ) -> AsyncGenerator[Event, None]:
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         state = ctx.session.state
         raw = state.get("pending_order")
 
@@ -56,7 +55,10 @@ class ExecutionAgent(BaseAgent):
 
         logger.info(
             "execution_agent: %s %s %s asset_class=%s",
-            order.side, order.symbol, order.order_type, order.asset_class,
+            order.side,
+            order.symbol,
+            order.order_type,
+            order.asset_class,
         )
 
         if order.asset_class in ("etf", "crypto"):
@@ -69,6 +71,7 @@ class ExecutionAgent(BaseAgent):
 
 
 # ── Alpaca execution ──────────────────────────────────────────────────────────
+
 
 async def _execute_alpaca(order: PendingOrder) -> dict:
     from infra.rate_limiter import acquire_alpaca_trading
@@ -141,6 +144,7 @@ def _get_last_price(symbol: str, client: object) -> float | None:
     try:
         from alpaca.data.historical import StockHistoricalDataClient  # type: ignore[import]
         from alpaca.data.requests import StockLatestQuoteRequest  # type: ignore[import]
+
         data_client = StockHistoricalDataClient()
         resp = data_client.get_stock_latest_quote(StockLatestQuoteRequest(symbol_or_symbols=symbol))
         quote = resp.get(symbol)
@@ -152,6 +156,7 @@ def _get_last_price(symbol: str, client: object) -> float | None:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _error_result(symbol: str, error: str) -> dict:
     result = OrderResultOutput(

@@ -1,4 +1,5 @@
 """Integration test: market regime detection from macro inputs (no API calls)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +33,14 @@ def test_detect_market_regime_rules(
 def test_detect_market_regime_returns_reasoning() -> None:
     from tools.research.tools import detect_market_regime
 
-    result = asyncio.run(detect_market_regime(35.0, 4.0, 4.5, -5.0, ))
+    result = asyncio.run(
+        detect_market_regime(
+            35.0,
+            4.0,
+            4.5,
+            -5.0,
+        )
+    )
     assert len(result["reasoning"]) > 10
     assert "yield_curve_spread" in result
 

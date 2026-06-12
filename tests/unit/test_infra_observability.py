@@ -1,4 +1,5 @@
 """Unit tests for infra.observability — setup and span helpers."""
+
 from __future__ import annotations
 
 import logging
@@ -7,9 +8,11 @@ from unittest.mock import MagicMock, patch
 
 # ── setup_observability (local / no GCP) ─────────────────────────────────────
 
+
 def test_setup_observability_local_sets_tracer(monkeypatch):
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     import infra.observability as obs
+
     obs._tracer = None  # reset global
 
     obs.setup_observability("test-session-123")
@@ -31,6 +34,7 @@ def test_setup_observability_with_gcp_project(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-gcp-project")
 
     import infra.observability as obs
+
     obs._tracer = None
 
     # Patch both cloud setup methods to avoid actual GCP calls
@@ -49,6 +53,7 @@ def test_setup_observability_cloud_trace_import_error_falls_back_to_local(monkey
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-project")
 
     import infra.observability as obs
+
     obs._tracer = None
 
     # Patch both to avoid any actual GCP calls; just verify it doesn't raise
@@ -59,6 +64,7 @@ def test_setup_observability_cloud_trace_import_error_falls_back_to_local(monkey
 
 
 # ── _setup_local_trace ────────────────────────────────────────────────────────
+
 
 def test_setup_local_trace_does_not_raise():
     from opentelemetry.sdk.resources import Resource
@@ -71,6 +77,7 @@ def test_setup_local_trace_does_not_raise():
 
 
 # ── _setup_cloud_trace ────────────────────────────────────────────────────────
+
 
 def test_setup_cloud_trace_falls_back_if_import_error(monkeypatch):
     from opentelemetry.sdk.resources import Resource
@@ -109,12 +116,14 @@ def test_setup_cloud_trace_success_path():
 
 # ── _setup_cloud_logging ──────────────────────────────────────────────────────
 
+
 def _inject_google_cloud_logging(mock_cloud_logging_mod: MagicMock) -> tuple:
     """
     Inject a mock google.cloud.logging into sys.modules AND onto the google namespace.
     Returns (mock_gcloud, original_cloud_attr) for cleanup in finally blocks.
     """
     import google as google_mod
+
     mock_gcloud = MagicMock()
     mock_gcloud.logging = mock_cloud_logging_mod
     # Attach to the real google namespace package so `google.cloud.logging` attribute access works
@@ -151,8 +160,9 @@ def test_setup_cloud_logging_with_google_cloud_logging():
 def test_setup_cloud_logging_without_google_cloud_logging():
     """When google.cloud.logging is unavailable, falls back to basicConfig."""
     import infra.observability as obs
-    # google.cloud.logging is not installed → ImportError fallback
-    obs._setup_cloud_logging("project", "sess")  # should not raise
+
+    with patch.dict(sys.modules, {"google.cloud.logging": None}):
+        obs._setup_cloud_logging("project", "sess")  # should not raise
 
 
 def test_setup_cloud_logging_injects_session_id_into_log_record():
@@ -179,6 +189,7 @@ def test_setup_cloud_logging_injects_session_id_into_log_record():
 
 
 # ── span context managers ─────────────────────────────────────────────────────
+
 
 def test_span_yields_span_object():
     from infra.observability import span
@@ -231,6 +242,7 @@ def test_db_write_span_yields():
 
 # ── get_logger ────────────────────────────────────────────────────────────────
 
+
 def test_get_logger_returns_logger():
     from infra.observability import get_logger
 
@@ -248,6 +260,7 @@ def test_get_logger_different_names():
 
 
 # ── _setup_cloud_logging ImportError fallback ─────────────────────────────────
+
 
 def test_setup_cloud_logging_import_error_falls_back_to_basicconfig():
     """Lines 75-76: missing google.cloud.logging → basicConfig(INFO)."""

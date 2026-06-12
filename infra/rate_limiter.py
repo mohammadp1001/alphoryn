@@ -2,6 +2,7 @@
 Token-bucket rate limiters — one per external API.
 Thread-safe for async use via asyncio.Lock.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,8 +25,8 @@ from config import (
 
 @dataclass
 class TokenBucket:
-    rate: float         # tokens added per second
-    burst: int          # max tokens (bucket capacity)
+    rate: float  # tokens added per second
+    burst: int  # max tokens (bucket capacity)
     _tokens: float = field(init=False)
     _last_refill: float = field(init=False)
     _lock: asyncio.Lock = field(init=False, default_factory=asyncio.Lock)

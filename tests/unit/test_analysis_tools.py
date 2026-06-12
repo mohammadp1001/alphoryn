@@ -1,10 +1,12 @@
 """Unit tests for pure-Python analysis tools (no external API calls)."""
+
 from __future__ import annotations
 
 import asyncio
 import math
 
 # ── RSI ───────────────────────────────────────────────────────────────────────
+
 
 def test_rsi_overbought() -> None:
     from tools.analysis.tools import compute_rsi
@@ -45,6 +47,7 @@ def test_rsi_insufficient_data_returns_50() -> None:
 
 # ── MACD ──────────────────────────────────────────────────────────────────────
 
+
 def test_macd_returns_required_keys() -> None:
     from tools.analysis.tools import compute_macd
 
@@ -57,12 +60,13 @@ def test_macd_bull_trend_positive_histogram() -> None:
     from tools.analysis.tools import compute_macd
 
     # Strong uptrend → MACD histogram should be positive
-    closes = [100.0 * (1.002 ** i) for i in range(60)]
+    closes = [100.0 * (1.002**i) for i in range(60)]
     result = asyncio.run(compute_macd("TEST", closes))
     assert result["current_histogram"] > 0
 
 
 # ── Bollinger Bands ───────────────────────────────────────────────────────────
+
 
 def test_bollinger_price_inside_bands() -> None:
     from tools.analysis.tools import compute_bollinger
@@ -83,6 +87,7 @@ def test_bollinger_bandwidth_positive() -> None:
 
 # ── ATR ───────────────────────────────────────────────────────────────────────
 
+
 def test_atr_positive_for_volatile_data() -> None:
     from tools.analysis.tools import compute_atr
 
@@ -96,10 +101,11 @@ def test_atr_positive_for_volatile_data() -> None:
 
 # ── Momentum ─────────────────────────────────────────────────────────────────
 
+
 def test_momentum_score_in_range() -> None:
     from tools.analysis.tools import detect_momentum
 
-    closes = [100.0 * (1.001 ** i) for i in range(30)]
+    closes = [100.0 * (1.001**i) for i in range(30)]
     volumes = [1_000_000.0] * 30
     result = asyncio.run(detect_momentum("TEST", closes, volumes))
     assert -1.0 <= result["momentum_score"] <= 1.0
@@ -108,13 +114,14 @@ def test_momentum_score_in_range() -> None:
 def test_momentum_strong_uptrend_positive_score() -> None:
     from tools.analysis.tools import detect_momentum
 
-    closes = [100.0 * (1.005 ** i) for i in range(30)]
+    closes = [100.0 * (1.005**i) for i in range(30)]
     volumes = [1_500_000.0] * 30
     result = asyncio.run(detect_momentum("TEST", closes, volumes))
     assert result["momentum_score"] > 0
 
 
 # ── Drawdown ─────────────────────────────────────────────────────────────────
+
 
 def test_max_drawdown_flat_series_zero() -> None:
     from tools.analysis.tools import calc_max_drawdown
@@ -133,6 +140,7 @@ def test_max_drawdown_known_value() -> None:
 
 
 # ── Correlation ──────────────────────────────────────────────────────────────
+
 
 def test_correlation_perfect_positive() -> None:
     from tools.analysis.tools import calc_correlation
@@ -153,6 +161,7 @@ def test_correlation_perfect_negative() -> None:
 
 # ── Sharpe ────────────────────────────────────────────────────────────────────
 
+
 def test_sharpe_zero_volatility_returns_zero() -> None:
     from tools.analysis.tools import calc_sharpe
 
@@ -162,6 +171,7 @@ def test_sharpe_zero_volatility_returns_zero() -> None:
 
 
 # ── ATR insufficient data path ────────────────────────────────────────────────
+
 
 def test_atr_insufficient_data_returns_zero() -> None:
     from tools.analysis.tools import compute_atr
@@ -176,6 +186,7 @@ def test_atr_insufficient_data_returns_zero() -> None:
 
 
 # ── compute_beta ──────────────────────────────────────────────────────────────
+
 
 def test_compute_beta_returns_one_for_identical_series() -> None:
     from tools.analysis.tools import compute_beta
@@ -207,6 +218,7 @@ def test_compute_beta_uncorrelated_series() -> None:
 
 # ── detect_momentum insufficient data ────────────────────────────────────────
 
+
 def test_detect_momentum_insufficient_data() -> None:
     from tools.analysis.tools import detect_momentum
 
@@ -215,6 +227,7 @@ def test_detect_momentum_insufficient_data() -> None:
 
 
 # ── detect_crossover ──────────────────────────────────────────────────────────
+
 
 def test_detect_crossover_bullish() -> None:
     from tools.analysis.tools import detect_crossover
@@ -252,6 +265,7 @@ def test_detect_crossover_insufficient_data() -> None:
 
 # ── detect_support_resistance ─────────────────────────────────────────────────
 
+
 def test_detect_support_resistance_returns_levels() -> None:
     from tools.analysis.tools import detect_support_resistance
 
@@ -281,6 +295,7 @@ def test_detect_support_resistance_no_strong_levels() -> None:
 
 # ── rank_by_momentum ──────────────────────────────────────────────────────────
 
+
 def test_rank_by_momentum_sorted_correctly() -> None:
     from tools.analysis.tools import rank_by_momentum
 
@@ -308,6 +323,7 @@ def test_rank_by_momentum_empty_list() -> None:
 
 # ── run_backtest ──────────────────────────────────────────────────────────────
 
+
 def test_run_backtest_insufficient_data() -> None:
     from tools.analysis.tools import run_backtest
 
@@ -322,7 +338,7 @@ def test_run_backtest_with_enough_data() -> None:
     from tools.analysis.tools import run_backtest
 
     # 100 bars of trending data
-    closes = [100.0 * (1.001 ** i) for i in range(100)]
+    closes = [100.0 * (1.001**i) for i in range(100)]
     volumes = [1e6] * 100
     result = asyncio.run(run_backtest("TEST", "MOMENTUM", closes, volumes))
     assert result["symbol"] == "TEST"
@@ -336,6 +352,7 @@ def test_run_backtest_no_matches_branch() -> None:
     import math
 
     from tools.analysis.tools import run_backtest
+
     closes = [100.0 + 20.0 * math.sin(i * 0.5) for i in range(100)]
     volumes = [1e6] * 100
     # Patch detect_momentum to return very different scores for history vs current
@@ -346,6 +363,7 @@ def test_run_backtest_no_matches_branch() -> None:
 
 # ── calc_max_drawdown peak-update path ────────────────────────────────────────
 
+
 def test_max_drawdown_with_multiple_peaks_covers_peak_update() -> None:
     from tools.analysis.tools import calc_max_drawdown
 
@@ -355,10 +373,11 @@ def test_max_drawdown_with_multiple_peaks_covers_peak_update() -> None:
     # From peak of 120 to 90 → 25% drawdown
     assert abs(result["max_drawdown_pct"] - 25.0) < 0.01
     assert result["drawdown_start_bar"] == 3  # peak at index 3 (120.0)
-    assert result["drawdown_end_bar"] == 4    # trough at index 4 (90.0)
+    assert result["drawdown_end_bar"] == 4  # trough at index 4 (90.0)
 
 
 # ── score_technical ───────────────────────────────────────────────────────────
+
 
 def test_score_technical_momentum_strategy() -> None:
     from tools.analysis.tools import score_technical

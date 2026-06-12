@@ -1,4 +1,5 @@
 """Unit tests for tools.coordinator.tools — 8 coordinator tools."""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def tmp_db(tmp_path, monkeypatch):
@@ -29,24 +31,30 @@ def tmp_db(tmp_path, monkeypatch):
                 raise
             finally:
                 conn.close()
+
         return _ctx()
 
     monkeypatch.setattr("db.schema._connect", _connect)
 
     from db.schema import init_db
+
     init_db(db_file)
     return db_file
 
 
 # ── check_loss_limit ──────────────────────────────────────────────────────────
 
+
 def test_check_loss_limit_not_breached():
     from tools.coordinator.tools import check_loss_limit
-    result = asyncio.run(check_loss_limit(
-        session_realised_pnl_eur=-100.0,
-        loss_limit_eur=500.0,
-        unrealised_pnl_eur=-50.0,
-    ))
+
+    result = asyncio.run(
+        check_loss_limit(
+            session_realised_pnl_eur=-100.0,
+            loss_limit_eur=500.0,
+            unrealised_pnl_eur=-50.0,
+        )
+    )
 
     assert result["breached"] is False
     assert result["warning"] is False
@@ -56,11 +64,14 @@ def test_check_loss_limit_not_breached():
 
 def test_check_loss_limit_warning_threshold():
     from tools.coordinator.tools import check_loss_limit
-    result = asyncio.run(check_loss_limit(
-        session_realised_pnl_eur=-400.0,
-        loss_limit_eur=500.0,
-        unrealised_pnl_eur=0.0,
-    ))
+
+    result = asyncio.run(
+        check_loss_limit(
+            session_realised_pnl_eur=-400.0,
+            loss_limit_eur=500.0,
+            unrealised_pnl_eur=0.0,
+        )
+    )
 
     assert result["breached"] is False
     assert result["warning"] is True
@@ -69,11 +80,14 @@ def test_check_loss_limit_warning_threshold():
 
 def test_check_loss_limit_breached():
     from tools.coordinator.tools import check_loss_limit
-    result = asyncio.run(check_loss_limit(
-        session_realised_pnl_eur=-500.0,
-        loss_limit_eur=500.0,
-        unrealised_pnl_eur=0.0,
-    ))
+
+    result = asyncio.run(
+        check_loss_limit(
+            session_realised_pnl_eur=-500.0,
+            loss_limit_eur=500.0,
+            unrealised_pnl_eur=0.0,
+        )
+    )
 
     assert result["breached"] is True
     assert result["consumed_pct"] >= 100.0
@@ -82,32 +96,40 @@ def test_check_loss_limit_breached():
 
 def test_check_loss_limit_zero_loss_limit():
     from tools.coordinator.tools import check_loss_limit
-    result = asyncio.run(check_loss_limit(
-        session_realised_pnl_eur=0.0,
-        loss_limit_eur=0.0,
-        unrealised_pnl_eur=0.0,
-    ))
+
+    result = asyncio.run(
+        check_loss_limit(
+            session_realised_pnl_eur=0.0,
+            loss_limit_eur=0.0,
+            unrealised_pnl_eur=0.0,
+        )
+    )
     assert result["consumed_pct"] == 0.0
 
 
 def test_check_loss_limit_positive_pnl_no_breach():
     from tools.coordinator.tools import check_loss_limit
-    result = asyncio.run(check_loss_limit(
-        session_realised_pnl_eur=200.0,  # profit
-        loss_limit_eur=500.0,
-        unrealised_pnl_eur=100.0,
-    ))
+
+    result = asyncio.run(
+        check_loss_limit(
+            session_realised_pnl_eur=200.0,  # profit
+            loss_limit_eur=500.0,
+            unrealised_pnl_eur=100.0,
+        )
+    )
     assert result["breached"] is False
     assert result["consumed_pct"] <= 0.0
 
 
 def test_check_loss_limit_includes_unrealised_in_output():
     from tools.coordinator.tools import check_loss_limit
+
     result = asyncio.run(check_loss_limit(-100.0, 500.0, -75.0))
     assert result["unrealised_pnl_eur"] == -75.0
 
 
 # ── select_shortlist ──────────────────────────────────────────────────────────
+
 
 def test_select_shortlist_picks_top_n():
     signals = [
@@ -116,6 +138,7 @@ def test_select_shortlist_picks_top_n():
         {"symbol": "QQQ", "combined_score": 0.5},
     ]
     from tools.coordinator.tools import select_shortlist
+
     result = asyncio.run(select_shortlist(signals, shortlist_n=2, strategy="MOMENTUM"))
 
     assert result["n"] == 2
@@ -128,6 +151,7 @@ def test_select_shortlist_caps_at_max_shortlist_n():
     signals = [{"symbol": f"ETF{i}", "combined_score": float(i)} for i in range(10)]
     from config import MAX_SHORTLIST_N
     from tools.coordinator.tools import select_shortlist
+
     result = asyncio.run(select_shortlist(signals, shortlist_n=99, strategy="MOMENTUM"))
 
     assert result["n"] <= MAX_SHORTLIST_N
@@ -135,6 +159,7 @@ def test_select_shortlist_caps_at_max_shortlist_n():
 
 def test_select_shortlist_empty_signals():
     from tools.coordinator.tools import select_shortlist
+
     result = asyncio.run(select_shortlist([], shortlist_n=2, strategy="SECTOR_ROTATION"))
     assert result["n"] == 0
     assert result["shortlisted"] == []
@@ -143,14 +168,17 @@ def test_select_shortlist_empty_signals():
 def test_select_shortlist_fewer_signals_than_n():
     signals = [{"symbol": "XLK", "combined_score": 0.8}]
     from tools.coordinator.tools import select_shortlist
+
     result = asyncio.run(select_shortlist(signals, shortlist_n=3, strategy="MEAN_REVERSION"))
     assert result["n"] == 1
 
 
 # ── synthesise_risk ───────────────────────────────────────────────────────────
 
+
 def test_synthesise_risk_equal_weights_medium():
     from tools.coordinator.tools import synthesise_risk
+
     result = asyncio.run(synthesise_risk("LOW", "low text", "HIGH", "high text", 0.5, 0.5))
     assert result["risk_level"] == "MEDIUM"
     assert "risk_score" in result
@@ -160,24 +188,28 @@ def test_synthesise_risk_equal_weights_medium():
 
 def test_synthesise_risk_both_low_gives_low():
     from tools.coordinator.tools import synthesise_risk
+
     result = asyncio.run(synthesise_risk("LOW", "", "LOW", "", 0.5, 0.5))
     assert result["risk_level"] == "LOW"
 
 
 def test_synthesise_risk_both_high_gives_high():
     from tools.coordinator.tools import synthesise_risk
+
     result = asyncio.run(synthesise_risk("HIGH", "", "HIGH", "", 0.5, 0.5))
     assert result["risk_level"] == "HIGH"
 
 
 def test_synthesise_risk_zero_weights_fallback():
     from tools.coordinator.tools import synthesise_risk
+
     result = asyncio.run(synthesise_risk("LOW", "", "HIGH", "", 0.0, 0.0))
     assert result["risk_score"] == 1.0  # fallback = MEDIUM score
 
 
 def test_synthesise_risk_pessimist_override():
     from tools.coordinator.tools import synthesise_risk
+
     # pessimist HIGH + high win rate → override to HIGH
     result = asyncio.run(synthesise_risk("LOW", "", "HIGH", "", 0.8, 0.7))
     assert result["risk_level"] == "HIGH"
@@ -185,8 +217,10 @@ def test_synthesise_risk_pessimist_override():
 
 # ── update_plan_state ─────────────────────────────────────────────────────────
 
+
 def test_update_plan_state_returns_correct_response():
     from tools.coordinator.tools import update_plan_state
+
     result = asyncio.run(update_plan_state("sess-1", "market_regime", "BULL_TREND"))
 
     assert result["session_id"] == "sess-1"
@@ -197,11 +231,14 @@ def test_update_plan_state_returns_correct_response():
 
 # ── abort_cycle ───────────────────────────────────────────────────────────────
 
+
 def test_abort_cycle_returns_aborted_outcome(tmp_db):
     from db.schema import upsert_session
+
     upsert_session("sess-1", "MOMENTUM", "SEMI_AUTO")
 
     from tools.coordinator.tools import abort_cycle
+
     result = asyncio.run(abort_cycle("sess-1", 2, "risk too high", "risk_gate"))
 
     assert result["outcome"] == "ABORTED"
@@ -213,9 +250,11 @@ def test_abort_cycle_returns_aborted_outcome(tmp_db):
 
 def test_abort_cycle_writes_cycle_record_to_db(tmp_db):
     from db.schema import upsert_session
+
     upsert_session("sess-ab", "MOMENTUM", "SEMI_AUTO")
 
     from tools.coordinator.tools import abort_cycle
+
     asyncio.run(abort_cycle("sess-ab", 0, "loss limit breached", "loss_limit"))
 
     conn = sqlite3.connect(str(tmp_db))
@@ -233,16 +272,20 @@ def test_abort_cycle_writes_cycle_record_to_db(tmp_db):
 
 def test_abort_cycle_db_failure_still_returns_result(monkeypatch):
     from unittest.mock import patch
+
     with patch("db.schema._connect", side_effect=Exception("db gone")):
         from tools.coordinator.tools import abort_cycle
+
         result = asyncio.run(abort_cycle("sess-x", 0, "test", "test_stage"))
     assert result["outcome"] == "ABORTED"
 
 
 # ── get_session_summary ───────────────────────────────────────────────────────
 
+
 def test_get_session_summary_empty_session(tmp_db):
     from tools.coordinator.tools import get_session_summary
+
     result = asyncio.run(get_session_summary("unknown-session"))
 
     assert result["session_id"] == "unknown-session"
@@ -270,6 +313,7 @@ def test_get_session_summary_with_cycles(tmp_db):
     conn.close()
 
     from tools.coordinator.tools import get_session_summary
+
     result = asyncio.run(get_session_summary("sess-sum"))
 
     assert result["cycle_count"] == 2
@@ -280,8 +324,10 @@ def test_get_session_summary_with_cycles(tmp_db):
 
 # ── resolve_unresolved_trades ─────────────────────────────────────────────────
 
+
 def test_resolve_unresolved_trades_empty_db(tmp_db):
     from tools.coordinator.tools import resolve_unresolved_trades
+
     result = asyncio.run(resolve_unresolved_trades())
 
     assert result["resolved_count"] == 0
@@ -333,6 +379,7 @@ def test_resolve_unresolved_trades_with_pending_buy_trade(tmp_db, monkeypatch):
         patch("alpaca.trading.client.TradingClient", mock_client_cls),
     ):
         from tools.coordinator.tools import resolve_unresolved_trades
+
         result = asyncio.run(resolve_unresolved_trades())
 
     assert result["resolved_count"] == 1
@@ -384,6 +431,7 @@ def test_resolve_unresolved_trades_with_pending_sell_trade(tmp_db, monkeypatch):
         patch("alpaca.trading.client.TradingClient", mock_client_cls),
     ):
         from tools.coordinator.tools import resolve_unresolved_trades
+
         result = asyncio.run(resolve_unresolved_trades())
 
     assert result["resolved_count"] == 1
@@ -434,6 +482,7 @@ def test_resolve_unresolved_trades_no_fill_price(tmp_db, monkeypatch):
         patch("alpaca.trading.client.TradingClient", mock_client_cls),
     ):
         from tools.coordinator.tools import resolve_unresolved_trades
+
         result = asyncio.run(resolve_unresolved_trades())
 
     assert result["failed_count"] == 1
@@ -482,6 +531,7 @@ def test_resolve_unresolved_trades_api_exception(tmp_db, monkeypatch):
         patch("alpaca.trading.client.TradingClient", mock_client_cls),
     ):
         from tools.coordinator.tools import resolve_unresolved_trades
+
         result = asyncio.run(resolve_unresolved_trades())
 
     assert result["failed_count"] == 1
@@ -490,6 +540,7 @@ def test_resolve_unresolved_trades_api_exception(tmp_db, monkeypatch):
 
 # ── request_hitl ──────────────────────────────────────────────────────────────
 
+
 def test_request_hitl_confirm():
     from tools.coordinator.tools import request_hitl
 
@@ -497,11 +548,20 @@ def test_request_hitl_confirm():
         return "confirm"
 
     with patch("asyncio.wait_for", side_effect=fake_wait_for):
-        result = asyncio.run(request_hitl(
-            session_id="s", cycle_index=0, symbol="XLK",
-            side="buy", qty=10.0, risk_level="MEDIUM", risk_score=0.9,
-            strategy="MOMENTUM", timeout_seconds=60, timeout_action="abort",
-        ))
+        result = asyncio.run(
+            request_hitl(
+                session_id="s",
+                cycle_index=0,
+                symbol="XLK",
+                side="buy",
+                qty=10.0,
+                risk_level="MEDIUM",
+                risk_score=0.9,
+                strategy="MOMENTUM",
+                timeout_seconds=60,
+                timeout_action="abort",
+            )
+        )
 
     assert result["action"] == "confirm"
     assert result["source"] == "human"
@@ -515,11 +575,20 @@ def test_request_hitl_abort_input():
         return "abort"
 
     with patch("asyncio.wait_for", side_effect=fake_wait_for):
-        result = asyncio.run(request_hitl(
-            session_id="s", cycle_index=0, symbol="SPY",
-            side="sell", qty=5.0, risk_level="HIGH", risk_score=1.5,
-            strategy="MOMENTUM", timeout_seconds=30, timeout_action="confirm",
-        ))
+        result = asyncio.run(
+            request_hitl(
+                session_id="s",
+                cycle_index=0,
+                symbol="SPY",
+                side="sell",
+                qty=5.0,
+                risk_level="HIGH",
+                risk_score=1.5,
+                strategy="MOMENTUM",
+                timeout_seconds=30,
+                timeout_action="confirm",
+            )
+        )
 
     assert result["action"] == "abort"
     assert result["source"] == "human"
@@ -532,11 +601,20 @@ def test_request_hitl_timeout_applies_action():
         raise TimeoutError()
 
     with patch("asyncio.wait_for", side_effect=fake_wait_for):
-        result = asyncio.run(request_hitl(
-            session_id="s", cycle_index=1, symbol="QQQ",
-            side="buy", qty=3.0, risk_level="LOW", risk_score=0.5,
-            strategy="SECTOR_ROTATION", timeout_seconds=5, timeout_action="confirm",
-        ))
+        result = asyncio.run(
+            request_hitl(
+                session_id="s",
+                cycle_index=1,
+                symbol="QQQ",
+                side="buy",
+                qty=3.0,
+                risk_level="LOW",
+                risk_score=0.5,
+                strategy="SECTOR_ROTATION",
+                timeout_seconds=5,
+                timeout_action="confirm",
+            )
+        )
 
     assert result["action"] == "confirm"
     assert result["source"] == "timeout"
@@ -549,11 +627,20 @@ def test_request_hitl_timeout_abort_action():
         raise TimeoutError()
 
     with patch("asyncio.wait_for", side_effect=fake_wait_for):
-        result = asyncio.run(request_hitl(
-            session_id="s", cycle_index=0, symbol="IWM",
-            side="sell", qty=2.0, risk_level="HIGH", risk_score=1.4,
-            strategy="MEAN_REVERSION", timeout_seconds=10, timeout_action="abort",
-        ))
+        result = asyncio.run(
+            request_hitl(
+                session_id="s",
+                cycle_index=0,
+                symbol="IWM",
+                side="sell",
+                qty=2.0,
+                risk_level="HIGH",
+                risk_score=1.4,
+                strategy="MEAN_REVERSION",
+                timeout_seconds=10,
+                timeout_action="abort",
+            )
+        )
 
     assert result["action"] == "abort"
     assert result["source"] == "timeout"

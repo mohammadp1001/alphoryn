@@ -1,4 +1,5 @@
 """Unit tests for tools.strategy.tools — list_strategies, get_strategy, describe_tool."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,12 +15,14 @@ def _mock_yaml(data: dict):
 
 # ── _load_yaml ────────────────────────────────────────────────────────────────
 
+
 def test_load_yaml_reads_file(tmp_path):
     yaml_file = tmp_path / "test.yaml"
     yaml_file.write_text("name: TEST")
 
     with patch.dict("sys.modules", _mock_yaml({"name": "TEST"})):
         from tools.strategy.tools import _load_yaml
+
         result = _load_yaml(yaml_file)
 
     assert result == {"name": "TEST"}
@@ -34,12 +37,14 @@ def test_load_yaml_empty_file_returns_empty_dict(tmp_path):
 
     with patch.dict("sys.modules", {"yaml": mock_yaml}):
         from tools.strategy.tools import _load_yaml
+
         result = _load_yaml(yaml_file)
 
     assert result == {}
 
 
 # ── list_strategies ───────────────────────────────────────────────────────────
+
 
 def test_list_strategies_returns_list(tmp_path):
     (tmp_path / "momentum.yaml").write_text("name: MOMENTUM")
@@ -52,6 +57,7 @@ def test_list_strategies_returns_list(tmp_path):
     }
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", _mock_yaml(strategy_data)),
@@ -65,6 +71,7 @@ def test_list_strategies_returns_list(tmp_path):
 
 def test_list_strategies_empty_dir(tmp_path):
     import tools.strategy.tools as st
+
     with patch.object(st, "_STRATEGIES_DIR", tmp_path):
         result = asyncio.run(st.list_strategies())
 
@@ -79,6 +86,7 @@ def test_list_strategies_skips_bad_yaml(tmp_path):
     mock_yaml.safe_load.side_effect = Exception("parse error")
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", {"yaml": mock_yaml}),
@@ -95,6 +103,7 @@ def test_list_strategies_description_truncated_at_200(tmp_path):
     strategy_data = {"name": "LONG", "description": long_desc}
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", _mock_yaml(strategy_data)),
@@ -110,11 +119,22 @@ def test_list_strategies_multiple_files(tmp_path):
 
     mock_yaml = MagicMock()
     mock_yaml.safe_load.side_effect = [
-        {"name": "MEAN_REVERSION", "description": "Revert to mean", "preferred_regimes": [], "asset_classes": []},
-        {"name": "MOMENTUM", "description": "Buy momentum", "preferred_regimes": [], "asset_classes": []},
+        {
+            "name": "MEAN_REVERSION",
+            "description": "Revert to mean",
+            "preferred_regimes": [],
+            "asset_classes": [],
+        },
+        {
+            "name": "MOMENTUM",
+            "description": "Buy momentum",
+            "preferred_regimes": [],
+            "asset_classes": [],
+        },
     ]
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", {"yaml": mock_yaml}),
@@ -126,12 +146,14 @@ def test_list_strategies_multiple_files(tmp_path):
 
 # ── get_strategy ──────────────────────────────────────────────────────────────
 
+
 def test_get_strategy_found_by_name(tmp_path):
     (tmp_path / "momentum.yaml").write_text("name: MOMENTUM")
 
     strategy_data = {"name": "MOMENTUM", "description": "Buy high-momentum ETFs"}
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", _mock_yaml(strategy_data)),
@@ -147,6 +169,7 @@ def test_get_strategy_found_case_insensitive(tmp_path):
     strategy_data = {"name": "MOMENTUM", "description": "Momentum strategy"}
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", _mock_yaml(strategy_data)),
@@ -160,6 +183,7 @@ def test_get_strategy_not_found(tmp_path):
     (tmp_path / "momentum.yaml").write_text("name: MOMENTUM")
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", _mock_yaml({"name": "MOMENTUM"})),
@@ -176,6 +200,7 @@ def test_get_strategy_found_by_stem(tmp_path):
     strategy_data = {"name": "SECTOR_ROTATION", "description": "Rotate sectors"}
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", _mock_yaml(strategy_data)),
@@ -192,6 +217,7 @@ def test_get_strategy_skips_bad_yaml_and_returns_not_found(tmp_path):
     mock_yaml.safe_load.side_effect = Exception("parse error")
 
     import tools.strategy.tools as st
+
     with (
         patch.object(st, "_STRATEGIES_DIR", tmp_path),
         patch.dict("sys.modules", {"yaml": mock_yaml}),
@@ -203,8 +229,10 @@ def test_get_strategy_skips_bad_yaml_and_returns_not_found(tmp_path):
 
 # ── describe_tool ─────────────────────────────────────────────────────────────
 
+
 def test_describe_tool_not_found():
     import tools.strategy.tools as st
+
     result = asyncio.run(st.describe_tool("nonexistent__tool_xyz_abc"))
     assert result["error"] == "not_found"
     assert result["tool_name"] == "nonexistent__tool_xyz_abc"
@@ -212,6 +240,7 @@ def test_describe_tool_not_found():
 
 def test_describe_tool_found():
     import tools.strategy.tools as st
+
     # market__get_ohlcv is a real registered tool
     result = asyncio.run(st.describe_tool("market__get_ohlcv"))
     assert result["tool_name"] == "market__get_ohlcv"
@@ -221,6 +250,7 @@ def test_describe_tool_found():
 
 def test_describe_tool_has_parameter_info():
     import tools.strategy.tools as st
+
     result = asyncio.run(st.describe_tool("market__get_ohlcv"))
     # get_ohlcv has parameters: symbol, timeframe, bars
     param_names = [p["name"] for p in result["parameters"]]
@@ -240,6 +270,7 @@ def test_describe_tool_skips_tool_context_param():
     mock_ft.func.__name__ = "test__fake_tool"
 
     import tools.strategy.tools as st
+
     with patch("tools.registry.MARKET_TOOLS", [mock_ft]):
         result = asyncio.run(st.describe_tool("test__fake_tool"))
 

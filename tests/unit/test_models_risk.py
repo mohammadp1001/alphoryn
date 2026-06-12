@@ -1,4 +1,5 @@
 """Unit tests for models.risk — RiskAssessment.synthesise and supporting models."""
+
 from __future__ import annotations
 
 from models.enums import MarketRegime, RiskLevel, Strategy
@@ -9,6 +10,7 @@ from models.risk import (
 )
 
 # ── AgentVerdict ──────────────────────────────────────────────────────────────
+
 
 def test_agent_verdict_creation():
     verdict = AgentVerdict(
@@ -32,6 +34,7 @@ def test_agent_verdict_high_risk():
 
 
 # ── AgentCalibration ──────────────────────────────────────────────────────────
+
 
 def test_agent_calibration_has_data_true():
     cal = AgentCalibration(
@@ -64,6 +67,7 @@ def test_agent_calibration_cold_start():
 
 
 # ── RiskAssessment.synthesise ─────────────────────────────────────────────────
+
 
 def _make_verdict(agent: str, level: RiskLevel) -> AgentVerdict:
     return AgentVerdict(
