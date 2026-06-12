@@ -143,10 +143,12 @@ def test_coordinator_shows_tool_namespaces():
     from agent.prompts import COORDINATOR_INSTRUCTION
 
     formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
-    assert "market__*" in formatted
     assert "analysis__*" in formatted
-    assert "research__*" in formatted
+    assert "workflow__*" in formatted
+    assert "coordinator__*" in formatted
     assert "strategy__*" in formatted
+    assert "file__*" in formatted
+    assert "memory__*" in formatted
 
 
 def test_coordinator_no_execution_tools_exposed():
@@ -214,7 +216,7 @@ def test_coordinator_market_hours_check_is_step_0():
 
     formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
     assert "market_closed" in formatted
-    assert "market__get_market_status" in formatted
+    assert "is_open" in formatted
 
 
 def test_coordinator_exchange_tz_in_formatted_prompt():
@@ -342,3 +344,43 @@ def test_strategy_tools_importable():
     assert list_strategies is not None
     assert get_strategy is not None
     assert describe_tool is not None
+
+
+# ── Issue #45: coordinator core loop rewrite ──────────────────────────────────
+
+
+def test_coordinator_uses_workflow_tools():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "workflow__run_" in formatted
+
+
+def test_coordinator_uses_detect_market_regime():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "coordinator__detect_market_regime" in formatted
+
+
+def test_coordinator_strategies_tried_this_cycle():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "strategies_tried_this_cycle" in formatted
+
+
+def test_coordinator_uses_debate_agents():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "debate_optimist" in formatted
+    assert "debate_pessimist" in formatted
+
+
+def test_coordinator_no_market_tools_in_instruction():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "market__get_market_status" not in formatted
+    assert "research__detect_market_regime" not in formatted

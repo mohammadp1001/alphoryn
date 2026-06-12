@@ -281,3 +281,74 @@ def test_coordinator_explicit_model_arg_overrides_params():
     explicit = LiteLlm(model="openrouter/qwen/qwen-2.5-72b-instruct")
     agent = create_coordinator(params, plan_state, model=explicit)
     assert agent.model == explicit
+
+
+# ── coordinator: new sub-agent tools (issue #45) ─────────────────────────────
+
+
+def _make_params():
+    from models.enums import OperatingMode
+    from models.session import SessionParams
+
+    return SessionParams(
+        mode=OperatingMode.SEMI_AUTO,
+        loss_limit_eur=500.0,
+        timeframe="1Day",
+        shortlist_n=2,
+        hitl_timeout_seconds=60,
+        hitl_timeout_action="abort",
+    )
+
+
+def _make_coordinator():
+    from agent.coordinator import create_coordinator
+    from models.session import PlanState
+
+    params = _make_params()
+    plan_state = PlanState(session_id="test-session-id", params=params)
+    return create_coordinator(params, plan_state)
+
+
+def test_coordinator_has_debate_agent_tools():
+    agent = _make_coordinator()
+    tool_names = [
+        getattr(t, "name", None) or getattr(getattr(t, "func", None), "__name__", "")
+        for t in agent.tools
+    ]
+    assert "debate_optimist" in tool_names
+    assert "debate_pessimist" in tool_names
+
+
+def test_coordinator_has_research_agent_tool():
+    agent = _make_coordinator()
+    tool_names = [
+        getattr(t, "name", None) or getattr(getattr(t, "func", None), "__name__", "")
+        for t in agent.tools
+    ]
+    assert "research_agent" in tool_names
+
+
+def test_coordinator_before_callback_initializes_strategies_tried():
+    import asyncio
+    from unittest.mock import MagicMock
+
+    from agent.coordinator import create_coordinator
+    from models.session import PlanState
+
+    params = _make_params()
+    plan_state = PlanState(session_id="test-strat-tried", params=params)
+    agent = create_coordinator(params, plan_state)
+
+    state = {}
+    ctx = MagicMock()
+    ctx.state = state
+
+    from unittest.mock import patch
+
+    with patch("agent.coordinator.os.environ.get", return_value=""), patch(
+        "db.schema.init_db"
+    ):
+        asyncio.run(agent.before_agent_callback(ctx))
+
+    assert "strategies_tried_this_cycle" in state
+    assert state["strategies_tried_this_cycle"] == []

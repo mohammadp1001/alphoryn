@@ -1,4 +1,4 @@
-"""coordinator.* tools — 8 tools, coordinator agent scope."""
+"""coordinator.* tools — 7 tools, coordinator agent scope."""
 
 from __future__ import annotations
 
@@ -390,3 +390,33 @@ async def abort_cycle(
         "session_id": session_id,
         "cycle_index": cycle_index,
     }
+
+
+async def detect_market_regime(
+    benchmark_symbol: str = "SPY",
+    vix_symbol: str = "^VIX",
+    yield_10y_symbol: str = "^TNX",
+    yield_2y_symbol: str = "^IRX",
+) -> dict:
+    """Classify the current macro market regime using benchmark and indicator data.
+
+    Re-exports research.detect_market_regime as coordinator__detect_market_regime so
+    the coordinator can classify the regime at session start without research__* tools.
+
+    Args:
+        benchmark_symbol: Equity benchmark ticker (e.g. 'SPY', 'EWG').
+        vix_symbol: VIX ticker.
+        yield_10y_symbol: 10-year yield ticker.
+        yield_2y_symbol: 2-year yield ticker.
+
+    Returns:
+        MarketRegimeOutput fields: regime, vix, yield_10y, yield_2y, reasoning, source.
+    """
+    from tools.research.tools import detect_market_regime as _detect
+
+    return await _detect(
+        benchmark_symbol=benchmark_symbol,
+        vix_symbol=vix_symbol,
+        yield_10y_symbol=yield_10y_symbol,
+        yield_2y_symbol=yield_2y_symbol,
+    )

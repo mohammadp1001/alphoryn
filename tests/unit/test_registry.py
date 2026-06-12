@@ -42,7 +42,7 @@ def test_memory_tools_list_populated():
 def test_coordinator_tools_list_populated():
     from tools.registry import COORDINATOR_TOOLS
 
-    assert len(COORDINATOR_TOOLS) == 8
+    assert len(COORDINATOR_TOOLS) == 7
 
 
 def test_strategy_tools_list_populated():
@@ -204,3 +204,38 @@ def test_execution_tool_names_are_unique():
 
     names = [t.name for t in EXECUTION_TOOLS]
     assert len(names) == len(set(names))
+
+
+def test_coordinator_tools_has_detect_market_regime():
+    from tools.registry import COORDINATOR_TOOLS
+
+    names = {t.name for t in COORDINATOR_TOOLS}
+    assert "coordinator__detect_market_regime" in names
+
+
+def test_all_coordinator_tools_excludes_market_tools():
+    from tools.registry import ALL_COORDINATOR_TOOLS, MARKET_TOOLS
+
+    market_names = {t.name for t in MARKET_TOOLS}
+    coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
+    assert market_names.isdisjoint(coord_names), (
+        f"Market tools must not be in ALL_COORDINATOR_TOOLS: {market_names & coord_names}"
+    )
+
+
+def test_all_coordinator_tools_excludes_research_tools():
+    from tools.registry import ALL_COORDINATOR_TOOLS, RESEARCH_TOOLS
+
+    research_names = {t.name for t in RESEARCH_TOOLS}
+    coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
+    assert research_names.isdisjoint(coord_names), (
+        f"Research tools must not be in ALL_COORDINATOR_TOOLS: {research_names & coord_names}"
+    )
+
+
+def test_all_coordinator_tools_includes_workflow_tools():
+    from tools.registry import ALL_COORDINATOR_TOOLS, WORKFLOW_TOOLS
+
+    workflow_names = {t.name for t in WORKFLOW_TOOLS}
+    coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
+    assert workflow_names.issubset(coord_names)
