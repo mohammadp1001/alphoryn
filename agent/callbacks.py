@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
 
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
 
@@ -69,3 +71,35 @@ def make_agent_log_callbacks(
             )
 
     return before_callback, after_callback
+
+
+def make_research_file_callback(
+    session_id: str,
+    symbol: str,
+    output_key: str,
+) -> Callable:
+    """Return an after-callback that writes the research agent output to a markdown file.
+
+    Reads the agent text output from state[output_key], writes it to
+    reports/{session_id}/research/{symbol}_{ts}.md, registers the file in
+    session_files, and injects the path into state["research_report_path"].
+    """
+
+    async def after_callback(callback_context: CallbackContext) -> None:
+        text = callback_context.state.get(output_key)
+        if not text:
+            logger.warning(
+                "research file-callback: state key '%s' is EMPTY — no file written", output_key
+            )
+            return
+        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+        path = Path("reports") / session_id / "research" / f"{symbol}_{ts}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(text), encoding="utf-8")
+        from db.schema import register_session_file as _register
+
+        _register(session_id=session_id, path=str(path), file_type="research", symbol=symbol)
+        callback_context.state["research_report_path"] = str(path)
+        logger.debug("research file-callback: wrote %s", path)
+
+    return after_callback
