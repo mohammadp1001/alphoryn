@@ -563,6 +563,36 @@ class RecordCycleResponse(_Base):
     written: bool
 
 
+class ReadFileResponse(_Base):
+    path: str
+    content: str | None
+    found: bool
+
+
+class WriteFileResponse(_Base):
+    path: str
+    written: bool
+
+
+class RegisterFileResponse(_Base):
+    file_id: str
+    registered: bool
+
+
+class SessionFileEntry(_Base):
+    id: str
+    session_id: str
+    symbol: str | None
+    file_type: str
+    path: str
+    created_at: str
+
+
+class SessionFilesResponse(_Base):
+    session_id: str
+    files: list[SessionFileEntry]
+
+
 # ---------------------------------------------------------------------------
 # Agent output models (output_schema on Agent, written via output_key)
 # ---------------------------------------------------------------------------

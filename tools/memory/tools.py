@@ -1,4 +1,4 @@
-"""memory.* tools — 6 tools, coordinator scope only."""
+"""memory.* tools — 7 tools, coordinator scope only."""
 from __future__ import annotations
 
 from infra.observability import db_write_span, get_logger
@@ -7,6 +7,8 @@ from tools.schemas import (
     RecordCycleResponse,
     ResolveTradeResponse,
     SessionCyclesResponse,
+    SessionFileEntry,
+    SessionFilesResponse,
     UnresolvedTradesResponse,
     WriteTradeResponse,
 )
@@ -247,3 +249,40 @@ async def record_cycle(
         )
 
     return RecordCycleResponse(session_id=session_id, cycle_index=cycle_index, written=True).model_dump()
+
+
+async def get_session_files(
+    session_id: str,
+    file_type: str = "",
+    symbol: str = "",
+) -> dict:
+    """List files registered for a session, with optional filters.
+
+    Args:
+        session_id: UUID of the session.
+        file_type: Filter by file category ('research', 'analysis', 'report'). Empty means all.
+        symbol: Filter by ticker symbol. Empty means all.
+
+    Returns:
+        dict with 'session_id' and 'files' (list of {id, session_id, symbol, file_type, path, created_at}).
+    """
+    logger.info("get_session_files session_id=%s file_type=%r symbol=%r", session_id, file_type, symbol)
+    from db.schema import get_session_files_db
+
+    rows = get_session_files_db(
+        session_id=session_id,
+        file_type=file_type or None,
+        symbol=symbol or None,
+    )
+    files = [
+        SessionFileEntry(
+            id=r["id"],
+            session_id=r["session_id"],
+            symbol=r["symbol"],
+            file_type=r["file_type"],
+            path=r["path"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+    return SessionFilesResponse(session_id=session_id, files=files).model_dump()

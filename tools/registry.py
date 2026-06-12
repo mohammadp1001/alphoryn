@@ -12,6 +12,7 @@ Namespace slices:
     MEMORY_TOOLS      → memory__*      (DB reads/writes)
     COORDINATOR_TOOLS → coordinator__* (session control, HITL, risk synthesis)
     STRATEGY_TOOLS    → strategy__*    (strategy files + describe_tool meta-tool)
+    FILE_TOOLS        → file__*        (read_file, write_file, register_session_file)
 
 ALL_COORDINATOR_TOOLS = all slices EXCEPT EXECUTION_TOOLS (coordinator never sees order tools).
 EXECUTION_TOOLS is kept separate; only the execution BaseAgent receives it.
@@ -63,6 +64,7 @@ from tools.execution.tools import (
     place_limit_order,
     place_market_order,
 )
+from tools.file_tools import read_file, register_session_file, write_file
 from tools.market.tools import (
     get_52w_range,
     get_benchmark_return,
@@ -82,6 +84,7 @@ from tools.market.tools import (
 from tools.memory.tools import (
     get_calibration,
     get_session_cycles,
+    get_session_files,
     get_unresolved_trades,
     record_cycle,
     resolve_trade,
@@ -190,8 +193,15 @@ MEMORY_TOOLS: list[FunctionTool] = [
     _tool(resolve_trade, "memory"),
     _tool(get_calibration, "memory"),
     _tool(get_session_cycles, "memory"),
+    _tool(get_session_files, "memory"),
     _tool(get_unresolved_trades, "memory"),
     _tool(record_cycle, "memory"),
+]
+
+FILE_TOOLS: list[FunctionTool] = [
+    _tool(read_file, "file"),
+    _tool(write_file, "file"),
+    _tool(register_session_file, "file"),
 ]
 
 COORDINATOR_TOOLS: list[FunctionTool] = [
@@ -219,4 +229,5 @@ ALL_COORDINATOR_TOOLS: list[FunctionTool] = (
     + MEMORY_TOOLS
     + COORDINATOR_TOOLS
     + STRATEGY_TOOLS
+    + FILE_TOOLS
 )

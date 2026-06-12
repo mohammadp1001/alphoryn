@@ -87,6 +87,16 @@ CREATE TABLE IF NOT EXISTS regime_stats (
     best_strategy   TEXT,
     last_seen       TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS session_files (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    symbol      TEXT,
+    file_type   TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
 """
 
 
@@ -327,6 +337,60 @@ def get_cycle_history(session_id: str) -> list[CycleRecord]:
         )
         for i, r in enumerate(rows)
     ]
+
+
+# ── Session files ─────────────────────────────────────────────────────────────
+
+def register_session_file(
+    session_id: str,
+    path: str,
+    file_type: str,
+    symbol: str | None = None,
+) -> str:
+    """Insert a row into session_files and return the generated UUID."""
+    import uuid
+
+    file_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO session_files (id, session_id, symbol, file_type, path, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (file_id, session_id, symbol, file_type, path, now),
+        )
+    return file_id
+
+
+def get_session_files_db(
+    session_id: str,
+    file_type: str | None = None,
+    symbol: str | None = None,
+) -> list[dict]:
+    """Return session_files rows for session_id, optionally filtered by file_type and/or symbol."""
+    with _connect() as conn:
+        if file_type and symbol:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? AND file_type = ? AND symbol = ? ORDER BY created_at",
+                (session_id, file_type, symbol),
+            ).fetchall()
+        elif file_type:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? AND file_type = ? ORDER BY created_at",
+                (session_id, file_type),
+            ).fetchall()
+        elif symbol:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? AND symbol = ? ORDER BY created_at",
+                (session_id, symbol),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? ORDER BY created_at",
+                (session_id,),
+            ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
