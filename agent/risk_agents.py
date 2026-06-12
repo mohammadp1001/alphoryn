@@ -26,6 +26,7 @@ def _lite_llm(model: str) -> object:
 
     return LiteLlm(model=model)
 
+
 _JSON_BLOCK = re.compile(r"\{.*?\}", re.DOTALL)
 
 

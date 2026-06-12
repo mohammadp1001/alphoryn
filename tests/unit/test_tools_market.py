@@ -561,7 +561,7 @@ def test_get_market_status_naive_datetime_gets_utc(monkeypatch):
 
     clock = MagicMock()
     clock.is_open = False
-    clock.next_open = datetime(2025, 1, 2, 9, 30)   # naive — no tzinfo
+    clock.next_open = datetime(2025, 1, 2, 9, 30)  # naive — no tzinfo
     clock.next_close = datetime(2025, 1, 2, 16, 0)  # naive — no tzinfo
 
     mock_client_cls = MagicMock()
