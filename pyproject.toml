@@ -41,7 +41,7 @@ dev = [
 algotrade = "cli.main:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["agent", "tools", "models", "infra", "cli", "db", "evals", "config.py"]
+packages = ["agent", "tools", "models", "infra", "cli", "db", "evals", "workflows", "config.py"]
 
 [tool.ruff]
 target-version = "py311"
