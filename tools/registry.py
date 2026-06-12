@@ -13,6 +13,8 @@ Namespace slices:
     COORDINATOR_TOOLS → coordinator__* (session control, HITL, risk synthesis)
     STRATEGY_TOOLS    → strategy__*    (strategy files + describe_tool meta-tool)
     FILE_TOOLS        → file__*        (read_file, write_file, register_session_file)
+    WORKFLOW_TOOLS    → workflow__*    (run_momentum_analysis, run_mean_reversion_analysis,
+                                        run_sector_rotation_analysis)
 
 ALL_COORDINATOR_TOOLS = all slices EXCEPT EXECUTION_TOOLS (coordinator never sees order tools).
 EXECUTION_TOOLS is kept separate; only the execution BaseAgent receives it.
@@ -115,6 +117,11 @@ from tools.strategy.tools import (
     get_strategy,
     list_strategies,
 )
+
+# ── workflows.* ──────────────────────────────────────────────────────────────
+from workflows.mean_reversion import run_mean_reversion_analysis
+from workflows.momentum import run_momentum_analysis
+from workflows.sector_rotation import run_sector_rotation_analysis
 
 
 def _tool(fn: Callable[..., Any], namespace: str) -> FunctionTool:
@@ -222,6 +229,12 @@ STRATEGY_TOOLS: list[FunctionTool] = [
     _tool(describe_tool, "strategy"),
 ]
 
+WORKFLOW_TOOLS: list[FunctionTool] = [
+    _tool(run_momentum_analysis, "workflow"),
+    _tool(run_mean_reversion_analysis, "workflow"),
+    _tool(run_sector_rotation_analysis, "workflow"),
+]
+
 # All tools the coordinator LLM sees — execution tools deliberately excluded
 ALL_COORDINATOR_TOOLS: list[FunctionTool] = (
     MARKET_TOOLS
@@ -231,4 +244,5 @@ ALL_COORDINATOR_TOOLS: list[FunctionTool] = (
     + COORDINATOR_TOOLS
     + STRATEGY_TOOLS
     + FILE_TOOLS
+    + WORKFLOW_TOOLS
 )
