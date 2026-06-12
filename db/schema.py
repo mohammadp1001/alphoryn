@@ -2,6 +2,7 @@
 SQLite schema creation and all database queries.
 Single connection helper — this is a single-user CLI, no connection pooling needed.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -126,6 +127,7 @@ def _connect(path: Path | None = None) -> Generator[sqlite3.Connection, None, No
 
 # ── Sessions ──────────────────────────────────────────────────────────────────
 
+
 def upsert_session(
     session_id: str,
     mode: str,
@@ -158,6 +160,7 @@ def close_session(session_id: str, outcome: str, realised_pnl: float, cycle_coun
 
 # ── Trade records ─────────────────────────────────────────────────────────────
 
+
 def write_trade_record(record: TradeRecord) -> None:
     """Write-ahead: called synchronously before submitting the order."""
     with _connect() as conn:
@@ -172,14 +175,26 @@ def write_trade_record(record: TradeRecord) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                record.id, record.session_id, record.cycle_index,
-                record.order_id, record.symbol,
+                record.id,
+                record.session_id,
+                record.cycle_index,
+                record.order_id,
+                record.symbol,
                 record.strategy.value if hasattr(record.strategy, "value") else record.strategy,
-                record.market_regime.value if hasattr(record.market_regime, "value") else record.market_regime,
-                record.side, record.qty, record.entry_price,
-                record.optimist_verdict, record.pessimist_verdict, record.risk_level,
-                record.risk_score, record.opt_win_rate_at_trade, record.pess_win_rate_at_trade,
-                record.filled_avg_price, record.executed_at.isoformat(),
+                record.market_regime.value
+                if hasattr(record.market_regime, "value")
+                else record.market_regime,
+                record.side,
+                record.qty,
+                record.entry_price,
+                record.optimist_verdict,
+                record.pessimist_verdict,
+                record.risk_level,
+                record.risk_score,
+                record.opt_win_rate_at_trade,
+                record.pess_win_rate_at_trade,
+                record.filled_avg_price,
+                record.executed_at.isoformat(),
             ),
         )
 
@@ -273,6 +288,7 @@ def get_unresolved_trades(session_id: str | None = None) -> list[TradeRecord]:
 
 # ── Calibration ───────────────────────────────────────────────────────────────
 
+
 def get_calibration(
     agent: str, market_regime: MarketRegime, strategy: Strategy
 ) -> CalibrationContext:
@@ -318,6 +334,7 @@ def get_calibration(
 
 # ── Cycle history ─────────────────────────────────────────────────────────────
 
+
 def get_cycle_history(session_id: str) -> list[CycleRecord]:
     """Reconstructed from trade_records; cycles without a trade are stored in PlanState only."""
     with _connect() as conn:
@@ -340,6 +357,7 @@ def get_cycle_history(session_id: str) -> list[CycleRecord]:
 
 
 # ── Session files ─────────────────────────────────────────────────────────────
+
 
 def register_session_file(
     session_id: str,
@@ -394,6 +412,7 @@ def get_session_files_db(
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
 
 def _determine_winner(pnl_pct: float) -> DebateWinner:
     if pnl_pct < 0:

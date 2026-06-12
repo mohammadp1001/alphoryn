@@ -17,6 +17,7 @@ Namespace slices:
 ALL_COORDINATOR_TOOLS = all slices EXCEPT EXECUTION_TOOLS (coordinator never sees order tools).
 EXECUTION_TOOLS is kept separate; only the execution BaseAgent receives it.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

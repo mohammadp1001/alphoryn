@@ -1,4 +1,5 @@
 """file.* tools — read_file, write_file, register_session_file."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -60,7 +61,9 @@ async def register_session_file(
     Returns:
         dict with 'file_id' (UUID) and 'registered': true.
     """
-    logger.info("register_session_file session_id=%s file_type=%s path=%s", session_id, file_type, path)
+    logger.info(
+        "register_session_file session_id=%s file_type=%s path=%s", session_id, file_type, path
+    )
     from db.schema import register_session_file as _register
 
     sym = symbol if symbol else None
