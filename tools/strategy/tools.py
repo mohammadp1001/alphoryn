@@ -1,4 +1,5 @@
 """strategy.* tools — read trading strategy definitions from strategies/ YAML files."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,6 +13,7 @@ _STRATEGIES_DIR = Path(__file__).parent.parent.parent / "strategies"
 
 def _load_yaml(path: Path) -> dict:
     import yaml  # type: ignore[import]
+
     with path.open("r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
 
@@ -28,12 +30,14 @@ async def list_strategies() -> dict:
     for path in sorted(_STRATEGIES_DIR.glob("*.yaml")):
         try:
             data = _load_yaml(path)
-            results.append({
-                "name": data.get("name", path.stem.upper()),
-                "description": (data.get("description") or "").strip()[:200],
-                "preferred_regimes": data.get("preferred_regimes", []),
-                "asset_classes": data.get("asset_classes", []),
-            })
+            results.append(
+                {
+                    "name": data.get("name", path.stem.upper()),
+                    "description": (data.get("description") or "").strip()[:200],
+                    "preferred_regimes": data.get("preferred_regimes", []),
+                    "asset_classes": data.get("asset_classes", []),
+                }
+            )
         except Exception as exc:
             logger.warning("list_strategies skipping %s: %s", path.name, exc)
     return {"strategies": results, "count": len(results)}
@@ -60,9 +64,11 @@ async def get_strategy(name: str) -> dict:
                 return data
         except Exception as exc:
             logger.warning("get_strategy error reading %s: %s", path.name, exc)
-    return {"error": "not_found", "name": name, "available": [
-        p.stem.upper() for p in sorted(_STRATEGIES_DIR.glob("*.yaml"))
-    ]}
+    return {
+        "error": "not_found",
+        "name": name,
+        "available": [p.stem.upper() for p in sorted(_STRATEGIES_DIR.glob("*.yaml"))],
+    }
 
 
 async def describe_tool(tool_name: str) -> dict:
@@ -94,6 +100,7 @@ async def describe_tool(tool_name: str) -> dict:
         if ft.name == tool_name or getattr(ft.func, "__name__", "") == tool_name:
             fn = ft.func
             import inspect
+
             sig = inspect.signature(fn)
             params = []
             for pname, param in sig.parameters.items():
@@ -104,15 +111,17 @@ async def describe_tool(tool_name: str) -> dict:
                     if param.annotation is not inspect.Parameter.empty
                     else "any"
                 )
-                params.append({
-                    "name": pname,
-                    "type": annotation,
-                    "default": (
-                        str(param.default)
-                        if param.default is not inspect.Parameter.empty
-                        else None
-                    ),
-                })
+                params.append(
+                    {
+                        "name": pname,
+                        "type": annotation,
+                        "default": (
+                            str(param.default)
+                            if param.default is not inspect.Parameter.empty
+                            else None
+                        ),
+                    }
+                )
             return {
                 "tool_name": tool_name,
                 "docstring": (inspect.getdoc(fn) or "").strip(),

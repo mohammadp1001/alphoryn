@@ -1,4 +1,5 @@
 """Unit tests for infra.retry — with_retry, _backoff, _is_retryable."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +11,7 @@ from config import RETRY_MAX_ATTEMPTS, RETRY_MAX_DELAY_SECONDS
 from infra.retry import _backoff, _is_retryable, with_retry
 
 # ── _is_retryable ─────────────────────────────────────────────────────────────
+
 
 def test_is_retryable_http_429():
     assert _is_retryable(Exception("HTTP 429 Too Many Requests"))
@@ -34,24 +36,28 @@ def test_is_retryable_http_504():
 def test_is_retryable_rate_limit_error_class():
     class RateLimitError(Exception):
         pass
+
     assert _is_retryable(RateLimitError("exceeded"))
 
 
 def test_is_retryable_server_error_class():
     class ServerError(Exception):
         pass
+
     assert _is_retryable(ServerError("internal"))
 
 
 def test_is_retryable_timeout_error_class():
     class TimeoutError(Exception):
         pass
+
     assert _is_retryable(TimeoutError("timed out"))
 
 
 def test_is_retryable_connection_error_class():
     class ConnectionError(Exception):
         pass
+
     assert _is_retryable(ConnectionError("reset"))
 
 
@@ -72,6 +78,7 @@ def test_is_retryable_false_for_type_error():
 
 
 # ── _backoff ──────────────────────────────────────────────────────────────────
+
 
 def test_backoff_attempt_1_within_bounds():
     delay = _backoff(1)
@@ -98,6 +105,7 @@ def test_backoff_always_positive():
 
 
 # ── with_retry decorator ──────────────────────────────────────────────────────
+
 
 def test_with_retry_succeeds_immediately():
     @with_retry

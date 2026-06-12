@@ -1,4 +1,5 @@
 """Tests for the eval harness utilities — no ADK, no external APIs."""
+
 from pathlib import Path
 
 from evals.harness import (
@@ -16,6 +17,7 @@ DATASETS_DIR = Path(__file__).parent.parent / "eval" / "datasets"
 # ---------------------------------------------------------------------------
 # validate_trace_structure
 # ---------------------------------------------------------------------------
+
 
 def test_valid_trace_passes():
     dataset = {
@@ -77,6 +79,7 @@ def test_missing_turn_index():
 # extract_tool_call_sequence
 # ---------------------------------------------------------------------------
 
+
 def _make_turns(calls: list[str]) -> list[dict]:
     events = [
         {
@@ -101,6 +104,7 @@ def test_extract_order_preserved():
 # ---------------------------------------------------------------------------
 # check_write_ahead_invariant
 # ---------------------------------------------------------------------------
+
 
 def test_write_ahead_correct_order():
     turns = _make_turns(["write_trade", "place_market_order"])
@@ -131,6 +135,7 @@ def test_write_ahead_order_without_write():
 # validate_all_datasets — integration over real fixture files
 # ---------------------------------------------------------------------------
 
+
 def test_all_fixtures_valid():
     """All dataset files in tests/eval/datasets/ must pass structural validation."""
     validate_all_datasets()
@@ -142,14 +147,18 @@ def test_committed_cycle_write_ahead():
     dataset = load_dataset(path)
     case = dataset["eval_cases"][0]
     turns = case["agent_data"]["turns"]
-    assert check_write_ahead_invariant(turns), "write_trade must precede execution_agent in 01_committed_cycle"
+    assert check_write_ahead_invariant(turns), (
+        "write_trade must precede execution_agent in 01_committed_cycle"
+    )
 
 
 def test_safety_write_ahead_fixture():
     """The write_ahead_before_order safety case must pass the invariant check."""
     path = DATASETS_DIR / "03_safety_constraints.json"
     dataset = load_dataset(path)
-    wa_case = next(c for c in dataset["eval_cases"] if c["eval_case_id"] == "write_ahead_before_order")
+    wa_case = next(
+        c for c in dataset["eval_cases"] if c["eval_case_id"] == "write_ahead_before_order"
+    )
     turns = wa_case["agent_data"]["turns"]
     assert check_write_ahead_invariant(turns)
 

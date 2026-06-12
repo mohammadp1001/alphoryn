@@ -7,6 +7,7 @@ be logged, stored on PlanState, or forwarded to any other agent.
 NOTE: @with_retry is intentionally NOT applied to place_* tools per retry policy.
 Order submission is not idempotent.
 """
+
 from __future__ import annotations
 
 import os
@@ -88,8 +89,10 @@ async def get_position(symbol: str) -> dict:
         try:
             p = client.get_open_position(symbol)
             return PositionResponse(
-                symbol=p.symbol, has_position=True,
-                qty=float(p.qty), side=str(p.side).lower(),
+                symbol=p.symbol,
+                has_position=True,
+                qty=float(p.qty),
+                side=str(p.side).lower(),
                 avg_entry_price=float(p.avg_entry_price),
                 market_value=float(p.market_value),
                 unrealised_pnl=float(p.unrealized_pl),
@@ -129,8 +132,12 @@ async def place_market_order(symbol: str, qty: float, side: str) -> dict:
         )
 
     return OrderResponse(
-        order_id=str(order.id), status=str(order.status), symbol=order.symbol,
-        qty=float(order.qty or 0), side=str(order.side).lower(), type="market",
+        order_id=str(order.id),
+        status=str(order.status),
+        symbol=order.symbol,
+        qty=float(order.qty or 0),
+        side=str(order.side).lower(),
+        type="market",
         submitted_at=order.submitted_at.isoformat() if order.submitted_at else None,
     ).model_dump()
 
@@ -147,7 +154,9 @@ async def place_limit_order(symbol: str, qty: float, side: str, limit_price: flo
     Returns:
         dict with 'order_id', 'status', 'symbol', 'qty', 'side', 'type', 'limit_price', 'submitted_at'.
     """
-    logger.info("place_limit_order symbol=%s qty=%s side=%s limit_price=%s", symbol, qty, side, limit_price)
+    logger.info(
+        "place_limit_order symbol=%s qty=%s side=%s limit_price=%s", symbol, qty, side, limit_price
+    )
     from alpaca.trading.enums import OrderSide, TimeInForce  # type: ignore[import]
     from alpaca.trading.requests import LimitOrderRequest  # type: ignore[import]
 
@@ -167,8 +176,12 @@ async def place_limit_order(symbol: str, qty: float, side: str, limit_price: flo
         )
 
     return LimitOrderResponse(
-        order_id=str(order.id), status=str(order.status), symbol=order.symbol,
-        qty=float(order.qty or 0), side=str(order.side).lower(), type="limit",
+        order_id=str(order.id),
+        status=str(order.status),
+        symbol=order.symbol,
+        qty=float(order.qty or 0),
+        side=str(order.side).lower(),
+        type="limit",
         limit_price=limit_price,
         submitted_at=order.submitted_at.isoformat() if order.submitted_at else None,
     ).model_dump()
@@ -190,9 +203,13 @@ async def cancel_order(order_id: str) -> dict:
         client = _trading_client()
         try:
             client.cancel_order_by_id(order_id)
-            return CancelOrderResponse(order_id=order_id, cancelled=True, message="Order cancelled").model_dump()
+            return CancelOrderResponse(
+                order_id=order_id, cancelled=True, message="Order cancelled"
+            ).model_dump()
         except Exception as exc:
-            return CancelOrderResponse(order_id=order_id, cancelled=False, message=str(exc)).model_dump()
+            return CancelOrderResponse(
+                order_id=order_id, cancelled=False, message=str(exc)
+            ).model_dump()
 
 
 @with_retry
@@ -212,7 +229,8 @@ async def get_order_status(order_id: str) -> dict:
         order = client.get_order_by_id(order_id)
 
     return OrderStatusResponse(
-        order_id=str(order.id), status=str(order.status),
+        order_id=str(order.id),
+        status=str(order.status),
         filled_qty=float(order.filled_qty or 0),
         filled_avg_price=float(order.filled_avg_price or 0),
         updated_at=order.updated_at.isoformat() if order.updated_at else None,
@@ -233,8 +251,10 @@ async def get_account_status() -> dict:
         account = _trading_client().get_account()
 
     return AccountStatusResponse(
-        is_paper=True, status=str(account.status),
-        buying_power=float(account.buying_power), cash=float(account.cash),
+        is_paper=True,
+        status=str(account.status),
+        buying_power=float(account.buying_power),
+        cash=float(account.cash),
         portfolio_value=float(account.portfolio_value),
         daytrade_count=int(account.daytrade_count or 0),
         pattern_day_trader=bool(account.pattern_day_trader),

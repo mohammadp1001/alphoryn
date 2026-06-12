@@ -13,6 +13,7 @@ coordinator; it writes state["pending_order"] and delegates to the execution Age
 
 Factory pattern prevents "agent already has a parent" ADK errors across sessions.
 """
+
 from __future__ import annotations
 
 import logging
@@ -21,7 +22,6 @@ from typing import Any
 
 from google.adk.agents import Agent  # type: ignore[import]
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
-from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
 from google.adk.tools import AgentTool  # type: ignore[import]
 
 from agent.execution_agent import create_execution_agent
@@ -35,11 +35,13 @@ logger = logging.getLogger("agent.coordinator")
 _DEFAULT_COORDINATOR_MODEL = "gemini-2.5-flash"
 
 
-def _resolve_model(model_str: str | None) -> str | LiteLlm:
+def _resolve_model(model_str: str | None) -> object:
     """Return a bare string for Gemini models, LiteLlm wrapper for OpenRouter."""
     if not model_str:
         return _DEFAULT_COORDINATOR_MODEL
     if model_str.startswith("openrouter/"):
+        from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
+
         return LiteLlm(model=model_str)
     return model_str
 
@@ -47,7 +49,7 @@ def _resolve_model(model_str: str | None) -> str | LiteLlm:
 def create_coordinator(
     params: SessionParams,
     plan_state: PlanState,
-    model: str | LiteLlm | None = None,
+    model: object = None,
 ) -> Agent:
     """Factory: returns a fully wired coordinator agent for one session.
 
@@ -61,18 +63,18 @@ def create_coordinator(
         model = _resolve_model(params.coordinator_model)
     _placeholder_cal = "Calibration data will be loaded at the start of each cycle."
 
-    risk_debate_tool = AgentTool(
-        agent=create_risk_debate(_placeholder_cal, _placeholder_cal)
-    )
+    risk_debate_tool = AgentTool(agent=create_risk_debate(_placeholder_cal, _placeholder_cal))
     execution_tool = AgentTool(agent=create_execution_agent())
 
     from config import DEFAULT_ETF_UNIVERSE, ETF_UNIVERSES, UNIVERSE_EXCHANGE_TZ
+
     universe_symbols = ETF_UNIVERSES.get(params.universe, DEFAULT_ETF_UNIVERSE)
     symbols_str = ", ".join(universe_symbols)
     exchange_tz = UNIVERSE_EXCHANGE_TZ.get(params.universe, "America/New_York")
     session_expires_at = (plan_state.started_at + params.duration).isoformat()
 
     from config import MAX_STRATEGY_CYCLES
+
     instruction = COORDINATOR_INSTRUCTION.format(
         session_id=plan_state.session_id,
         mode=params.mode.value,
@@ -113,6 +115,7 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
 
     async def before_callback(callback_context: CallbackContext) -> None:
         from infra.rate_limiter import acquire_gemini
+
         await acquire_gemini()
 
         state = callback_context.state
@@ -120,6 +123,7 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
         # One-time session initialisation
         if "session_initialised" not in state:
             from db.schema import init_db
+
             init_db()
             state["session_initialised"] = True
             state["cycle_count"] = 0
@@ -134,6 +138,7 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
                 from alpaca.trading.client import TradingClient  # type: ignore[import]
 
                 from infra.rate_limiter import acquire_alpaca_trading
+
                 await acquire_alpaca_trading()
                 client = TradingClient(api_key=api_key, secret_key=api_secret, paper=True)
 

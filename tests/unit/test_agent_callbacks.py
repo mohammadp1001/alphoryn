@@ -1,4 +1,5 @@
 """Unit tests for agent.callbacks and agent.coordinator._make_before_callback."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,6 +7,7 @@ import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Fake CallbackContext ──────────────────────────────────────────────────────
+
 
 class _FakeCallbackCtx:
     def __init__(self, state=None, user_content=None):
@@ -15,8 +17,10 @@ class _FakeCallbackCtx:
 
 # ── agent/callbacks.py: _serialise ───────────────────────────────────────────
 
+
 def test_serialise_simple_dict():
     from agent.callbacks import _serialise
+
     result = _serialise({"key": "value", "num": 42})
     assert '"key"' in result
     assert '"value"' in result
@@ -44,11 +48,13 @@ def test_serialise_long_value_is_truncated():
 
 def test_serialise_short_value_not_truncated():
     from agent.callbacks import _serialise
+
     result = _serialise({"k": "v"})
     assert "…(truncated)" not in result
 
 
 # ── agent/callbacks.py: before_callback ──────────────────────────────────────
+
 
 def test_before_callback_acquires_gemini_rate_limit():
     from agent.callbacks import make_agent_log_callbacks
@@ -112,6 +118,7 @@ def test_before_callback_handles_parts_with_no_text():
 
 # ── agent/callbacks.py: after_callback ───────────────────────────────────────
 
+
 def test_after_callback_logs_output_when_present(caplog):
     from agent.callbacks import make_agent_log_callbacks
 
@@ -140,9 +147,11 @@ def test_after_callback_warns_when_output_key_missing(caplog):
 
 # ── agent/coordinator.py: _make_before_callback ──────────────────────────────
 
+
 def _make_params():
     from models.enums import OperatingMode
     from models.session import SessionParams
+
     return SessionParams(
         mode=OperatingMode.SEMI_AUTO,
         loss_limit_eur=500.0,
@@ -155,6 +164,7 @@ def _make_params():
 
 def _make_plan_state(params=None):
     from models.session import PlanState
+
     if params is None:
         params = _make_params()
     return PlanState(session_id="test-cb-session", params=params)
@@ -290,6 +300,7 @@ def test_coordinator_before_callback_alpaca_fetch_exception(monkeypatch):
 
 # ── _serialise exception branch ───────────────────────────────────────────────
 
+
 def test_serialise_str_raises_falls_back_to_repr():
     """Lines 20-21: when json.dumps(default=str) fails because str() raises, repr() is used."""
     from agent.callbacks import _serialise
@@ -306,6 +317,7 @@ def test_serialise_str_raises_falls_back_to_repr():
 
 
 # ── before_callback user_content attribute raises ─────────────────────────────
+
 
 def test_before_callback_user_content_raises_is_swallowed():
     """Lines 45-46: accessing user_content raises → exception is swallowed, logged as unavailable."""

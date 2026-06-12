@@ -1,4 +1,5 @@
 """System prompt templates for all agents."""
+
 from __future__ import annotations
 
 _RISK_PREAMBLE = """You are part of an adversarial risk debate. Two agents debate each trade candidate.

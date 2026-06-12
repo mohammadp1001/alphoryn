@@ -1,4 +1,5 @@
 """Unit tests for infra.secrets — get_secret, get_alpaca_credentials."""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,11 +10,13 @@ import pytest
 
 # ── get_secret ────────────────────────────────────────────────────────────────
 
+
 def test_get_secret_raises_if_no_project(monkeypatch):
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
 
     with patch("infra.secrets.acquire_secret_manager", new=AsyncMock()):
         from infra.secrets import get_secret
+
         with pytest.raises(RuntimeError, match="GOOGLE_CLOUD_PROJECT"):
             asyncio.run(get_secret("some-secret"))
 
@@ -47,6 +50,7 @@ def test_get_secret_success(monkeypatch):
         import importlib
 
         import infra.secrets as secrets_mod
+
         importlib.reload(secrets_mod)
         result = asyncio.run(secrets_mod.get_secret("alpaca-api-key"))
 
@@ -80,6 +84,7 @@ def test_get_secret_uses_correct_resource_name(monkeypatch):
         import importlib
 
         import infra.secrets as secrets_mod
+
         importlib.reload(secrets_mod)
         asyncio.run(secrets_mod.get_secret("my-secret", version="3"))
 
@@ -112,6 +117,7 @@ def test_get_secret_default_version_is_latest(monkeypatch):
         import importlib
 
         import infra.secrets as secrets_mod
+
         importlib.reload(secrets_mod)
         asyncio.run(secrets_mod.get_secret("my-secret"))
 
@@ -120,9 +126,11 @@ def test_get_secret_default_version_is_latest(monkeypatch):
 
 # ── get_alpaca_credentials ────────────────────────────────────────────────────
 
+
 def test_get_alpaca_credentials_calls_get_secret_twice():
     with patch("infra.secrets.get_secret", new=AsyncMock(side_effect=["key-123", "secret-456"])):
         from infra.secrets import get_alpaca_credentials
+
         key, secret = asyncio.run(get_alpaca_credentials())
 
     assert key == "key-123"
@@ -139,11 +147,12 @@ def test_get_alpaca_credentials_returns_correct_order():
 
     with patch("infra.secrets.get_secret", new=mock_get_secret):
         from infra.secrets import get_alpaca_credentials
+
         key, secret = asyncio.run(get_alpaca_credentials())
 
     from config import ALPACA_API_KEY_SECRET, ALPACA_API_SECRET_SECRET
+
     assert calls[0] == ALPACA_API_KEY_SECRET
     assert calls[1] == ALPACA_API_SECRET_SECRET
     assert key == f"value-{ALPACA_API_KEY_SECRET}"
     assert secret == f"value-{ALPACA_API_SECRET_SECRET}"
-

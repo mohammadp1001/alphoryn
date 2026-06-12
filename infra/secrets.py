@@ -3,6 +3,7 @@ GCP Secret Manager wrapper.
 The coordinator calls this at execution-agent spawn time to fetch the Alpaca execution key.
 The value is injected as env vars into the execution agent context — never logged or stored.
 """
+
 from __future__ import annotations
 
 import logging

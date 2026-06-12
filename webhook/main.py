@@ -17,6 +17,7 @@ Deploy:
         --no-allow-unauthenticated \
         --set-env-vars ALPACA_WEBHOOK_SECRET=<secret>
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -43,6 +44,7 @@ _WEBHOOK_SECRET: str | None = os.environ.get("ALPACA_WEBHOOK_SECRET")
 # Signature verification
 # ---------------------------------------------------------------------------
 
+
 def _verify_signature(req: Request, secret: str) -> bool:
     """Return True if the Alpaca-Signature header matches the payload HMAC."""
     sig_header = req.headers.get("Alpaca-Signature", "")
@@ -57,6 +59,7 @@ def _verify_signature(req: Request, secret: str) -> bool:
 # ---------------------------------------------------------------------------
 # Pnl helpers
 # ---------------------------------------------------------------------------
+
 
 def _compute_pnl_pct(filled_avg_price: float, entry_price: float, side: str) -> float:
     if entry_price == 0:
@@ -77,6 +80,7 @@ def _debate_winner(pnl_pct: float) -> DebateWinner:
 # Route
 # ---------------------------------------------------------------------------
 
+
 @app.route("/webhook/alpaca", methods=["POST"])
 def alpaca_webhook() -> Response:
     if _WEBHOOK_SECRET and not _verify_signature(request, _WEBHOOK_SECRET):
@@ -94,7 +98,11 @@ def alpaca_webhook() -> Response:
     event_type = payload.get("event")
     if event_type not in {"fill", "partial_fill", "canceled", "expired"}:
         # Not an event we act on; acknowledge and skip
-        return Response(json.dumps({"ok": True, "action": "ignored"}), status=HTTPStatus.OK, mimetype="application/json")
+        return Response(
+            json.dumps({"ok": True, "action": "ignored"}),
+            status=HTTPStatus.OK,
+            mimetype="application/json",
+        )
 
     order = payload.get("order", {})
     order_id = order.get("id", "")
@@ -109,7 +117,11 @@ def alpaca_webhook() -> Response:
 
     if match is None:
         logger.info("Webhook: order_id=%s not in unresolved trades — skipping", order_id)
-        return Response(json.dumps({"ok": True, "action": "not_found"}), status=HTTPStatus.OK, mimetype="application/json")
+        return Response(
+            json.dumps({"ok": True, "action": "not_found"}),
+            status=HTTPStatus.OK,
+            mimetype="application/json",
+        )
 
     if event_type in {"canceled", "expired"}:
         pnl_pct = 0.0

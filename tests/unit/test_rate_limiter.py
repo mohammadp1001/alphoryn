@@ -1,4 +1,5 @@
 """Unit tests for the token bucket rate limiter."""
+
 from __future__ import annotations
 
 import asyncio
@@ -53,5 +54,3 @@ def test_acquire_gemini_callable() -> None:
     from infra.rate_limiter import acquire_gemini
 
     asyncio.run(acquire_gemini())
-
-

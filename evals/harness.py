@@ -11,6 +11,7 @@ Full eval (generate + grade) requires:
   pip install google-adk
   agents-cli eval run
 """
+
 from __future__ import annotations
 
 import json
@@ -62,7 +63,9 @@ def validate_all_datasets() -> None:
         dataset = load_dataset(path)
         errors = validate_trace_structure(dataset)
         if errors:
-            msg = f"Dataset {path.name} has structural errors:\n" + "\n".join(f"  - {e}" for e in errors)
+            msg = f"Dataset {path.name} has structural errors:\n" + "\n".join(
+                f"  - {e}" for e in errors
+            )
             raise AssertionError(msg)
         case_ids = [c["eval_case_id"] for c in dataset.get("eval_cases", [])]
         print(f"  {path.name}: {len(case_ids)} case(s) — {case_ids}")

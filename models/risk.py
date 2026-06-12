@@ -9,6 +9,7 @@ from models.research import SentimentReport
 
 class CandidateShortlist(BaseModel):
     """Top-N ETFs selected by coordinator from RankedSignals for the risk debate."""
+
     symbols: list[str]
     ranked_signals: RankedSignals
     selection_reasoning: str
@@ -16,18 +17,20 @@ class CandidateShortlist(BaseModel):
 
 class AgentCalibration(BaseModel):
     """Win-rate calibration for one agent in one (regime, strategy) context."""
-    agent: str                      # "optimist" | "pessimist"
+
+    agent: str  # "optimist" | "pessimist"
     market_regime: MarketRegime
     strategy: Strategy
     wins: int
     losses: int
     ties: int
-    win_rate: float                 # wins / (wins + losses), 0.5 if no data
-    has_data: bool                  # False on cold start
+    win_rate: float  # wins / (wins + losses), 0.5 if no data
+    has_data: bool  # False on cold start
 
 
 class DebateInput(BaseModel):
     """Everything passed into the risk debate."""
+
     shortlist: CandidateShortlist
     backtest_results: list[BacktestResult]
     sentiment_report: SentimentReport
@@ -37,10 +40,11 @@ class DebateInput(BaseModel):
 
 class AgentVerdict(BaseModel):
     """One risk agent's output after its 2-turn debate."""
-    agent: str                      # "optimist" | "pessimist"
+
+    agent: str  # "optimist" | "pessimist"
     recommended_level: RiskLevel
     reasoning: str
-    acknowledged_opposing_signal: str   # constitution requirement
+    acknowledged_opposing_signal: str  # constitution requirement
 
 
 class RiskAssessment(BaseModel):
@@ -48,11 +52,12 @@ class RiskAssessment(BaseModel):
     Coordinator's final synthesis after the debate.
     Level is computed deterministically — see ADR 0001.
     """
+
     level: RiskLevel
     optimist_verdict: AgentVerdict
     pessimist_verdict: AgentVerdict
-    synthesis_reasoning: str        # written by LLM, level computed by formula
-    weighted_score: float           # the raw score from the formula
+    synthesis_reasoning: str  # written by LLM, level computed by formula
+    weighted_score: float  # the raw score from the formula
     override_applied: bool = False  # True if asymmetric pessimist override triggered
 
     @classmethod

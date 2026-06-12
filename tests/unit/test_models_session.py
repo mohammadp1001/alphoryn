@@ -1,4 +1,5 @@
 """Unit tests for models.session — SessionParams, PlanState."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -12,6 +13,7 @@ from models.memory import CycleRecord
 from models.session import PlanState, SessionParams
 
 # ── SessionParams ─────────────────────────────────────────────────────────────
+
 
 def test_session_params_defaults():
     params = SessionParams()
@@ -49,6 +51,7 @@ def test_session_params_duration_property():
 
 # ── PlanState ─────────────────────────────────────────────────────────────────
 
+
 def _make_plan_state(session_id="test-id", **kwargs) -> PlanState:
     params = SessionParams(**kwargs)
     return PlanState(session_id=session_id, params=params)
@@ -74,6 +77,7 @@ def test_plan_state_started_at_is_set():
 
 
 # ── loss_limit_consumed_pct ───────────────────────────────────────────────────
+
 
 def test_loss_limit_consumed_pct_zero_loss():
     ps = _make_plan_state()
@@ -106,6 +110,7 @@ def test_loss_limit_consumed_pct_zero_limit():
 
 # ── loss_limit_breached ───────────────────────────────────────────────────────
 
+
 def test_loss_limit_breached_false_when_ok():
     ps = _make_plan_state()
     assert ps.loss_limit_breached is False
@@ -124,6 +129,7 @@ def test_loss_limit_breached_true_beyond_limit():
 
 
 # ── loss_limit_warning ────────────────────────────────────────────────────────
+
 
 def test_loss_limit_warning_false_below_80():
     ps = _make_plan_state()
@@ -144,6 +150,7 @@ def test_loss_limit_warning_true_above_80():
 
 
 # ── complete_cycle ────────────────────────────────────────────────────────────
+
 
 def _make_cycle_record(outcome: CycleOutcome, pnl: float | None = None) -> CycleRecord:
     return CycleRecord(
@@ -226,12 +233,27 @@ def test_complete_multiple_cycles():
         positions=[],
     )
 
-    c1 = CycleRecord(cycle_index=0, outcome=CycleOutcome.COMMITTED,
-                     shortlisted_symbols=[], risk_level="LOW", realised_pnl_pct=1.0)
-    c2 = CycleRecord(cycle_index=1, outcome=CycleOutcome.COMMITTED,
-                     shortlisted_symbols=[], risk_level="MEDIUM", realised_pnl_pct=-0.5)
-    c3 = CycleRecord(cycle_index=2, outcome=CycleOutcome.ABORTED,
-                     shortlisted_symbols=[], risk_level="HIGH", realised_pnl_pct=None)
+    c1 = CycleRecord(
+        cycle_index=0,
+        outcome=CycleOutcome.COMMITTED,
+        shortlisted_symbols=[],
+        risk_level="LOW",
+        realised_pnl_pct=1.0,
+    )
+    c2 = CycleRecord(
+        cycle_index=1,
+        outcome=CycleOutcome.COMMITTED,
+        shortlisted_symbols=[],
+        risk_level="MEDIUM",
+        realised_pnl_pct=-0.5,
+    )
+    c3 = CycleRecord(
+        cycle_index=2,
+        outcome=CycleOutcome.ABORTED,
+        shortlisted_symbols=[],
+        risk_level="HIGH",
+        realised_pnl_pct=None,
+    )
 
     ps.complete_cycle(c1)
     ps.complete_cycle(c2)

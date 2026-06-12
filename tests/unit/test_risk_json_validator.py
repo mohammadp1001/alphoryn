@@ -1,4 +1,5 @@
 """Unit tests for _make_json_validator_callback in agent.risk_agents."""
+
 from __future__ import annotations
 
 import asyncio
@@ -34,6 +35,7 @@ def _run(coro):
 @pytest.fixture()
 def validator():
     from agent.risk_agents import _make_json_validator_callback
+
     return _make_json_validator_callback(RiskVerdictOutput)
 
 
@@ -43,23 +45,27 @@ def callback_context():
 
 
 def test_valid_json_returns_none(validator, callback_context):
-    payload = json.dumps({
-        "recommended_level": "LOW",
-        "reasoning": "stable conditions",
-        "acknowledged_opposing_signal": "minor volatility",
-    })
+    payload = json.dumps(
+        {
+            "recommended_level": "LOW",
+            "reasoning": "stable conditions",
+            "acknowledged_opposing_signal": "minor volatility",
+        }
+    )
     result = _run(validator(callback_context, _make_llm_response(payload)))
     assert result is None
 
 
 def test_valid_json_embedded_in_text_returns_none(validator, callback_context):
     payload = (
-        'Here is my verdict: '
-        + json.dumps({
-            "recommended_level": "MEDIUM",
-            "reasoning": "mixed signals",
-            "acknowledged_opposing_signal": "none",
-        })
+        "Here is my verdict: "
+        + json.dumps(
+            {
+                "recommended_level": "MEDIUM",
+                "reasoning": "mixed signals",
+                "acknowledged_opposing_signal": "none",
+            }
+        )
         + " end."
     )
     result = _run(validator(callback_context, _make_llm_response(payload)))

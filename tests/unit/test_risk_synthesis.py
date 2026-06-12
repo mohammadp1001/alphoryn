@@ -1,7 +1,9 @@
 """Unit tests for ADR 0001 deterministic risk synthesis."""
+
 from __future__ import annotations
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _synthesise(opt_level: str, pess_level: str, opt_win: float, pess_win: float) -> dict:
     """Call synthesise_risk tool function directly (no ADK wrapper needed)."""
@@ -13,6 +15,7 @@ def _synthesise(opt_level: str, pess_level: str, opt_win: float, pess_win: float
 
 
 # ── ADR 0001 formula tests ────────────────────────────────────────────────────
+
 
 def test_equal_weights_both_low_gives_low() -> None:
     result = _synthesise("LOW", "LOW", 0.5, 0.5)
@@ -74,6 +77,7 @@ def test_score_above_high_threshold_gives_high() -> None:
 
 
 # ── Debate winner tests ───────────────────────────────────────────────────────
+
 
 def test_pessimist_high_wins_debate() -> None:
     result = _synthesise("LOW", "HIGH", 0.5, 0.5)

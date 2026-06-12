@@ -10,25 +10,26 @@ from models.memory import CycleRecord
 from models.risk import RiskAssessment
 
 _TIMEFRAME_DURATION: dict[SessionTimeframe, timedelta] = {
-    SessionTimeframe.MIN_30:  timedelta(minutes=30),
-    SessionTimeframe.HOUR_1:  timedelta(hours=1),
-    SessionTimeframe.HOUR_3:  timedelta(hours=3),
+    SessionTimeframe.MIN_30: timedelta(minutes=30),
+    SessionTimeframe.HOUR_1: timedelta(hours=1),
+    SessionTimeframe.HOUR_3: timedelta(hours=3),
     SessionTimeframe.HOUR_12: timedelta(hours=12),
-    SessionTimeframe.DAY_1:   timedelta(days=1),
-    SessionTimeframe.DAY_2:   timedelta(days=2),
-    SessionTimeframe.DAY_5:   timedelta(days=5),
+    SessionTimeframe.DAY_1: timedelta(days=1),
+    SessionTimeframe.DAY_2: timedelta(days=2),
+    SessionTimeframe.DAY_5: timedelta(days=5),
 }
 
 
 class SessionParams(BaseModel):
     """Set once via CLI wizard at session start."""
+
     timeframe: SessionTimeframe = SessionTimeframe.DAY_1  # how long the session runs
     mode: OperatingMode = OperatingMode.SEMI_AUTO
     loss_limit_eur: float = 500.0
-    shortlist_n: int = 2                # 1–5, default 2
+    shortlist_n: int = 2  # 1–5, default 2
     hitl_timeout_seconds: int = 60
     hitl_timeout_action: str = "abort"  # "abort" | "proceed"
-    universe: str = "US_SECTOR_ETFS"   # key into config.ETF_UNIVERSES
+    universe: str = "US_SECTOR_ETFS"  # key into config.ETF_UNIVERSES
     allow_closed_market: bool = False  # skip market-closed abort when True
     # None → use default Gemini 2.5 Flash; "openrouter/…" strings are auto-wrapped in LiteLlm
     coordinator_model: str | None = None
@@ -43,7 +44,8 @@ class PlanState(BaseModel):
     Coordinator's single source of truth for the session.
     Never shared with subagents directly — subagents receive only their task inputs.
     """
-    session_id: str                     # UUID generated at session start
+
+    session_id: str  # UUID generated at session start
     params: SessionParams
     started_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -87,8 +89,6 @@ class PlanState(BaseModel):
         self.cycle_index += 1
         if record.realised_pnl_pct is not None and record.outcome.value == "COMMITTED":
             portfolio_value = (
-                self.portfolio_snapshot.portfolio_value
-                if self.portfolio_snapshot
-                else 0.0
+                self.portfolio_snapshot.portfolio_value if self.portfolio_snapshot else 0.0
             )
             self.session_realised_pnl_eur += (record.realised_pnl_pct / 100) * portfolio_value

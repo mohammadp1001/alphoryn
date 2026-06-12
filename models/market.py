@@ -16,7 +16,7 @@ class OHLCVBar(BaseModel):
 
 class OHLCVData(BaseModel):
     symbol: str
-    timeframe: str                          # e.g. "1Day", "1Hour"
+    timeframe: str  # e.g. "1Day", "1Hour"
     bars: list[OHLCVBar]
 
     @property
@@ -88,8 +88,8 @@ class SectorAllocation(BaseModel):
 
 
 class SectorMap(BaseModel):
-    etf_to_sector: dict[str, str]           # symbol → sector name
-    sector_to_etfs: dict[str, list[str]]    # sector → [symbols]
+    etf_to_sector: dict[str, str]  # symbol → sector name
+    sector_to_etfs: dict[str, list[str]]  # sector → [symbols]
 
 
 class RangeData(BaseModel):
@@ -109,7 +109,7 @@ class VolumeBucket(BaseModel):
 class VolumeProfile(BaseModel):
     symbol: str
     buckets: list[VolumeBucket]
-    point_of_control: float                 # price level with highest volume
+    point_of_control: float  # price level with highest volume
     days: int
 
 

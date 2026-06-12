@@ -8,7 +8,7 @@ from models.enums import Strategy
 class RSIResult(BaseModel):
     symbol: str
     period: int
-    values: list[float]         # most recent last
+    values: list[float]  # most recent last
     current: float
 
     @property
@@ -34,7 +34,7 @@ class BollingerResult(BaseModel):
     symbol: str
     period: int
     upper: list[float]
-    middle: list[float]         # SMA
+    middle: list[float]  # SMA
     lower: list[float]
     current_upper: float
     current_middle: float
@@ -71,7 +71,7 @@ class BetaResult(BaseModel):
 
 class MomentumSignal(BaseModel):
     symbol: str
-    momentum_score: float           # normalised -1.0 to +1.0
+    momentum_score: float  # normalised -1.0 to +1.0
     rsi_contribution: float
     macd_contribution: float
     price_vs_sma_contribution: float
@@ -82,15 +82,15 @@ class MomentumSignal(BaseModel):
 
 class CrossoverSignal(BaseModel):
     symbol: str
-    crossover_type: str             # "bullish" | "bearish" | "none"
+    crossover_type: str  # "bullish" | "bearish" | "none"
     bars_since_crossover: int | None = None
-    strength: float                 # 0.0–1.0
+    strength: float  # 0.0–1.0
 
 
 class SRLevel(BaseModel):
     price: float
-    level_type: str                 # "support" | "resistance"
-    strength: float                 # 0.0–1.0 based on touch count
+    level_type: str  # "support" | "resistance"
+    strength: float  # 0.0–1.0 based on touch count
 
 
 class SRLevels(BaseModel):
@@ -102,7 +102,7 @@ class SRLevels(BaseModel):
 
 class TechnicalScore(BaseModel):
     symbol: str
-    composite_score: float          # -1.0 to +1.0
+    composite_score: float  # -1.0 to +1.0
     rsi_score: float
     macd_score: float
     bollinger_score: float
@@ -119,27 +119,29 @@ class RankedSignal(BaseModel):
 
 class RankedSignals(BaseModel):
     strategy: Strategy
-    signals: list[RankedSignal]     # sorted by combined_score descending
-    screened_universe: list[str]    # symbols that were evaluated
+    signals: list[RankedSignal]  # sorted by combined_score descending
+    screened_universe: list[str]  # symbols that were evaluated
 
 
 class SignalMatch(BaseModel):
     """One historical occurrence of a signal pattern similar to the current one."""
-    bar_index: int                  # index in lookback window
+
+    bar_index: int  # index in lookback window
     signal_strength: float
-    forward_return_pct: float       # actual return N days after signal
+    forward_return_pct: float  # actual return N days after signal
 
 
 class BacktestResult(BaseModel):
     """Signal lookback summary — NOT a full portfolio simulation."""
+
     symbol: str
     strategy: Strategy
-    signal_pattern: str             # human-readable description
+    signal_pattern: str  # human-readable description
     lookback_bars: int
     forward_return_days: int
     match_count: int
     avg_forward_return_pct: float
-    win_rate_pct: float             # % of matches with positive forward return
+    win_rate_pct: float  # % of matches with positive forward return
     max_adverse_excursion_pct: float
     matches: list[SignalMatch] = Field(default_factory=list)
 
@@ -162,7 +164,7 @@ class DrawdownResult(BaseModel):
 
 class CorrelationMatrix(BaseModel):
     symbols: list[str]
-    matrix: list[list[float]]       # row i, col j = corr(symbols[i], symbols[j])
+    matrix: list[list[float]]  # row i, col j = corr(symbols[i], symbols[j])
 
     def get(self, a: str, b: str) -> float:
         i, j = self.symbols.index(a), self.symbols.index(b)

@@ -1,4 +1,5 @@
 """Unit tests for tools.research.tools — 13 research tools."""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,11 +13,16 @@ def _mock_acquire():
 
 # ── get_news ──────────────────────────────────────────────────────────────────
 
+
 def test_get_news_returns_items():
     ts = int(datetime.now(UTC).timestamp())
     mock_news = [
-        {"title": "XLK surges on AI news", "publisher": "Reuters",
-         "providerPublishTime": ts, "link": "http://example.com"},
+        {
+            "title": "XLK surges on AI news",
+            "publisher": "Reuters",
+            "providerPublishTime": ts,
+            "link": "http://example.com",
+        },
     ]
     mock_ticker = MagicMock()
     mock_ticker.news = mock_news
@@ -26,6 +32,7 @@ def test_get_news_returns_items():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_news
+
         result = asyncio.run(get_news("XLK", 7))
 
     assert result["symbol"] == "XLK"
@@ -46,6 +53,7 @@ def test_get_news_filters_old_items():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_news
+
         result = asyncio.run(get_news("XLK", 7))
 
     assert result["items"] == []
@@ -60,6 +68,7 @@ def test_get_news_empty_news():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_news
+
         result = asyncio.run(get_news("SPY", 3))
 
     assert result["symbol"] == "SPY"
@@ -75,6 +84,7 @@ def test_get_news_exception_returns_empty():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_news
+
         result = asyncio.run(get_news("GLD", 5))
 
     assert result["symbol"] == "GLD"
@@ -89,8 +99,7 @@ def test_get_news_loop_exception_triggers_except_pass():
     int(datetime.now(UTC).timestamp())
     # providerPublishTime is a string that int() rejects → triggers utcfromtimestamp error
     bad_news = [
-        {"title": "Bad item", "publisher": "X",
-         "providerPublishTime": "not-a-number", "link": ""},
+        {"title": "Bad item", "publisher": "X", "providerPublishTime": "not-a-number", "link": ""},
     ]
     mock_ticker = MagicMock()
     mock_ticker.news = bad_news
@@ -100,6 +109,7 @@ def test_get_news_loop_exception_triggers_except_pass():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_news
+
         result = asyncio.run(get_news("VIX", 7))
 
     assert result["symbol"] == "VIX"
@@ -108,9 +118,11 @@ def test_get_news_loop_exception_triggers_except_pass():
 
 # ── get_sentiment ─────────────────────────────────────────────────────────────
 
+
 def test_get_sentiment_bullish():
     news = [{"headline": "XLK surges to record high on strong growth profit rally"}]
     from tools.research.tools import get_sentiment
+
     result = asyncio.run(get_sentiment("XLK", news))
     assert result["label"] == "bullish"
     assert result["score"] > 0.1
@@ -119,6 +131,7 @@ def test_get_sentiment_bullish():
 def test_get_sentiment_bearish():
     news = [{"headline": "XLF crashes on fear of recession loss decline weakness"}]
     from tools.research.tools import get_sentiment
+
     result = asyncio.run(get_sentiment("XLF", news))
     assert result["label"] == "bearish"
     assert result["score"] < -0.1
@@ -127,12 +140,14 @@ def test_get_sentiment_bearish():
 def test_get_sentiment_neutral():
     news = [{"headline": "ETF shows stable performance in mixed trading session"}]
     from tools.research.tools import get_sentiment
+
     result = asyncio.run(get_sentiment("SPY", news))
     assert result["label"] == "neutral"
 
 
 def test_get_sentiment_no_items():
     from tools.research.tools import get_sentiment
+
     result = asyncio.run(get_sentiment("QQQ", []))
     assert result["score"] == 0.0
     assert result["label"] == "neutral"
@@ -146,6 +161,7 @@ def test_get_sentiment_multiple_items():
         {"headline": "neutral"},
     ]
     from tools.research.tools import get_sentiment
+
     result = asyncio.run(get_sentiment("IWM", news))
     assert result["item_count"] == 3
     assert -1.0 <= result["score"] <= 1.0
@@ -153,12 +169,13 @@ def test_get_sentiment_multiple_items():
 
 # ── get_earnings_calendar ─────────────────────────────────────────────────────
 
+
 def _make_mock_cal_row(future_date: datetime):
     """Build a mock DataFrame-like object for earnings_dates without real pandas."""
     mock_row = MagicMock()
-    mock_row.get = lambda key, default=0: {
-        "EPS Estimate": 1.5, "Surprise(%)": 5.0
-    }.get(key, default)
+    mock_row.get = lambda key, default=0: {"EPS Estimate": 1.5, "Surprise(%)": 5.0}.get(
+        key, default
+    )
 
     mock_dt = MagicMock()
     mock_dt.isoformat.return_value = future_date.isoformat()
@@ -184,6 +201,7 @@ def test_get_earnings_calendar_with_future_event():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_earnings_calendar
+
         result = asyncio.run(get_earnings_calendar("AAPL", 30))
 
     assert result["symbol"] == "AAPL"
@@ -199,6 +217,7 @@ def test_get_earnings_calendar_no_data():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_earnings_calendar
+
         result = asyncio.run(get_earnings_calendar("XLK", 7))
 
     assert result["events"] == []
@@ -214,12 +233,14 @@ def test_get_earnings_calendar_exception_returns_empty():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_earnings_calendar
+
         result = asyncio.run(get_earnings_calendar("SPY", 7))
 
     assert result["events"] == []
 
 
 # ── get_macro_data ────────────────────────────────────────────────────────────
+
 
 def test_get_macro_data_returns_all_fields():
     mock_ticker = MagicMock()
@@ -230,6 +251,7 @@ def test_get_macro_data_returns_all_fields():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_macro_data
+
         result = asyncio.run(get_macro_data())
 
     assert "vix" in result
@@ -245,12 +267,14 @@ def test_get_macro_data_exception_returns_zero():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_macro_data
+
         result = asyncio.run(get_macro_data())
 
     assert result["vix"] == 0.0
 
 
 # ── get_fund_flows ────────────────────────────────────────────────────────────
+
 
 def _make_mock_hist(closes: list[float], volumes: list[float]):
     """Build a mock DataFrame-like object for yf.download without real pandas."""
@@ -282,6 +306,7 @@ def test_get_fund_flows_inflow():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_fund_flows
+
         result = asyncio.run(get_fund_flows("XLK"))
 
     assert result["symbol"] == "XLK"
@@ -295,6 +320,7 @@ def test_get_fund_flows_outflow():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_fund_flows
+
         result = asyncio.run(get_fund_flows("SPY"))
 
     assert result["flow_direction"] == "outflow"
@@ -309,6 +335,7 @@ def test_get_fund_flows_empty_data():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_fund_flows
+
         result = asyncio.run(get_fund_flows("XYZ"))
 
     assert result["flow_direction"] == "neutral"
@@ -322,12 +349,14 @@ def test_get_fund_flows_single_row():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_fund_flows
+
         result = asyncio.run(get_fund_flows("X"))
 
     assert result["flow_direction"] == "neutral"
 
 
 # ── get_etf_metrics ───────────────────────────────────────────────────────────
+
 
 def test_get_etf_metrics_returns_fields():
     mock_ticker = MagicMock()
@@ -342,6 +371,7 @@ def test_get_etf_metrics_returns_fields():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_etf_metrics
+
         result = asyncio.run(get_etf_metrics("XLK"))
 
     assert result["symbol"] == "XLK"
@@ -351,6 +381,7 @@ def test_get_etf_metrics_returns_fields():
 
 
 # ── compare_etfs ──────────────────────────────────────────────────────────────
+
 
 def test_compare_etfs_returns_all_symbols():
     mock_ticker = MagicMock()
@@ -365,6 +396,7 @@ def test_compare_etfs_returns_all_symbols():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import compare_etfs
+
         result = asyncio.run(compare_etfs(["XLK", "SPY"]))
 
     assert len(result["comparisons"]) == 2
@@ -381,6 +413,7 @@ def test_compare_etfs_caps_at_5():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import compare_etfs
+
         result = asyncio.run(compare_etfs(["A", "B", "C", "D", "E", "F", "G"]))
 
     assert len(result["comparisons"]) <= 5
@@ -392,6 +425,7 @@ def test_compare_etfs_exception_still_includes_symbol():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import compare_etfs
+
         result = asyncio.run(compare_etfs(["XLK"]))
 
     assert len(result["comparisons"]) == 1
@@ -401,6 +435,7 @@ def test_compare_etfs_exception_still_includes_symbol():
 
 # ── get_expense_ratios ────────────────────────────────────────────────────────
 
+
 def test_get_expense_ratios_returns_all():
     mock_ticker = MagicMock()
     mock_ticker.info = {"annualReportExpenseRatio": 0.0003}
@@ -409,6 +444,7 @@ def test_get_expense_ratios_returns_all():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_expense_ratios
+
         result = asyncio.run(get_expense_ratios(["XLK", "SPY"]))
 
     assert len(result["ratios"]) == 2
@@ -420,12 +456,14 @@ def test_get_expense_ratios_exception_returns_zero():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_expense_ratios
+
         result = asyncio.run(get_expense_ratios(["FAIL"]))
 
     assert result["ratios"][0]["expense_ratio"] == 0.0
 
 
 # ── get_sector_performance ────────────────────────────────────────────────────
+
 
 def _make_mock_sector_hist(first: float, last: float):
     """Build a mock hist["Close"] series for sector performance."""
@@ -446,6 +484,7 @@ def test_get_sector_performance_returns_sorted():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_sector_performance
+
         result = asyncio.run(get_sector_performance("1mo"))
 
     assert "timeframe" in result
@@ -460,12 +499,14 @@ def test_get_sector_performance_exception_skips_sector():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_sector_performance
+
         result = asyncio.run(get_sector_performance("3mo"))
 
     assert result["returns"] == []
 
 
 # ── get_dividend_history ──────────────────────────────────────────────────────
+
 
 def _make_mock_divs(items: list[tuple]):
     """Build a mock dividends series object without real pandas.
@@ -482,19 +523,21 @@ def _make_mock_divs(items: list[tuple]):
         return mock_dt
 
     mock_tail = MagicMock()
-    mock_tail.items.return_value = iter([
-        (make_mock_dt(date_str), amount) for date_str, amount in items
-    ])
+    mock_tail.items.return_value = iter(
+        [(make_mock_dt(date_str), amount) for date_str, amount in items]
+    )
 
     mock_divs.tail.return_value = mock_tail
     return mock_divs
 
 
 def test_get_dividend_history_returns_dividends():
-    mock_divs = _make_mock_divs([
-        ("2024-12-15", 0.52),
-        ("2024-09-15", 0.49),
-    ])
+    mock_divs = _make_mock_divs(
+        [
+            ("2024-12-15", 0.52),
+            ("2024-09-15", 0.49),
+        ]
+    )
     mock_ticker = MagicMock()
     mock_ticker.dividends = mock_divs
 
@@ -503,6 +546,7 @@ def test_get_dividend_history_returns_dividends():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_dividend_history
+
         result = asyncio.run(get_dividend_history("XLK"))
 
     assert result["symbol"] == "XLK"
@@ -520,6 +564,7 @@ def test_get_dividend_history_empty():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_dividend_history
+
         result = asyncio.run(get_dividend_history("GLD"))
 
     assert result["dividends"] == []
@@ -536,6 +581,7 @@ def test_get_dividend_history_exception_returns_empty():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_dividend_history
+
         result = asyncio.run(get_dividend_history("XLE"))
 
     assert result["dividends"] == []
@@ -543,8 +589,10 @@ def test_get_dividend_history_exception_returns_empty():
 
 # ── get_economic_calendar ─────────────────────────────────────────────────────
 
+
 def test_get_economic_calendar_returns_events():
     from tools.research.tools import get_economic_calendar
+
     result = asyncio.run(get_economic_calendar(days_ahead=30))
 
     assert "events" in result
@@ -554,6 +602,7 @@ def test_get_economic_calendar_returns_events():
 
 def test_get_economic_calendar_fomc_event():
     from tools.research.tools import get_economic_calendar
+
     result = asyncio.run(get_economic_calendar(7))
     event_names = [e["event"] for e in result["events"]]
     assert "FOMC Meeting" in event_names
@@ -561,38 +610,55 @@ def test_get_economic_calendar_fomc_event():
 
 # ── detect_market_regime ──────────────────────────────────────────────────────
 
+
 def test_detect_market_regime_crisis():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=35.0, yield_10y=4.5, yield_2y=5.0, benchmark_return_20d=-5.0))
+
+    result = asyncio.run(
+        detect_market_regime(vix=35.0, yield_10y=4.5, yield_2y=5.0, benchmark_return_20d=-5.0)
+    )
     assert result["regime"] == "CRISIS"
 
 
 def test_detect_market_regime_high_vol():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=25.0, yield_10y=4.0, yield_2y=4.5, benchmark_return_20d=0.5))
+
+    result = asyncio.run(
+        detect_market_regime(vix=25.0, yield_10y=4.0, yield_2y=4.5, benchmark_return_20d=0.5)
+    )
     assert result["regime"] == "HIGH_VOL"
 
 
 def test_detect_market_regime_bull_trend():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=12.0, yield_10y=4.0, yield_2y=4.2, benchmark_return_20d=3.5))
+
+    result = asyncio.run(
+        detect_market_regime(vix=12.0, yield_10y=4.0, yield_2y=4.2, benchmark_return_20d=3.5)
+    )
     assert result["regime"] == "BULL_TREND"
 
 
 def test_detect_market_regime_bear_trend():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=18.0, yield_10y=4.0, yield_2y=4.2, benchmark_return_20d=-3.0))
+
+    result = asyncio.run(
+        detect_market_regime(vix=18.0, yield_10y=4.0, yield_2y=4.2, benchmark_return_20d=-3.0)
+    )
     assert result["regime"] == "BEAR_TREND"
 
 
 def test_detect_market_regime_low_vol_range():
     from tools.research.tools import detect_market_regime
-    result = asyncio.run(detect_market_regime(vix=14.0, yield_10y=4.0, yield_2y=4.1, benchmark_return_20d=1.0))
+
+    result = asyncio.run(
+        detect_market_regime(vix=14.0, yield_10y=4.0, yield_2y=4.1, benchmark_return_20d=1.0)
+    )
     assert result["regime"] == "LOW_VOL_RANGE"
 
 
 def test_detect_market_regime_returns_all_fields():
     from tools.research.tools import detect_market_regime
+
     result = asyncio.run(detect_market_regime(15.0, 4.0, 4.2, 2.5))
     assert "reasoning" in result
     assert "yield_curve_spread" in result
@@ -600,6 +666,7 @@ def test_detect_market_regime_returns_all_fields():
 
 
 # ── get_analyst_ratings ───────────────────────────────────────────────────────
+
 
 def _make_mock_recs(rows: list[dict]):
     """Build a mock recommendations DataFrame without real pandas."""
@@ -617,9 +684,9 @@ def _make_mock_recs(rows: list[dict]):
         return mock_dt
 
     mock_tail = MagicMock()
-    mock_tail.iterrows.return_value = iter([
-        (make_mock_dt("2025-01-15"), make_mock_row(r)) for r in rows
-    ])
+    mock_tail.iterrows.return_value = iter(
+        [(make_mock_dt("2025-01-15"), make_mock_row(r)) for r in rows]
+    )
     mock_recs.tail.return_value = mock_tail
     return mock_recs
 
@@ -635,6 +702,7 @@ def test_get_analyst_ratings_with_data():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_analyst_ratings
+
         result = asyncio.run(get_analyst_ratings("XLK"))
 
     assert result["symbol"] == "XLK"
@@ -651,6 +719,7 @@ def test_get_analyst_ratings_no_data():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_analyst_ratings
+
         result = asyncio.run(get_analyst_ratings("SPY"))
 
     assert result["ratings"] == []
@@ -667,12 +736,14 @@ def test_get_analyst_ratings_exception_returns_empty():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_analyst_ratings
+
         result = asyncio.run(get_analyst_ratings("QQQ"))
 
     assert result["ratings"] == []
 
 
 # ── get_sector_performance with custom symbols ────────────────────────────────
+
 
 def test_get_sector_performance_custom_symbols_uses_yfinance_sector():
     """Lines 309-323: custom symbols path — sector looked up via yf.Ticker.info."""
@@ -688,6 +759,7 @@ def test_get_sector_performance_custom_symbols_uses_yfinance_sector():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_sector_performance
+
         result = asyncio.run(get_sector_performance(timeframe="1mo", symbols=["TSLA", "NVDA"]))
 
     assert len(result["returns"]) == 2
@@ -706,6 +778,7 @@ def test_get_sector_performance_custom_symbols_sector_lookup_exception():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_sector_performance
+
         result = asyncio.run(get_sector_performance(timeframe="1mo", symbols=["XYZ"]))
 
     assert result["returns"][0]["sector"] == "Unknown"
@@ -725,6 +798,7 @@ def test_get_sector_performance_custom_symbols_empty_sector_map():
 
     with _mock_acquire(), patch.dict("sys.modules", {"yfinance": mock_yf}):
         from tools.research.tools import get_sector_performance
+
         result = asyncio.run(get_sector_performance(timeframe="1mo", symbols=["EWG"]))
 
     assert len(result["returns"]) == 1

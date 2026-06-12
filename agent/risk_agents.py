@@ -1,4 +1,5 @@
 """Risk debate agent factories — optimist and pessimist for SequentialAgent."""
+
 from __future__ import annotations
 
 import json
@@ -8,7 +9,6 @@ from typing import Any
 
 from google.adk.agents import Agent, SequentialAgent  # type: ignore[import]
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
-from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
 from google.adk.models.llm_response import LlmResponse  # type: ignore[import]
 
 from agent.callbacks import make_agent_log_callbacks
@@ -17,8 +17,15 @@ from tools.schemas import RiskVerdictOutput
 
 logger = logging.getLogger("agent.risk_agents")
 
-_OPENROUTER_OPTIMIST  = LiteLlm(model="openrouter/qwen/qwen-2.5-72b-instruct")
-_OPENROUTER_PESSIMIST = LiteLlm(model="openrouter/deepseek/deepseek-chat")
+_OPENROUTER_OPTIMIST_MODEL = "openrouter/qwen/qwen-2.5-72b-instruct"
+_OPENROUTER_PESSIMIST_MODEL = "openrouter/deepseek/deepseek-chat"
+
+
+def _lite_llm(model: str) -> object:
+    from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
+
+    return LiteLlm(model=model)
+
 
 _JSON_BLOCK = re.compile(r"\{.*?\}", re.DOTALL)
 
@@ -30,15 +37,14 @@ def _make_json_validator_callback(model_cls: type[Any]):
     and validates the shape against model_cls. Logs a warning on failure
     but does not raise — ADK's own handling continues either way.
     """
+
     async def _validate(
         callback_context: CallbackContext,
         llm_response: LlmResponse,
     ) -> LlmResponse | None:
         text = ""
         if llm_response.content and llm_response.content.parts:
-            text = "".join(
-                p.text or "" for p in llm_response.content.parts if hasattr(p, "text")
-            )
+            text = "".join(p.text or "" for p in llm_response.content.parts if hasattr(p, "text"))
         if not text:
             return None
         match = _JSON_BLOCK.search(text)
@@ -57,7 +63,7 @@ def _make_json_validator_callback(model_cls: type[Any]):
 
 def create_risk_optimist(
     calibration_summary: str,
-    model: str | LiteLlm = _OPENROUTER_OPTIMIST,
+    model: object = None,
 ) -> Agent:
     """Factory: returns a fresh optimist risk agent.
 
@@ -65,13 +71,13 @@ def create_risk_optimist(
         calibration_summary: Pre-formatted calibration string injected into system prompt.
         model: Model ID. Default: Qwen2.5-72B via OpenRouter.
     """
+    if model is None:
+        model = _lite_llm(_OPENROUTER_OPTIMIST_MODEL)
     before_cb, after_cb = make_agent_log_callbacks("risk_optimist", "optimist_verdict")
     return Agent(
         name="risk_optimist",
         model=model,
-        instruction=RISK_OPTIMIST_INSTRUCTION.format(
-            calibration_summary=calibration_summary
-        ),
+        instruction=RISK_OPTIMIST_INSTRUCTION.format(calibration_summary=calibration_summary),
         tools=[],
         description="Argues for the lowest justifiable risk level for a trade candidate.",
         output_key="optimist_verdict",
@@ -84,7 +90,7 @@ def create_risk_optimist(
 
 def create_risk_pessimist(
     calibration_summary: str,
-    model: str | LiteLlm = _OPENROUTER_PESSIMIST,
+    model: object = None,
 ) -> Agent:
     """Factory: returns a fresh pessimist risk agent.
 
@@ -92,13 +98,13 @@ def create_risk_pessimist(
         calibration_summary: Pre-formatted calibration string injected into system prompt.
         model: Model ID. Default: DeepSeek-V3 via OpenRouter.
     """
+    if model is None:
+        model = _lite_llm(_OPENROUTER_PESSIMIST_MODEL)
     before_cb, after_cb = make_agent_log_callbacks("risk_pessimist", "pessimist_verdict")
     return Agent(
         name="risk_pessimist",
         model=model,
-        instruction=RISK_PESSIMIST_INSTRUCTION.format(
-            calibration_summary=calibration_summary
-        ),
+        instruction=RISK_PESSIMIST_INSTRUCTION.format(calibration_summary=calibration_summary),
         tools=[],
         description=(
             "Argues for the highest justifiable risk level for a trade candidate. "
@@ -115,8 +121,8 @@ def create_risk_pessimist(
 def create_risk_debate(
     opt_calibration_summary: str,
     pess_calibration_summary: str,
-    optimist_model: str | LiteLlm = _OPENROUTER_OPTIMIST,
-    pessimist_model: str | LiteLlm = _OPENROUTER_PESSIMIST,
+    optimist_model: object = None,
+    pessimist_model: object = None,
 ) -> SequentialAgent:
     """Factory: returns a SequentialAgent that runs optimist then pessimist.
 

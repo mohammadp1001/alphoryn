@@ -1,4 +1,5 @@
 """coordinator.* tools — 8 tools, coordinator agent scope."""
+
 from __future__ import annotations
 
 import asyncio
@@ -38,12 +39,20 @@ async def request_hitl(
     Returns:
         dict with 'action' ('confirm'|'abort'), 'source' ('human'|'timeout'), 'latency_ms'.
     """
-    logger.info("request_hitl session_id=%s cycle=%d symbol=%s side=%s qty=%s risk=%s", session_id, cycle_index, symbol, side, qty, risk_level)
+    logger.info(
+        "request_hitl session_id=%s cycle=%d symbol=%s side=%s qty=%s risk=%s",
+        session_id,
+        cycle_index,
+        symbol,
+        side,
+        qty,
+        risk_level,
+    )
     from infra.observability import hitl_span
 
     start = datetime.utcnow()
     prompt = (
-        f"\n{'='*60}\n"
+        f"\n{'=' * 60}\n"
         f"[HITL] Cycle {cycle_index} — {symbol}\n"
         f"  Action  : {side.upper()} {qty} shares\n"
         f"  Strategy: {strategy}\n"
@@ -85,7 +94,9 @@ async def check_loss_limit(
     Returns:
         dict with 'breached', 'warning', 'consumed_pct', 'remaining_eur'.
     """
-    logger.info("check_loss_limit realised_pnl=%s limit=%s", session_realised_pnl_eur, loss_limit_eur)
+    logger.info(
+        "check_loss_limit realised_pnl=%s limit=%s", session_realised_pnl_eur, loss_limit_eur
+    )
     consumed = -session_realised_pnl_eur  # positive = we have consumed some loss budget
     consumed_pct = consumed / loss_limit_eur * 100 if loss_limit_eur > 0 else 0.0
     remaining = loss_limit_eur - consumed
@@ -121,7 +132,10 @@ async def select_shortlist(
     """
     logger.info(
         "select_shortlist n_signals=%d shortlist_n=%d min_score=%s strategy=%s",
-        len(ranked_signals), shortlist_n, min_score, strategy,
+        len(ranked_signals),
+        shortlist_n,
+        min_score,
+        strategy,
     )
     from config import DEFAULT_MIN_SHORTLIST_SCORE, MAX_SHORTLIST_N
 
@@ -133,8 +147,7 @@ async def select_shortlist(
     top = sorted(passing, key=lambda x: x.get("combined_score", 0), reverse=True)[:n]
 
     shortlisted = [
-        {"symbol": s["symbol"], "combined_score": s.get("combined_score", 0)}
-        for s in top
+        {"symbol": s["symbol"], "combined_score": s.get("combined_score", 0)} for s in top
     ]
     return {
         "shortlisted": shortlisted,
@@ -165,7 +178,13 @@ async def synthesise_risk(
     Returns:
         dict with 'risk_level', 'risk_score', 'debate_winner', 'synthesis_reasoning'.
     """
-    logger.info("synthesise_risk opt=%s pess=%s opt_win_rate=%s pess_win_rate=%s", optimist_level, pessimist_level, opt_win_rate, pess_win_rate)
+    logger.info(
+        "synthesise_risk opt=%s pess=%s opt_win_rate=%s pess_win_rate=%s",
+        optimist_level,
+        pessimist_level,
+        opt_win_rate,
+        pess_win_rate,
+    )
     from config import (
         PESSIMIST_OVERRIDE_WIN_RATE,
         RISK_HIGH_THRESHOLD,
@@ -256,12 +275,14 @@ async def resolve_unresolved_trades() -> dict:
                     pnl_pct = -pnl_pct
                 resolve_outcome(trade.id, pnl_pct)
                 resolved_count += 1
-                details.append({"trade_id": trade.id, "status": "resolved",
-                                "pnl_pct": round(pnl_pct, 4)})
+                details.append(
+                    {"trade_id": trade.id, "status": "resolved", "pnl_pct": round(pnl_pct, 4)}
+                )
             else:
                 failed_count += 1
-                details.append({"trade_id": trade.id, "status": "unresolvable",
-                                "reason": "no fill price"})
+                details.append(
+                    {"trade_id": trade.id, "status": "unresolvable", "reason": "no fill price"}
+                )
         except Exception as exc:
             failed_count += 1
             details.append({"trade_id": trade.id, "status": "error", "reason": str(exc)})
@@ -340,8 +361,15 @@ async def abort_cycle(
     Returns:
         dict with 'outcome' ('ABORTED'), 'reason', 'stage'.
     """
-    logger.info("abort_cycle session_id=%s cycle=%d stage=%s reason=%s", session_id, cycle_index, stage, reason)
+    logger.info(
+        "abort_cycle session_id=%s cycle=%d stage=%s reason=%s",
+        session_id,
+        cycle_index,
+        stage,
+        reason,
+    )
     from db.schema import _connect  # type: ignore[attr-defined]
+
     try:
         with _connect() as conn:
             conn.execute(
@@ -355,5 +383,10 @@ async def abort_cycle(
             )
     except Exception as exc:
         logger.warning("abort_cycle: failed to write cycle record — %s", exc)
-    return {"outcome": "ABORTED", "reason": reason, "stage": stage,
-            "session_id": session_id, "cycle_index": cycle_index}
+    return {
+        "outcome": "ABORTED",
+        "reason": reason,
+        "stage": stage,
+        "session_id": session_id,
+        "cycle_index": cycle_index,
+    }

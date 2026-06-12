@@ -1,4 +1,5 @@
 """research.* tools — 12 tools, research agent scope."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -49,12 +50,14 @@ async def get_news(symbol: str, days: int) -> dict:
         for n in news[:20]:
             published = datetime.utcfromtimestamp(n.get("providerPublishTime", 0))
             if published >= cutoff:
-                items.append({
-                    "headline": n.get("title", ""),
-                    "source": n.get("publisher", ""),
-                    "published_at": published.isoformat(),
-                    "url": n.get("link", ""),
-                })
+                items.append(
+                    {
+                        "headline": n.get("title", ""),
+                        "source": n.get("publisher", ""),
+                        "published_at": published.isoformat(),
+                        "url": n.get("link", ""),
+                    }
+                )
     except Exception:
         pass
 
@@ -72,10 +75,38 @@ async def get_sentiment(symbol: str, news_items: list[dict]) -> dict:
         dict with 'symbol', 'score' (-1 to +1), 'label' ('bearish'|'neutral'|'bullish'), 'item_count'.
     """
     logger.info("get_sentiment symbol=%s n_items=%d", symbol, len(news_items))
-    bullish_keywords = ["surge", "rally", "gain", "rise", "beat", "upgrade", "buy", "strong",
-                        "record", "high", "growth", "profit", "positive", "optimistic"]
-    bearish_keywords = ["crash", "fall", "drop", "miss", "downgrade", "sell", "weak", "low",
-                        "loss", "negative", "concern", "fear", "recession", "decline"]
+    bullish_keywords = [
+        "surge",
+        "rally",
+        "gain",
+        "rise",
+        "beat",
+        "upgrade",
+        "buy",
+        "strong",
+        "record",
+        "high",
+        "growth",
+        "profit",
+        "positive",
+        "optimistic",
+    ]
+    bearish_keywords = [
+        "crash",
+        "fall",
+        "drop",
+        "miss",
+        "downgrade",
+        "sell",
+        "weak",
+        "low",
+        "loss",
+        "negative",
+        "concern",
+        "fear",
+        "recession",
+        "decline",
+    ]
 
     total = 0.0
     count = len(news_items)
@@ -92,7 +123,9 @@ async def get_sentiment(symbol: str, news_items: list[dict]) -> dict:
         score = max(-1.0, min(1.0, raw / 3))
 
     label = "bullish" if score > 0.1 else ("bearish" if score < -0.1 else "neutral")
-    return SentimentResponse(symbol=symbol, score=round(score, 4), label=label, item_count=count).model_dump()
+    return SentimentResponse(
+        symbol=symbol, score=round(score, 4), label=label, item_count=count
+    ).model_dump()
 
 
 @with_retry
@@ -119,11 +152,13 @@ async def get_earnings_calendar(symbol: str, days_ahead: int) -> dict:
         if cal is not None:
             for dt, row in cal.iterrows():
                 if dt.to_pydatetime().replace(tzinfo=None) <= cutoff:
-                    events.append({
-                        "date": dt.isoformat(),
-                        "estimate_eps": float(row.get("EPS Estimate", 0) or 0),
-                        "surprise_pct": float(row.get("Surprise(%)", 0) or 0),
-                    })
+                    events.append(
+                        {
+                            "date": dt.isoformat(),
+                            "estimate_eps": float(row.get("EPS Estimate", 0) or 0),
+                            "surprise_pct": float(row.get("Surprise(%)", 0) or 0),
+                        }
+                    )
     except Exception:
         pass
 
@@ -148,7 +183,13 @@ async def get_macro_data(
     Returns:
         dict with 'vix', 'yield_10y', 'yield_2y', 'dxy', 'timestamp'.
     """
-    logger.info("get_macro_data vix=%s 10y=%s 2y=%s dxy=%s", vix_symbol, yield_10y_symbol, yield_2y_symbol, dxy_symbol)
+    logger.info(
+        "get_macro_data vix=%s 10y=%s 2y=%s dxy=%s",
+        vix_symbol,
+        yield_10y_symbol,
+        yield_2y_symbol,
+        dxy_symbol,
+    )
     await acquire_yfinance()
     import yfinance as yf  # type: ignore[import]
 
@@ -184,18 +225,27 @@ async def get_fund_flows(symbol: str) -> dict:
 
     hist = yf.download(symbol, period="5d", progress=False)
     if hist.empty:
-        return FundFlowsResponse(symbol=symbol, flow_direction="neutral", estimated_flow_usd=0.0).model_dump()
+        return FundFlowsResponse(
+            symbol=symbol, flow_direction="neutral", estimated_flow_usd=0.0
+        ).model_dump()
 
     closes = hist["Close"].tolist()
     volumes = hist["Volume"].tolist()
 
     if len(closes) < 2:
-        return FundFlowsResponse(symbol=symbol, flow_direction="neutral", estimated_flow_usd=0.0).model_dump()
+        return FundFlowsResponse(
+            symbol=symbol, flow_direction="neutral", estimated_flow_usd=0.0
+        ).model_dump()
 
-    flow = sum((c - closes[i - 1]) * v for i, (c, v) in enumerate(zip(closes[1:], volumes[1:], strict=False), 1))
+    flow = sum(
+        (c - closes[i - 1]) * v
+        for i, (c, v) in enumerate(zip(closes[1:], volumes[1:], strict=False), 1)
+    )
     direction = "inflow" if flow > 0 else ("outflow" if flow < 0 else "neutral")
     return FundFlowsResponse(
-        symbol=symbol, flow_direction=direction, estimated_flow_usd=round(float(flow), 0),
+        symbol=symbol,
+        flow_direction=direction,
+        estimated_flow_usd=round(float(flow), 0),
     ).model_dump()
 
 
@@ -241,16 +291,19 @@ async def compare_etfs(symbols: list[str]) -> dict:
     for sym in symbols[:5]:
         try:
             info = yf.Ticker(sym).info
-            comparisons.append({
-                "symbol": sym,
-                "aum_usd": float(info.get("totalAssets", 0) or 0),
-                "expense_ratio": float(info.get("annualReportExpenseRatio", 0) or 0),
-                "ytd_return_pct": float((info.get("52WeekChange", 0) or 0) * 100),
-                "beta": float(info.get("beta3Year") or info.get("beta", 1.0) or 1.0),
-            })
+            comparisons.append(
+                {
+                    "symbol": sym,
+                    "aum_usd": float(info.get("totalAssets", 0) or 0),
+                    "expense_ratio": float(info.get("annualReportExpenseRatio", 0) or 0),
+                    "ytd_return_pct": float((info.get("52WeekChange", 0) or 0) * 100),
+                    "beta": float(info.get("beta3Year") or info.get("beta", 1.0) or 1.0),
+                }
+            )
         except Exception:
-            comparisons.append({"symbol": sym, "aum_usd": 0, "expense_ratio": 0,
-                                "ytd_return_pct": 0, "beta": 1.0})
+            comparisons.append(
+                {"symbol": sym, "aum_usd": 0, "expense_ratio": 0, "ytd_return_pct": 0, "beta": 1.0}
+            )
     return CompareEtfsResponse(comparisons=comparisons).model_dump()
 
 
@@ -272,10 +325,12 @@ async def get_expense_ratios(symbols: list[str]) -> dict:
     for sym in symbols:
         try:
             info = yf.Ticker(sym).info
-            ratios.append({
-                "symbol": sym,
-                "expense_ratio": float(info.get("annualReportExpenseRatio", 0) or 0),
-            })
+            ratios.append(
+                {
+                    "symbol": sym,
+                    "expense_ratio": float(info.get("annualReportExpenseRatio", 0) or 0),
+                }
+            )
         except Exception:
             ratios.append({"symbol": sym, "expense_ratio": 0.0})
     return ExpenseRatiosResponse(ratios=ratios).model_dump()
@@ -299,10 +354,17 @@ async def get_sector_performance(timeframe: str, symbols: list[str] | None = Non
 
     if symbols is None:
         sector_map: dict[str, str] = {
-            "XLK": "Technology", "XLE": "Energy", "XLF": "Financials",
-            "XLV": "Healthcare", "XLY": "Consumer Discretionary", "XLP": "Consumer Staples",
-            "XLI": "Industrials", "XLB": "Materials", "XLU": "Utilities",
-            "XLRE": "Real Estate", "XLC": "Communication Services",
+            "XLK": "Technology",
+            "XLE": "Energy",
+            "XLF": "Financials",
+            "XLV": "Healthcare",
+            "XLY": "Consumer Discretionary",
+            "XLP": "Consumer Staples",
+            "XLI": "Industrials",
+            "XLB": "Materials",
+            "XLU": "Utilities",
+            "XLRE": "Real Estate",
+            "XLC": "Communication Services",
         }
         sym_list = list(sector_map.keys())
     else:
@@ -383,7 +445,13 @@ async def get_economic_calendar(days_ahead: int) -> dict:
 
 
 @with_retry
-async def detect_market_regime(vix: float, yield_10y: float, yield_2y: float, benchmark_return_20d: float, benchmark_symbol: str = "SPY") -> dict:
+async def detect_market_regime(
+    vix: float,
+    yield_10y: float,
+    yield_2y: float,
+    benchmark_return_20d: float,
+    benchmark_symbol: str = "SPY",
+) -> dict:
     """Classify current market regime based on macro inputs.
 
     Args:
@@ -398,7 +466,12 @@ async def detect_market_regime(vix: float, yield_10y: float, yield_2y: float, be
     Returns:
         dict with 'regime' (MarketRegime enum string) and 'reasoning'.
     """
-    logger.info("detect_market_regime vix=%s benchmark=%s return_20d=%s", vix, benchmark_symbol, benchmark_return_20d)
+    logger.info(
+        "detect_market_regime vix=%s benchmark=%s return_20d=%s",
+        vix,
+        benchmark_symbol,
+        benchmark_return_20d,
+    )
     if vix > 30:
         regime = "CRISIS"
         reasoning = f"VIX={vix:.1f} signals extreme fear; market in crisis mode"
@@ -447,12 +520,14 @@ async def get_analyst_ratings(symbol: str) -> dict:
         recs = ticker.recommendations
         if recs is not None and not recs.empty:
             for idx, row in recs.tail(10).iterrows():
-                ratings.append({
-                    "firm": str(row.get("Firm", "")),
-                    "rating": str(row.get("To Grade", row.get("Action", ""))),
-                    "price_target": None,
-                    "rating_date": idx.isoformat() if hasattr(idx, "isoformat") else str(idx),
-                })
+                ratings.append(
+                    {
+                        "firm": str(row.get("Firm", "")),
+                        "rating": str(row.get("To Grade", row.get("Action", ""))),
+                        "price_target": None,
+                        "rating_date": idx.isoformat() if hasattr(idx, "isoformat") else str(idx),
+                    }
+                )
     except Exception:
         pass
     return AnalystRatingsResponse(symbol=symbol, ratings=ratings).model_dump()

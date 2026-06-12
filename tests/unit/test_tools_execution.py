@@ -1,4 +1,5 @@
 """Unit tests for tools.execution.tools — Alpaca trading tools."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,8 +11,15 @@ def _mock_acquire():
     return patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock())
 
 
-def _make_position(symbol="XLK", qty="10", side="long", avg_entry="185.0",
-                   market_value="1850.0", pl="-5.0", plpc="-0.0027"):
+def _make_position(
+    symbol="XLK",
+    qty="10",
+    side="long",
+    avg_entry="185.0",
+    market_value="1850.0",
+    pl="-5.0",
+    plpc="-0.0027",
+):
     p = MagicMock()
     p.symbol = symbol
     p.qty = qty
@@ -24,8 +32,14 @@ def _make_position(symbol="XLK", qty="10", side="long", avg_entry="185.0",
     return p
 
 
-def _make_account(cash="5000.0", portfolio_value="10000.0", buying_power="5000.0",
-                  status="ACTIVE", daytrade_count=0, pdt=False):
+def _make_account(
+    cash="5000.0",
+    portfolio_value="10000.0",
+    buying_power="5000.0",
+    status="ACTIVE",
+    daytrade_count=0,
+    pdt=False,
+):
     a = MagicMock()
     a.cash = cash
     a.portfolio_value = portfolio_value
@@ -37,9 +51,17 @@ def _make_account(cash="5000.0", portfolio_value="10000.0", buying_power="5000.0
     return a
 
 
-def _make_order(order_id="order-1", status="submitted", symbol="XLK",
-                qty="10", side="buy", filled_qty="0", filled_price=None,
-                submitted_at=None, updated_at=None):
+def _make_order(
+    order_id="order-1",
+    status="submitted",
+    symbol="XLK",
+    qty="10",
+    side="buy",
+    filled_qty="0",
+    filled_price=None,
+    submitted_at=None,
+    updated_at=None,
+):
     o = MagicMock()
     o.id = order_id
     o.status = MagicMock()
@@ -57,6 +79,7 @@ def _make_order(order_id="order-1", status="submitted", symbol="XLK",
 
 # ── get_portfolio ─────────────────────────────────────────────────────────────
 
+
 def test_get_portfolio_returns_correct_structure(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
@@ -70,6 +93,7 @@ def test_get_portfolio_returns_correct_structure(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import get_portfolio
+
         result = asyncio.run(get_portfolio())
 
     assert "positions" in result
@@ -85,8 +109,11 @@ def test_get_portfolio_position_fields(monkeypatch):
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
     account = _make_account()
-    positions = [_make_position("QQQ", qty="3", avg_entry="400.0",
-                                market_value="1200.0", pl="30.0", plpc="0.025")]
+    positions = [
+        _make_position(
+            "QQQ", qty="3", avg_entry="400.0", market_value="1200.0", pl="30.0", plpc="0.025"
+        )
+    ]
 
     mock_client = MagicMock()
     mock_client.get_account.return_value = account
@@ -94,6 +121,7 @@ def test_get_portfolio_position_fields(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import get_portfolio
+
         result = asyncio.run(get_portfolio())
 
     pos = result["positions"][0]
@@ -105,18 +133,21 @@ def test_get_portfolio_position_fields(monkeypatch):
 
 # ── get_position ──────────────────────────────────────────────────────────────
 
+
 def test_get_position_has_position(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
     monkeypatch.setenv("ALPACA_API_SECRET", "test-secret")
 
-    pos = _make_position("XLE", qty="8", avg_entry="90.0",
-                         market_value="720.0", pl="0.0", plpc="0.0")
+    pos = _make_position(
+        "XLE", qty="8", avg_entry="90.0", market_value="720.0", pl="0.0", plpc="0.0"
+    )
 
     mock_client = MagicMock()
     mock_client.get_open_position.return_value = pos
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import get_position
+
         result = asyncio.run(get_position("XLE"))
 
     assert result["has_position"] is True
@@ -133,6 +164,7 @@ def test_get_position_no_position(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import get_position
+
         result = asyncio.run(get_position("NOPE"))
 
     assert result["has_position"] is False
@@ -140,6 +172,7 @@ def test_get_position_no_position(monkeypatch):
 
 
 # ── place_market_order ────────────────────────────────────────────────────────
+
 
 def test_place_market_order_buy(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
@@ -152,6 +185,7 @@ def test_place_market_order_buy(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import place_market_order
+
         result = asyncio.run(place_market_order("XLK", 10.0, "buy"))
 
     assert result["order_id"] == "mkt-1"
@@ -171,6 +205,7 @@ def test_place_market_order_sell(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import place_market_order
+
         result = asyncio.run(place_market_order("SPY", 5.0, "sell"))
 
     assert result["side"] == "sell"
@@ -190,12 +225,14 @@ def test_place_market_order_submitted_at_none(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import place_market_order
+
         result = asyncio.run(place_market_order("XLK", 1.0, "buy"))
 
     assert result["submitted_at"] is None
 
 
 # ── place_limit_order ─────────────────────────────────────────────────────────
+
 
 def test_place_limit_order(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
@@ -208,6 +245,7 @@ def test_place_limit_order(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import place_limit_order
+
         result = asyncio.run(place_limit_order("QQQ", 3.0, "buy", 399.50))
 
     assert result["type"] == "limit"
@@ -226,6 +264,7 @@ def test_place_limit_order_sell(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import place_limit_order
+
         result = asyncio.run(place_limit_order("IWM", 2.0, "sell", 210.0))
 
     assert result["type"] == "limit"
@@ -233,6 +272,7 @@ def test_place_limit_order_sell(monkeypatch):
 
 
 # ── cancel_order ──────────────────────────────────────────────────────────────
+
 
 def test_cancel_order_success(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
@@ -243,6 +283,7 @@ def test_cancel_order_success(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import cancel_order
+
         result = asyncio.run(cancel_order("order-999"))
 
     assert result["cancelled"] is True
@@ -259,6 +300,7 @@ def test_cancel_order_failure(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import cancel_order
+
         result = asyncio.run(cancel_order("bad-order"))
 
     assert result["cancelled"] is False
@@ -266,6 +308,7 @@ def test_cancel_order_failure(monkeypatch):
 
 
 # ── get_order_status ──────────────────────────────────────────────────────────
+
 
 def test_get_order_status(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
@@ -285,6 +328,7 @@ def test_get_order_status(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import get_order_status
+
         result = asyncio.run(get_order_status("ord-status"))
 
     assert result["order_id"] == "ord-status"
@@ -307,6 +351,7 @@ def test_get_order_status_null_fill_fields(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import get_order_status
+
         result = asyncio.run(get_order_status("ord-new"))
 
     assert result["filled_qty"] == 0.0
@@ -315,6 +360,7 @@ def test_get_order_status_null_fill_fields(monkeypatch):
 
 
 # ── get_account_status ────────────────────────────────────────────────────────
+
 
 def test_get_account_status(monkeypatch):
     monkeypatch.setenv("ALPACA_API_KEY", "test-key")
@@ -334,6 +380,7 @@ def test_get_account_status(monkeypatch):
 
     with _mock_acquire(), patch("tools.execution.tools._trading_client", return_value=mock_client):
         from tools.execution.tools import get_account_status
+
         result = asyncio.run(get_account_status())
 
     assert result["is_paper"] is True
@@ -346,6 +393,7 @@ def test_get_account_status(monkeypatch):
 
 # ── _trading_client factory ───────────────────────────────────────────────────
 
+
 def test_trading_client_factory_returns_instance(monkeypatch):
     """Lines 20-22: _trading_client() builds a TradingClient from env vars."""
     monkeypatch.setenv("ALPACA_API_KEY", "fake-key")
@@ -354,14 +402,18 @@ def test_trading_client_factory_returns_instance(monkeypatch):
     mock_instance = MagicMock()
     mock_cls = MagicMock(return_value=mock_instance)
 
-    with patch.dict("sys.modules", {
-        "alpaca": MagicMock(),
-        "alpaca.trading": MagicMock(),
-        "alpaca.trading.client": MagicMock(TradingClient=mock_cls),
-    }):
+    with patch.dict(
+        "sys.modules",
+        {
+            "alpaca": MagicMock(),
+            "alpaca.trading": MagicMock(),
+            "alpaca.trading.client": MagicMock(TradingClient=mock_cls),
+        },
+    ):
         import importlib
 
         import tools.execution.tools as exec_tools
+
         importlib.reload(exec_tools)
         result = exec_tools._trading_client()
 
@@ -375,13 +427,16 @@ def test_trading_client_factory_returns_instance(monkeypatch):
 
 # ── _finite_float edge cases ──────────────────────────────────────────────────
 
+
 def test_finite_float_type_error_returns_none():
     """Line 22: _finite_float([1,2,3]) → TypeError → None."""
     from tools.schemas import _finite_float
+
     assert _finite_float([1, 2, 3]) is None
 
 
 def test_finite_float_value_error_returns_none():
     """Line 23: _finite_float('not_a_float') → ValueError → None."""
     from tools.schemas import _finite_float
+
     assert _finite_float("not_a_float") is None

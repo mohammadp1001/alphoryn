@@ -18,7 +18,7 @@ class NewsItem(BaseModel):
 
 class SentimentScore(BaseModel):
     symbol: str
-    score: float                    # -1.0 (very bearish) to +1.0 (very bullish)
+    score: float  # -1.0 (very bearish) to +1.0 (very bullish)
     positive_count: int
     negative_count: int
     neutral_count: int
@@ -51,7 +51,7 @@ class EarningsCalendar(BaseModel):
 
 
 class MacroIndicator(BaseModel):
-    name: str                       # e.g. "VIX", "10Y_YIELD", "CPI_YOY"
+    name: str  # e.g. "VIX", "10Y_YIELD", "CPI_YOY"
     value: float
     previous_value: float | None = None
     as_of: date
@@ -90,14 +90,14 @@ class ETFComparison(BaseModel):
 
 
 class ExpenseRatios(BaseModel):
-    ratios: dict[str, float]        # symbol → expense ratio %
+    ratios: dict[str, float]  # symbol → expense ratio %
 
 
 class NAVDiscount(BaseModel):
     symbol: str
     nav: float
     price: float
-    discount_pct: float             # negative = trading at discount to NAV
+    discount_pct: float  # negative = trading at discount to NAV
     as_of: date
 
 
@@ -124,7 +124,7 @@ class ETFPeer(BaseModel):
 class DividendEvent(BaseModel):
     ex_date: date
     amount: float
-    frequency: str | None = None    # "quarterly", "monthly", etc.
+    frequency: str | None = None  # "quarterly", "monthly", etc.
 
 
 class DividendHistory(BaseModel):
@@ -136,7 +136,7 @@ class DividendHistory(BaseModel):
 class EconomicEvent(BaseModel):
     name: str
     release_date: date
-    importance: str                 # "high" | "medium" | "low"
+    importance: str  # "high" | "medium" | "low"
     forecast: float | None = None
     previous: float | None = None
 
@@ -151,12 +151,12 @@ class MarketRegimeSummary(BaseModel):
     reasoning: str
     vix_level: float | None = None
     trend_direction: str | None = None  # "up" | "down" | "sideways"
-    confidence: float                   # 0.0–1.0
+    confidence: float  # 0.0–1.0
 
 
 class AnalystRating(BaseModel):
     firm: str | None = None
-    rating: str                     # "buy" | "hold" | "sell"
+    rating: str  # "buy" | "hold" | "sell"
     price_target: float | None = None
     rating_date: date | None = None
 
@@ -164,5 +164,5 @@ class AnalystRating(BaseModel):
 class AnalystRatings(BaseModel):
     symbol: str
     ratings: list[AnalystRating]
-    consensus: str | None = None    # "buy" | "hold" | "sell"
+    consensus: str | None = None  # "buy" | "hold" | "sell"
     avg_price_target: float | None = None

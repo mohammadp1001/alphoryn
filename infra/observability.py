@@ -4,6 +4,7 @@ ADK emits invocation/agent_run/call_llm/execute_tool spans automatically.
 This module adds our custom span layer (decision cycles, API calls, HITL, SQLite writes)
 and configures structured logging with trace ID injection.
 """
+
 from __future__ import annotations
 
 import logging
@@ -88,6 +89,7 @@ def _setup_cloud_logging(project_id: str, session_id: str) -> None:
 
 # ── Custom span helpers ───────────────────────────────────────────────────────
 
+
 @contextmanager
 def span(name: str, **attributes: Any) -> Generator[trace.Span, None, None]:
     """Context manager for a custom child span with optional attributes."""
@@ -99,7 +101,9 @@ def span(name: str, **attributes: Any) -> Generator[trace.Span, None, None]:
 
 
 @contextmanager
-def decision_cycle_span(cycle_index: int, strategy: str, regime: str) -> Generator[trace.Span, None, None]:
+def decision_cycle_span(
+    cycle_index: int, strategy: str, regime: str
+) -> Generator[trace.Span, None, None]:
     """Parent span for one full decision cycle."""
     with span(
         "decision_cycle",
@@ -135,6 +139,7 @@ def db_write_span(table: str, record_id: str) -> Generator[trace.Span, None, Non
 
 
 # ── Structured logger ─────────────────────────────────────────────────────────
+
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)

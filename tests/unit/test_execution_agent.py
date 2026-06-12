@@ -1,4 +1,5 @@
 """Unit tests for agent.execution_agent — ExecutionAgent, _execute_alpaca."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 class _FakeSession:
     def __init__(self):
@@ -61,8 +63,10 @@ def _make_alpaca_order(order_id="alp-1", symbol="XLK", qty="10.0"):
 
 # ── _run_async_impl ───────────────────────────────────────────────────────────
 
+
 def test_run_async_impl_missing_pending_order():
     from agent.execution_agent import create_execution_agent
+
     agent = create_execution_agent()
     ctx = _FakeCtx()
 
@@ -75,6 +79,7 @@ def test_run_async_impl_missing_pending_order():
 
 def test_run_async_impl_invalid_pending_order():
     from agent.execution_agent import create_execution_agent
+
     agent = create_execution_agent()
     ctx = _FakeCtx()
     ctx.session.state["pending_order"] = {"symbol": "X"}  # missing required fields
@@ -88,12 +93,19 @@ def test_run_async_impl_invalid_pending_order():
 
 def test_run_async_impl_etf_routes_to_alpaca():
     from agent.execution_agent import create_execution_agent
+
     agent = create_execution_agent()
     ctx = _FakeCtx()
     ctx.session.state["pending_order"] = _make_pending_order_dict(asset_class="etf")
 
-    mock_result = {"order_id": "alp-123", "status": "submitted", "symbol": "XLK",
-                   "qty": 10.0, "side": "buy", "type": "market"}
+    mock_result = {
+        "order_id": "alp-123",
+        "status": "submitted",
+        "symbol": "XLK",
+        "qty": 10.0,
+        "side": "buy",
+        "type": "market",
+    }
     with patch("agent.execution_agent._execute_alpaca", new=AsyncMock(return_value=mock_result)):
         events = asyncio.run(_collect(agent._run_async_impl(ctx)))
 
@@ -103,12 +115,21 @@ def test_run_async_impl_etf_routes_to_alpaca():
 
 def test_run_async_impl_crypto_routes_to_alpaca():
     from agent.execution_agent import create_execution_agent
+
     agent = create_execution_agent()
     ctx = _FakeCtx()
-    ctx.session.state["pending_order"] = _make_pending_order_dict(asset_class="crypto", symbol="BTCUSD")
+    ctx.session.state["pending_order"] = _make_pending_order_dict(
+        asset_class="crypto", symbol="BTCUSD"
+    )
 
-    mock_result = {"order_id": "crypto-1", "status": "submitted", "symbol": "BTCUSD",
-                   "qty": 1.0, "side": "buy", "type": "market"}
+    mock_result = {
+        "order_id": "crypto-1",
+        "status": "submitted",
+        "symbol": "BTCUSD",
+        "qty": 1.0,
+        "side": "buy",
+        "type": "market",
+    }
     with patch("agent.execution_agent._execute_alpaca", new=AsyncMock(return_value=mock_result)):
         asyncio.run(_collect(agent._run_async_impl(ctx)))
 
@@ -117,6 +138,7 @@ def test_run_async_impl_crypto_routes_to_alpaca():
 
 def test_run_async_impl_unknown_asset_class():
     from agent.execution_agent import create_execution_agent
+
     agent = create_execution_agent()
     ctx = _FakeCtx()
     ctx.session.state["pending_order"] = _make_pending_order_dict(asset_class="commodity")
@@ -128,6 +150,7 @@ def test_run_async_impl_unknown_asset_class():
 
 
 # ── _execute_alpaca ───────────────────────────────────────────────────────────
+
 
 def test_execute_alpaca_missing_credentials(monkeypatch):
     monkeypatch.delenv("ALPACA_API_KEY", raising=False)
@@ -159,7 +182,9 @@ def test_execute_alpaca_market_order_success(monkeypatch):
         patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()),
         patch.dict("sys.modules", sys_mods),
     ):
-        order = PendingOrder(symbol="XLK", side="buy", asset_class="etf", order_type="market", qty=10.0)
+        order = PendingOrder(
+            symbol="XLK", side="buy", asset_class="etf", order_type="market", qty=10.0
+        )
         result = asyncio.run(_execute_alpaca(order))
 
     assert result["status"] == "submitted"
@@ -182,7 +207,9 @@ def test_execute_alpaca_market_order_sell(monkeypatch):
         patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()),
         patch.dict("sys.modules", sys_mods),
     ):
-        order = PendingOrder(symbol="XLK", side="sell", asset_class="etf", order_type="market", qty=5.0)
+        order = PendingOrder(
+            symbol="XLK", side="sell", asset_class="etf", order_type="market", qty=5.0
+        )
         result = asyncio.run(_execute_alpaca(order))
 
     assert result["status"] == "submitted"
@@ -206,8 +233,12 @@ def test_execute_alpaca_limit_order_success(monkeypatch):
         patch.dict("sys.modules", sys_mods),
     ):
         order = PendingOrder(
-            symbol="XLK", side="buy", asset_class="etf",
-            order_type="limit", qty=10.0, limit_price=185.5,
+            symbol="XLK",
+            side="buy",
+            asset_class="etf",
+            order_type="limit",
+            qty=10.0,
+            limit_price=185.5,
         )
         result = asyncio.run(_execute_alpaca(order))
 
@@ -237,8 +268,12 @@ def test_execute_alpaca_qty_auto_computed(monkeypatch):
         patch.dict("sys.modules", sys_mods),
     ):
         order = PendingOrder(
-            symbol="XLK", side="buy", asset_class="etf",
-            order_type="market", qty=None, buying_power_pct=0.1,
+            symbol="XLK",
+            side="buy",
+            asset_class="etf",
+            order_type="market",
+            qty=None,
+            buying_power_pct=0.1,
         )
         result = asyncio.run(_execute_alpaca(order))
 
@@ -264,8 +299,9 @@ def test_execute_alpaca_qty_none_no_price(monkeypatch):
         patch("agent.execution_agent._get_last_price", return_value=None),
         patch.dict("sys.modules", sys_mods),
     ):
-        order = PendingOrder(symbol="XLK", side="buy", asset_class="etf",
-                             order_type="market", qty=None)
+        order = PendingOrder(
+            symbol="XLK", side="buy", asset_class="etf", order_type="market", qty=None
+        )
         result = asyncio.run(_execute_alpaca(order))
 
     assert result["status"] == "failed"
@@ -290,8 +326,9 @@ def test_execute_alpaca_exception(monkeypatch):
         patch("infra.rate_limiter.TokenBucket.acquire", new=AsyncMock()),
         patch.dict("sys.modules", sys_mods),
     ):
-        order = PendingOrder(symbol="XLK", side="buy", asset_class="etf",
-                             order_type="market", qty=5.0)
+        order = PendingOrder(
+            symbol="XLK", side="buy", asset_class="etf", order_type="market", qty=5.0
+        )
         result = asyncio.run(_execute_alpaca(order))
 
     assert result["status"] == "failed"
@@ -299,6 +336,7 @@ def test_execute_alpaca_exception(monkeypatch):
 
 
 # ── _get_last_price ───────────────────────────────────────────────────────────
+
 
 def test_get_last_price_success():
     from agent.execution_agent import _get_last_price
@@ -360,6 +398,7 @@ def test_get_last_price_exception_returns_none():
 
 # ── _error_result ─────────────────────────────────────────────────────────────
 
+
 def test_error_result_structure():
     from agent.execution_agent import _error_result
 
@@ -370,5 +409,3 @@ def test_error_result_structure():
     assert result["error"] == "something went wrong"
     assert result["order_id"] == ""
     assert result["qty"] == 0.0
-
-
