@@ -29,7 +29,7 @@ def test_execution_tools_list_populated():
 
 def test_memory_tools_list_populated():
     from tools.registry import MEMORY_TOOLS
-    assert len(MEMORY_TOOLS) == 6
+    assert len(MEMORY_TOOLS) == 7
 
 
 def test_coordinator_tools_list_populated():
@@ -40,6 +40,11 @@ def test_coordinator_tools_list_populated():
 def test_strategy_tools_list_populated():
     from tools.registry import STRATEGY_TOOLS
     assert len(STRATEGY_TOOLS) == 3  # list_strategies, get_strategy, describe_tool
+
+
+def test_file_tools_list_populated():
+    from tools.registry import FILE_TOOLS
+    assert len(FILE_TOOLS) == 3  # read_file, write_file, register_session_file
 
 
 def test_all_coordinator_tools_excludes_execution():
@@ -133,6 +138,27 @@ def test_strategy_tools_have_strategy_prefix():
     from tools.registry import STRATEGY_TOOLS
     for tool in STRATEGY_TOOLS:
         assert tool.name.startswith("strategy__"), f"Expected strategy__ prefix: {tool.name}"
+
+
+def test_file_tools_are_function_tools():
+    from google.adk.tools import FunctionTool  # type: ignore[import]
+
+    from tools.registry import FILE_TOOLS
+    for tool in FILE_TOOLS:
+        assert isinstance(tool, FunctionTool)
+
+
+def test_file_tools_have_file_prefix():
+    from tools.registry import FILE_TOOLS
+    for tool in FILE_TOOLS:
+        assert tool.name.startswith("file__"), f"Expected file__ prefix: {tool.name}"
+
+
+def test_all_coordinator_tools_includes_file_tools():
+    from tools.registry import ALL_COORDINATOR_TOOLS, FILE_TOOLS
+    file_names = {t.name for t in FILE_TOOLS}
+    coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
+    assert file_names.issubset(coord_names)
 
 
 # ── Uniqueness ────────────────────────────────────────────────────────────────

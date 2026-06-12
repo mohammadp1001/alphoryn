@@ -2,6 +2,7 @@
 SQLite schema creation and all database queries.
 Single connection helper — this is a single-user CLI, no connection pooling needed.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -87,6 +88,16 @@ CREATE TABLE IF NOT EXISTS regime_stats (
     best_strategy   TEXT,
     last_seen       TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS session_files (
+    id          TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,
+    symbol      TEXT,
+    file_type   TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
 """
 
 
@@ -115,6 +126,7 @@ def _connect(path: Path | None = None) -> Generator[sqlite3.Connection, None, No
 
 
 # ── Sessions ──────────────────────────────────────────────────────────────────
+
 
 def upsert_session(
     session_id: str,
@@ -148,6 +160,7 @@ def close_session(session_id: str, outcome: str, realised_pnl: float, cycle_coun
 
 # ── Trade records ─────────────────────────────────────────────────────────────
 
+
 def write_trade_record(record: TradeRecord) -> None:
     """Write-ahead: called synchronously before submitting the order."""
     with _connect() as conn:
@@ -162,14 +175,26 @@ def write_trade_record(record: TradeRecord) -> None:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                record.id, record.session_id, record.cycle_index,
-                record.order_id, record.symbol,
+                record.id,
+                record.session_id,
+                record.cycle_index,
+                record.order_id,
+                record.symbol,
                 record.strategy.value if hasattr(record.strategy, "value") else record.strategy,
-                record.market_regime.value if hasattr(record.market_regime, "value") else record.market_regime,
-                record.side, record.qty, record.entry_price,
-                record.optimist_verdict, record.pessimist_verdict, record.risk_level,
-                record.risk_score, record.opt_win_rate_at_trade, record.pess_win_rate_at_trade,
-                record.filled_avg_price, record.executed_at.isoformat(),
+                record.market_regime.value
+                if hasattr(record.market_regime, "value")
+                else record.market_regime,
+                record.side,
+                record.qty,
+                record.entry_price,
+                record.optimist_verdict,
+                record.pessimist_verdict,
+                record.risk_level,
+                record.risk_score,
+                record.opt_win_rate_at_trade,
+                record.pess_win_rate_at_trade,
+                record.filled_avg_price,
+                record.executed_at.isoformat(),
             ),
         )
 
@@ -263,6 +288,7 @@ def get_unresolved_trades(session_id: str | None = None) -> list[TradeRecord]:
 
 # ── Calibration ───────────────────────────────────────────────────────────────
 
+
 def get_calibration(
     agent: str, market_regime: MarketRegime, strategy: Strategy
 ) -> CalibrationContext:
@@ -308,6 +334,7 @@ def get_calibration(
 
 # ── Cycle history ─────────────────────────────────────────────────────────────
 
+
 def get_cycle_history(session_id: str) -> list[CycleRecord]:
     """Reconstructed from trade_records; cycles without a trade are stored in PlanState only."""
     with _connect() as conn:
@@ -329,7 +356,63 @@ def get_cycle_history(session_id: str) -> list[CycleRecord]:
     ]
 
 
+# ── Session files ─────────────────────────────────────────────────────────────
+
+
+def register_session_file(
+    session_id: str,
+    path: str,
+    file_type: str,
+    symbol: str | None = None,
+) -> str:
+    """Insert a row into session_files and return the generated UUID."""
+    import uuid
+
+    file_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO session_files (id, session_id, symbol, file_type, path, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (file_id, session_id, symbol, file_type, path, now),
+        )
+    return file_id
+
+
+def get_session_files_db(
+    session_id: str,
+    file_type: str | None = None,
+    symbol: str | None = None,
+) -> list[dict]:
+    """Return session_files rows for session_id, optionally filtered by file_type and/or symbol."""
+    with _connect() as conn:
+        if file_type and symbol:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? AND file_type = ? AND symbol = ? ORDER BY created_at",
+                (session_id, file_type, symbol),
+            ).fetchall()
+        elif file_type:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? AND file_type = ? ORDER BY created_at",
+                (session_id, file_type),
+            ).fetchall()
+        elif symbol:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? AND symbol = ? ORDER BY created_at",
+                (session_id, symbol),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM session_files WHERE session_id = ? ORDER BY created_at",
+                (session_id,),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
 
 def _determine_winner(pnl_pct: float) -> DebateWinner:
     if pnl_pct < 0:

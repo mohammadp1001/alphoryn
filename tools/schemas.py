@@ -5,6 +5,7 @@ annotated type silently converts NaN/Inf → None at construction time, which
 prevents the Gemini API's 400 INVALID_ARGUMENT error caused by JSON-illegal
 NaN tokens in tool responses.
 """
+
 from __future__ import annotations
 
 import math
@@ -33,6 +34,7 @@ class _Base(BaseModel):
 # ---------------------------------------------------------------------------
 # Market tools
 # ---------------------------------------------------------------------------
+
 
 class OhlcvBar(_Base):
     timestamp: str
@@ -161,6 +163,7 @@ class MarketStatusResponse(_Base):
 # ---------------------------------------------------------------------------
 # Research tools
 # ---------------------------------------------------------------------------
+
 
 class NewsItem(_Base):
     headline: str
@@ -294,6 +297,7 @@ class AnalystRatingsResponse(_Base):
 # ---------------------------------------------------------------------------
 # Analysis tools
 # ---------------------------------------------------------------------------
+
 
 class RsiResponse(_Base):
     symbol: str
@@ -430,6 +434,7 @@ class TechnicalScoreResponse(_Base):
 # Execution tools
 # ---------------------------------------------------------------------------
 
+
 class PositionEntry(_Base):
     symbol: str
     qty: float
@@ -508,6 +513,7 @@ class AccountStatusResponse(_Base):
 # Memory tools
 # ---------------------------------------------------------------------------
 
+
 class WriteTradeResponse(_Base):
     trade_id: str
     written: bool
@@ -563,9 +569,40 @@ class RecordCycleResponse(_Base):
     written: bool
 
 
+class ReadFileResponse(_Base):
+    path: str
+    content: str | None
+    found: bool
+
+
+class WriteFileResponse(_Base):
+    path: str
+    written: bool
+
+
+class RegisterFileResponse(_Base):
+    file_id: str
+    registered: bool
+
+
+class SessionFileEntry(_Base):
+    id: str
+    session_id: str
+    symbol: str | None
+    file_type: str
+    path: str
+    created_at: str
+
+
+class SessionFilesResponse(_Base):
+    session_id: str
+    files: list[SessionFileEntry]
+
+
 # ---------------------------------------------------------------------------
 # Agent output models (output_schema on Agent, written via output_key)
 # ---------------------------------------------------------------------------
+
 
 class MarketRegimeOutput(_Base):
     regime: str
@@ -611,14 +648,16 @@ class OrderResultOutput(_Base):
 # Coordinator ↔ Execution BaseAgent contract
 # ---------------------------------------------------------------------------
 
+
 class PendingOrder(_Base):
     """Written by coordinator to state["pending_order"]; read by execution BaseAgent."""
+
     symbol: str
-    side: str                        # "buy" | "sell"
-    asset_class: str                 # "etf" | "crypto"
-    order_type: str                  # "market" | "limit"
-    qty: float | None = None         # shares/units; None = size by buying_power_pct
-    buying_power_pct: float = 0.10   # fraction of buying power if qty is None
+    side: str  # "buy" | "sell"
+    asset_class: str  # "etf" | "crypto"
+    order_type: str  # "market" | "limit"
+    qty: float | None = None  # shares/units; None = size by buying_power_pct
+    buying_power_pct: float = 0.10  # fraction of buying power if qty is None
     limit_price: float | None = None
     strategy: str = ""
     risk_level: str = ""

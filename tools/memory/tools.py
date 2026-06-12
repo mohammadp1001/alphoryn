@@ -1,4 +1,5 @@
-"""memory.* tools — 6 tools, coordinator scope only."""
+"""memory.* tools — 7 tools, coordinator scope only."""
+
 from __future__ import annotations
 
 from infra.observability import db_write_span, get_logger
@@ -7,6 +8,8 @@ from tools.schemas import (
     RecordCycleResponse,
     ResolveTradeResponse,
     SessionCyclesResponse,
+    SessionFileEntry,
+    SessionFilesResponse,
     UnresolvedTradesResponse,
     WriteTradeResponse,
 )
@@ -53,7 +56,14 @@ async def write_trade(
     Returns:
         dict with 'trade_id', 'written'.
     """
-    logger.info("write_trade session_id=%s cycle=%d symbol=%s side=%s qty=%s", session_id, cycle_index, symbol, side, qty)
+    logger.info(
+        "write_trade session_id=%s cycle=%d symbol=%s side=%s qty=%s",
+        session_id,
+        cycle_index,
+        symbol,
+        side,
+        qty,
+    )
     import uuid
     from datetime import datetime
 
@@ -105,7 +115,9 @@ async def resolve_trade(trade_id: str, actual_pnl_pct: float) -> dict:
         result = resolve_outcome(trade_id, actual_pnl_pct)
 
     winner = result.debate_winner.value if result.debate_winner else "tie"
-    return ResolveTradeResponse(trade_id=trade_id, debate_winner=winner, resolved=result.updated).model_dump()
+    return ResolveTradeResponse(
+        trade_id=trade_id, debate_winner=winner, resolved=result.updated
+    ).model_dump()
 
 
 async def get_calibration(market_regime: str, strategy: str) -> dict:
@@ -166,7 +178,9 @@ async def get_session_cycles(session_id: str) -> dict:
             "outcome": r["outcome"],
             "abort_reason": r["abort_reason"],
             "abort_stage": r["abort_stage"],
-            "shortlisted_symbols": r["shortlisted_symbols"].split(",") if r["shortlisted_symbols"] else [],
+            "shortlisted_symbols": r["shortlisted_symbols"].split(",")
+            if r["shortlisted_symbols"]
+            else [],
             "risk_level": r["risk_level"],
             "trade_id": r["trade_id"],
             "realised_pnl_pct": r["realised_pnl_pct"],
@@ -186,17 +200,19 @@ async def get_unresolved_trades() -> dict:
     from db.schema import get_unresolved_trades as _get_unresolved
 
     trades = _get_unresolved()
-    return UnresolvedTradesResponse(trades=[
-        {
-            "trade_id": t.id,
-            "symbol": t.symbol,
-            "order_id": t.order_id,
-            "entry_price": t.entry_price,
-            "side": t.side,
-            "opened_at": t.executed_at.isoformat() if t.executed_at else None,
-        }
-        for t in trades
-    ]).model_dump()
+    return UnresolvedTradesResponse(
+        trades=[
+            {
+                "trade_id": t.id,
+                "symbol": t.symbol,
+                "order_id": t.order_id,
+                "entry_price": t.entry_price,
+                "side": t.side,
+                "opened_at": t.executed_at.isoformat() if t.executed_at else None,
+            }
+            for t in trades
+        ]
+    ).model_dump()
 
 
 async def record_cycle(
@@ -238,12 +254,57 @@ async def record_cycle(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                session_id, cycle_index, outcome,
+                session_id,
+                cycle_index,
+                outcome,
                 ",".join(shortlisted_symbols),
-                risk_level, abort_reason, abort_stage,
+                risk_level,
+                abort_reason,
+                abort_stage,
                 trade_id if trade_id else None,
                 realised_pnl_pct,
             ),
         )
 
-    return RecordCycleResponse(session_id=session_id, cycle_index=cycle_index, written=True).model_dump()
+    return RecordCycleResponse(
+        session_id=session_id, cycle_index=cycle_index, written=True
+    ).model_dump()
+
+
+async def get_session_files(
+    session_id: str,
+    file_type: str = "",
+    symbol: str = "",
+) -> dict:
+    """List files registered for a session, with optional filters.
+
+    Args:
+        session_id: UUID of the session.
+        file_type: Filter by file category ('research', 'analysis', 'report'). Empty means all.
+        symbol: Filter by ticker symbol. Empty means all.
+
+    Returns:
+        dict with 'session_id' and 'files' (list of {id, session_id, symbol, file_type, path, created_at}).
+    """
+    logger.info(
+        "get_session_files session_id=%s file_type=%r symbol=%r", session_id, file_type, symbol
+    )
+    from db.schema import get_session_files_db
+
+    rows = get_session_files_db(
+        session_id=session_id,
+        file_type=file_type or None,
+        symbol=symbol or None,
+    )
+    files = [
+        SessionFileEntry(
+            id=r["id"],
+            session_id=r["session_id"],
+            symbol=r["symbol"],
+            file_type=r["file_type"],
+            path=r["path"],
+            created_at=r["created_at"],
+        )
+        for r in rows
+    ]
+    return SessionFilesResponse(session_id=session_id, files=files).model_dump()

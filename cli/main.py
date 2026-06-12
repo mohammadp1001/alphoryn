@@ -265,7 +265,7 @@ async def _run_session(params: SessionParams) -> None:
                         a = fc.args or {}
                         opt_tag  = _agent_tag("risk_optimist")
                         pess_tag = _agent_tag("risk_pessimist")
-                        rprint(f"\n{tag} [dim]⚙[/dim]  [bold]{display}[/bold]")
+                        rprint(f"\n{tag} [dim]>>[/dim]  [bold]{display}[/bold]")
                         rprint(
                             f"  {opt_tag} [dim italic][verdict][/dim italic] "
                             f"[bold]{a.get('optimist_level', '?')}[/bold] — "
@@ -278,12 +278,12 @@ async def _run_session(params: SessionParams) -> None:
                         )
                     else:
                         args_str = _compress_call_args(fc.args or {})
-                        rprint(f"\n{tag} [dim]⚙[/dim]  [bold]{display}[/bold]  {args_str}")
+                        rprint(f"\n{tag} [dim]>>[/dim]  [bold]{display}[/bold]  {args_str}")
                 elif hasattr(part, "function_response") and part.function_response:
                     fr = part.function_response
                     summary = _summarise_tool_response(fr.name, fr.response or {})
                     display = fr.name.replace("__", ".")
-                    rprint(f"{tag} [dim]←[/dim]  [dim]{display}[/dim]  {summary}")
+                    rprint(f"{tag} [dim]<<[/dim]  [dim]{display}[/dim]  {summary}")
 
     except KeyboardInterrupt:
         _outcome = "interrupted"
