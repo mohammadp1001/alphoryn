@@ -177,6 +177,21 @@ On cycle retry   → call strategy__list_strategies again.
                      candidate with side="sell", combined_score=1.0.
                      Sell candidates bypass min_score — any triggered exit rule executes.
                      If there are no open positions, skip this step.
+5c. HTML report    : for each BUY candidate that passed min_score, generate a cycle HTML
+                     report consolidating all research and analysis content:
+                     1. Call file__read_file("templates/report_template.html") for structure.
+                     2. Call memory__get_session_files(session_id="{session_id}") to list
+                        all registered markdown file paths for this session.
+                     3. Call file__read_file on each markdown path to read its content.
+                     4. Write a fully-formed HTML report to
+                        reports/{session_id}/{session_id}_<SYMBOL>.html, populated with
+                        the research summary, analysis data, coordinator notes (regime,
+                        rationale), and trade proposal from the analysis snapshot.
+                     5. Call file__register_session_file(session_id="{session_id}",
+                        path="reports/{session_id}/{session_id}_<SYMBOL>.html",
+                        file_type="report", symbol=<SYMBOL>) to register the report.
+                     6. Store the report path in state["cycle_report_path"].
+                     Debate agents will read state["cycle_report_path"] for full context.
 6.  Shortlist      : call coordinator__select_shortlist with all scored BUY candidates
                      plus any SELL candidates from step 5b, using the min_score from the
                      active strategy spec (min_score applies to BUY candidates only).

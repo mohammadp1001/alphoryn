@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AlgoTrade Cycle Report — {SESSION_ID}</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 2em auto; color: #222; }
+    h1   { border-bottom: 2px solid #0057b7; padding-bottom: .4em; }
+    h2   { color: #0057b7; margin-top: 1.5em; }
+    h3   { margin-top: 1em; }
+    pre  { background: #f4f4f4; padding: 1em; border-radius: 4px; overflow-x: auto; }
+    .meta { color: #666; font-size: .9em; }
+    .section { border: 1px solid #ddd; border-radius: 4px; padding: 1em; margin-bottom: 1.5em; }
+  </style>
+</head>
+<body>
+
+<h1>AlgoTrade Cycle Report</h1>
+<p class="meta">
+  <strong>Session:</strong> {SESSION_ID} &nbsp;|&nbsp;
+  <strong>Symbol:</strong> {SYMBOL} &nbsp;|&nbsp;
+  <strong>Strategy:</strong> {STRATEGY} &nbsp;|&nbsp;
+  <strong>Generated:</strong> {TIMESTAMP}
+</p>
+
+<!-- ── Section 1: Research Summary ───────────────────────────────────────── -->
+<div class="section" id="research-summary">
+  <h2>Research Summary</h2>
+  <p>Paste or render the content of the research markdown report here.
+  Include news highlights, sentiment direction, and key risks identified
+  by the research agent.</p>
+  <h3>News Highlights</h3>
+  <ul>
+    <li>Recent event 1 — date, source</li>
+    <li>Recent event 2 — date, source</li>
+  </ul>
+  <h3>Sentiment</h3>
+  <p>Overall: <strong>neutral / bullish / bearish</strong> — confidence: <em>high / medium / low</em></p>
+  <h3>Key Risks</h3>
+  <ol>
+    <li>Risk 1</li>
+    <li>Risk 2</li>
+  </ol>
+</div>
+
+<!-- ── Section 2: Analysis ───────────────────────────────────────────────── -->
+<div class="section" id="analysis">
+  <h2>Analysis</h2>
+  <p>Paste or render the content of the analysis markdown report here.
+  Include technical indicator values, momentum scores, and the composite
+  technical score from the analysis workflow.</p>
+  <h3>Technical Indicators</h3>
+  <pre>RSI (14):  {RSI_VALUE}
+MACD:      {MACD_VALUE}  Signal: {SIGNAL_VALUE}
+Bollinger: Upper {BB_UPPER}  Lower {BB_LOWER}
+ATR (14):  {ATR_VALUE}</pre>
+  <h3>Momentum Score</h3>
+  <p>Combined: <strong>{MOMENTUM_SCORE}</strong> &nbsp;|&nbsp;
+     Technical: <strong>{TECHNICAL_SCORE}</strong></p>
+</div>
+
+<!-- ── Section 3: Coordinator Notes ─────────────────────────────────────── -->
+<div class="section" id="coordinator-notes">
+  <h2>Coordinator Notes</h2>
+  <p>Coordinator's own observations and reasoning for selecting this symbol
+  for the shortlist. Include market regime context, strategy rationale, and
+  any signals that pushed the combined score above threshold.</p>
+  <h3>Market Regime</h3>
+  <p>{MARKET_REGIME} — VIX: {VIX}  |  10Y: {YIELD_10Y}%  |  Spread: {YIELD_SPREAD}%</p>
+  <h3>Selection Rationale</h3>
+  <p>{SELECTION_RATIONALE}</p>
+</div>
+
+<!-- ── Section 4: Trade Proposal ────────────────────────────────────────── -->
+<div class="section" id="trade-proposal">
+  <h2>Trade Proposal</h2>
+  <p>Proposed order parameters for the debate agents to evaluate.</p>
+  <pre>Symbol:       {SYMBOL}
+Side:         {SIDE}
+Order type:   {ORDER_TYPE}
+Strategy:     {STRATEGY}
+Combined score: {COMBINED_SCORE}
+Asset class:  {ASSET_CLASS}</pre>
+  <h3>Entry Conditions Met</h3>
+  <ul>
+    <li>Condition 1</li>
+    <li>Condition 2</li>
+  </ul>
+  <h3>Exit Conditions (stop / target)</h3>
+  <p>Stop: {STOP_PRICE} &nbsp;|&nbsp; Target: {TARGET_PRICE}</p>
+</div>
+
+</body>
+</html>

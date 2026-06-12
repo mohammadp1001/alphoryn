@@ -253,6 +253,86 @@ def test_execution_agent_module_importable():
     assert ExecutionAgent is not None
 
 
+# ── Issue #43: HTML report generation ────────────────────────────────────────
+
+
+def test_report_template_file_exists():
+    from pathlib import Path
+
+    template = Path("templates/report_template.html")
+    assert template.exists(), "templates/report_template.html must exist"
+
+
+def test_report_template_has_research_summary_section():
+    from pathlib import Path
+
+    content = Path("templates/report_template.html").read_text(encoding="utf-8")
+    assert "Research Summary" in content
+
+
+def test_report_template_has_analysis_section():
+    from pathlib import Path
+
+    content = Path("templates/report_template.html").read_text(encoding="utf-8")
+    assert "Analysis" in content
+
+
+def test_report_template_has_coordinator_notes_section():
+    from pathlib import Path
+
+    content = Path("templates/report_template.html").read_text(encoding="utf-8")
+    assert "Coordinator Notes" in content
+
+
+def test_report_template_has_trade_proposal_section():
+    from pathlib import Path
+
+    content = Path("templates/report_template.html").read_text(encoding="utf-8")
+    assert "Trade Proposal" in content
+
+
+def test_coordinator_instruction_mentions_html_report():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "HTML report" in formatted or "html" in formatted.lower()
+
+
+def test_coordinator_instruction_mentions_cycle_report_path():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "cycle_report_path" in formatted
+
+
+def test_coordinator_instruction_mentions_report_template():
+    from agent.prompts import COORDINATOR_INSTRUCTION
+
+    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
+    assert "report_template.html" in formatted
+
+
+def test_coordinator_tool_set_includes_file_write():
+    from tools.registry import ALL_COORDINATOR_TOOLS
+
+    names = {t.name for t in ALL_COORDINATOR_TOOLS}
+    assert "file__write_file" in names
+
+
+def test_coordinator_tool_set_includes_file_read():
+    from tools.registry import ALL_COORDINATOR_TOOLS
+
+    names = {t.name for t in ALL_COORDINATOR_TOOLS}
+    assert "file__read_file" in names
+
+
+def test_coordinator_tool_set_includes_get_session_files():
+    from tools.registry import ALL_COORDINATOR_TOOLS
+
+    names = {t.name for t in ALL_COORDINATOR_TOOLS}
+    assert "memory__get_session_files" in names
+
+
 # ── Strategy tools ────────────────────────────────────────────────────────────
 
 
