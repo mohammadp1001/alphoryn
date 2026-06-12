@@ -47,14 +47,15 @@ from tools.analysis.tools import (
 
 # ── coordinator.* ────────────────────────────────────────────────────────────
 from tools.coordinator.tools import (
-    abort_cycle,
     check_loss_limit,
     get_session_summary,
     request_hitl,
     resolve_unresolved_trades,
-    select_shortlist,
     synthesise_risk,
     update_plan_state,
+)
+from tools.coordinator.tools import (
+    detect_market_regime as coordinator_detect_market_regime,
 )
 
 # ── execution.* ──────────────────────────────────────────────────────────────
@@ -215,12 +216,11 @@ FILE_TOOLS: list[FunctionTool] = [
 COORDINATOR_TOOLS: list[FunctionTool] = [
     _tool(request_hitl, "coordinator"),
     _tool(check_loss_limit, "coordinator"),
-    _tool(select_shortlist, "coordinator"),
     _tool(synthesise_risk, "coordinator"),
     _tool(resolve_unresolved_trades, "coordinator"),
     _tool(update_plan_state, "coordinator"),
     _tool(get_session_summary, "coordinator"),
-    _tool(abort_cycle, "coordinator"),
+    _tool(coordinator_detect_market_regime, "coordinator"),
 ]
 
 STRATEGY_TOOLS: list[FunctionTool] = [
@@ -235,14 +235,8 @@ WORKFLOW_TOOLS: list[FunctionTool] = [
     _tool(run_sector_rotation_analysis, "workflow"),
 ]
 
-# All tools the coordinator LLM sees — execution tools deliberately excluded
+# All tools the coordinator LLM sees — execution, market, and research tool slices
+# are excluded. Market data comes via Alpaca MCP; regime detection is a coordinator tool.
 ALL_COORDINATOR_TOOLS: list[FunctionTool] = (
-    MARKET_TOOLS
-    + ANALYSIS_TOOLS
-    + RESEARCH_TOOLS
-    + MEMORY_TOOLS
-    + COORDINATOR_TOOLS
-    + STRATEGY_TOOLS
-    + FILE_TOOLS
-    + WORKFLOW_TOOLS
+    ANALYSIS_TOOLS + MEMORY_TOOLS + COORDINATOR_TOOLS + STRATEGY_TOOLS + FILE_TOOLS + WORKFLOW_TOOLS
 )
