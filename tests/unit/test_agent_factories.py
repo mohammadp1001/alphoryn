@@ -328,6 +328,40 @@ def test_coordinator_has_research_agent_tool():
     assert "research_agent" in tool_names
 
 
+def test_alpaca_mcp_tools_returns_empty_on_import_error():
+    import os
+    import sys
+    from unittest.mock import patch
+
+    with (
+        patch.dict(os.environ, {"ALPACA_MCP_URL": "http://mcp.example.com"}),
+        patch.dict(sys.modules, {"google.adk.tools.mcp_tool.mcp_toolset": None}),
+    ):
+        from agent.coordinator import _alpaca_mcp_tools
+
+        result = _alpaca_mcp_tools()
+    assert result == []
+
+
+def test_alpaca_mcp_tools_returns_toolset_when_import_succeeds():
+    import os
+    import sys
+    from unittest.mock import MagicMock, patch
+
+    mock_module = MagicMock()
+    mock_module.MCPToolset = MagicMock(return_value="toolset_instance")
+    mock_module.SseServerParams = MagicMock(return_value="sse_params")
+
+    with (
+        patch.dict(os.environ, {"ALPACA_MCP_URL": "http://mcp.example.com"}),
+        patch.dict(sys.modules, {"google.adk.tools.mcp_tool.mcp_toolset": mock_module}),
+    ):
+        from agent.coordinator import _alpaca_mcp_tools
+
+        result = _alpaca_mcp_tools()
+    assert result == ["toolset_instance"]
+
+
 def test_coordinator_before_callback_initializes_strategies_tried():
     import asyncio
     from unittest.mock import MagicMock

@@ -127,3 +127,30 @@ def test_detect_market_regime_regime_enum_valid():
 
     result = _run_detect(12.0, 40.0, 38.0, 3.5)
     MarketRegime(result["regime"])  # raises ValueError if invalid
+
+
+def test_detect_market_regime_last_close_exception_returns_zero():
+    from unittest.mock import PropertyMock
+
+    mock_yf = MagicMock()
+    mock_ticker = MagicMock()
+    type(mock_ticker).info = PropertyMock(side_effect=RuntimeError("API down"))
+    mock_yf.Ticker.return_value = mock_ticker
+
+    dates = pd.date_range("2026-01-01", periods=2, freq="D")
+    mock_yf.download.return_value = pd.DataFrame({"Close": [100.0, 103.0]}, index=dates)
+
+    with (
+        patch("infra.rate_limiter.acquire_yfinance", new_callable=AsyncMock),
+        patch.dict(sys.modules, {"yfinance": mock_yf}),
+    ):
+        import importlib
+
+        import tools.coordinator.tools as coord_mod
+
+        importlib.reload(coord_mod)
+        result = asyncio.run(coord_mod.detect_market_regime())
+
+    assert result["vix"] == 0.0
+    assert result["yield_10y"] == 0.0
+    assert "regime" in result

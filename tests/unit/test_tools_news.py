@@ -75,7 +75,25 @@ def test_get_news_empty_when_no_news():
 
 def test_get_news_exception_returns_empty():
     mock_yf = MagicMock()
-    mock_yf.Ticker.return_value.news = None  # None triggers exception in iteration
+    mock_yf.Ticker.return_value.news = None  # None → news or [] → empty list, no exception
+    with (
+        patch("infra.rate_limiter.acquire_yfinance", new_callable=AsyncMock),
+        patch.dict(sys.modules, {"yfinance": mock_yf}),
+    ):
+        from tools.news import get_news
+
+        result = asyncio.run(get_news("SPY", days=7))
+
+    assert result["items"] == []
+
+
+def test_get_news_exception_in_try_block_returns_empty():
+    from unittest.mock import PropertyMock
+
+    mock_yf = MagicMock()
+    mock_ticker = MagicMock()
+    type(mock_ticker).news = PropertyMock(side_effect=RuntimeError("API down"))
+    mock_yf.Ticker.return_value = mock_ticker
     with (
         patch("infra.rate_limiter.acquire_yfinance", new_callable=AsyncMock),
         patch.dict(sys.modules, {"yfinance": mock_yf}),
