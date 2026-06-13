@@ -16,12 +16,20 @@ from tools.news import get_news
 logger = logging.getLogger("agent.research_agent")
 
 _DEFAULT_RESEARCH_MODEL = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+_RESEARCH_FALLBACK_MODELS: list[str] = [
+    "openrouter/google/gemma-4-31b-it:free",
+    "openrouter/google/gemma-4-26b-a4b-it:free",
+]
 _RESEARCH_OUTPUT_KEY = "research_output"
 
 
 def _lite_llm(model: str) -> object:
+    import litellm  # type: ignore[import]
     from google.adk.models.lite_llm import LiteLlm  # type: ignore[import]
 
+    # Model-specific fallback chain: if `model` is rate-limited (429), litellm
+    # retries each fallback in order before raising.
+    litellm.fallbacks = [{"model": model, "fallbacks": _RESEARCH_FALLBACK_MODELS}]
     return LiteLlm(model=model)
 
 
