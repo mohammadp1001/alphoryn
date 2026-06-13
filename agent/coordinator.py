@@ -31,10 +31,9 @@ from agent.debate_agents import create_debate_optimist, create_debate_pessimist
 from agent.execution_agent import create_execution_agent
 from agent.prompts import COORDINATOR_INSTRUCTION
 from agent.research_agent import create_research_agent
+from infra.observability import log_action
 from models.session import PlanState, SessionParams
 from tools.registry import ALL_COORDINATOR_TOOLS
-
-logger = logging.getLogger("agent.coordinator")
 
 _DEFAULT_COORDINATOR_MODEL = "gemini-2.5-flash"
 
@@ -63,7 +62,13 @@ def _alpaca_mcp_tools() -> list:
 
         return [MCPToolset(connection_params=SseServerParams(url=mcp_url))]
     except ImportError:
-        logger.warning("MCPToolset not available — Alpaca MCP disabled")
+        log_action(
+            "coordinator",
+            "mcp_init",
+            logging.WARNING,
+            status="disabled",
+            reason="MCPToolset_not_available",
+        )
         return []
 
 
@@ -153,6 +158,7 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
             state["cycle_count"] = 0
             state["active_strategy"] = ""
             state["strategies_tried_this_cycle"] = []
+            log_action("coordinator", "session_init", session_id=plan_state.session_id)
 
         # Pre-fetch portfolio and account snapshots before each coordinator turn.
         # Credentials must be present in env; if not, snapshots are skipped (paper mode).
@@ -192,17 +198,30 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
                     ],
                     "position_count": len(positions),
                 }
-                logger.debug(
-                    "before_callback: portfolio fetched — %d positions, buying_power=%.2f",
-                    len(positions),
-                    float(account.buying_power),
+                log_action(
+                    "coordinator",
+                    "portfolio_fetch",
+                    positions=len(positions),
+                    buying_power=f"{float(account.buying_power):.2f}",
                 )
             except Exception as exc:
-                logger.warning("before_callback: portfolio fetch failed — %s", exc)
+                log_action(
+                    "coordinator",
+                    "portfolio_fetch",
+                    logging.WARNING,
+                    status="failed",
+                    error=str(exc),
+                )
                 state.setdefault("account_snapshot", {})
                 state.setdefault("portfolio_snapshot", {"positions": [], "position_count": 0})
         else:
-            logger.debug("before_callback: no Alpaca credentials — skipping portfolio prefetch")
+            log_action(
+                "coordinator",
+                "portfolio_fetch",
+                logging.DEBUG,
+                status="skipped",
+                reason="no_credentials",
+            )
             state.setdefault("account_snapshot", {})
             state.setdefault("portfolio_snapshot", {"positions": [], "position_count": 0})
 

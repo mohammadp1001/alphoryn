@@ -149,7 +149,7 @@ def test_debate_json_validator_no_json_warns(caplog):
     from agent.debate_agents import _make_json_validator_callback
     from tools.schemas import RiskVerdictOutput
 
-    validator = _make_json_validator_callback(RiskVerdictOutput)
+    validator = _make_json_validator_callback("debate_optimist", RiskVerdictOutput)
 
     mock_response = MagicMock()
     mock_part = MagicMock()
@@ -162,7 +162,7 @@ def test_debate_json_validator_no_json_warns(caplog):
         result = asyncio.run(validator(ctx, mock_response))
 
     assert result is None
-    assert any("no JSON block" in r.message for r in caplog.records)
+    assert any("no_json_block" in r.message for r in caplog.records)
 
 
 def test_debate_json_validator_invalid_json_warns(caplog):
@@ -173,7 +173,7 @@ def test_debate_json_validator_invalid_json_warns(caplog):
     from agent.debate_agents import _make_json_validator_callback
     from tools.schemas import RiskVerdictOutput
 
-    validator = _make_json_validator_callback(RiskVerdictOutput)
+    validator = _make_json_validator_callback("debate_optimist", RiskVerdictOutput)
 
     mock_response = MagicMock()
     mock_part = MagicMock()
@@ -195,7 +195,7 @@ def test_debate_json_validator_empty_response_returns_none():
     from agent.debate_agents import _make_json_validator_callback
     from tools.schemas import RiskVerdictOutput
 
-    validator = _make_json_validator_callback(RiskVerdictOutput)
+    validator = _make_json_validator_callback("debate_optimist", RiskVerdictOutput)
 
     mock_response = MagicMock()
     mock_response.content = None

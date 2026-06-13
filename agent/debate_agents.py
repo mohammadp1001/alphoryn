@@ -37,7 +37,7 @@ def _lite_llm(model: str) -> object:
     return LiteLlm(model=model)
 
 
-def _make_json_validator_callback(model_cls: type[Any]):
+def _make_json_validator_callback(agent_name: str, model_cls: type[Any]):
     """Return an after_model_callback that validates JSON against model_cls."""
 
     async def _validate(
@@ -51,13 +51,26 @@ def _make_json_validator_callback(model_cls: type[Any]):
             return None
         match = _JSON_BLOCK.search(text)
         if not match:
-            logger.warning("%s: no JSON block found in model response", model_cls.__name__)
+            logger.warning(
+                "[%s] json_validate  status=no_json_block",
+                agent_name,
+                extra={
+                    "agent": agent_name,
+                    "event": "json_validate_failed",
+                    "reason": "no_json_block",
+                },
+            )
             return None
         try:
             data = json.loads(match.group())
             model_cls(**data)
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            logger.warning("%s: JSON validation failed — %s", model_cls.__name__, exc)
+            logger.warning(
+                "[%s] json_validate  status=failed  error=%s",
+                agent_name,
+                exc,
+                extra={"agent": agent_name, "event": "json_validate_failed", "error": str(exc)},
+            )
         return None
 
     return _validate
@@ -89,7 +102,7 @@ def create_debate_optimist(
         output_schema=RiskVerdictOutput,
         before_agent_callback=before_cb,
         after_agent_callback=after_cb,
-        after_model_callback=_make_json_validator_callback(RiskVerdictOutput),
+        after_model_callback=_make_json_validator_callback("debate_optimist", RiskVerdictOutput),
     )
 
 
@@ -119,5 +132,5 @@ def create_debate_pessimist(
         output_schema=RiskVerdictOutput,
         before_agent_callback=before_cb,
         after_agent_callback=after_cb,
-        after_model_callback=_make_json_validator_callback(RiskVerdictOutput),
+        after_model_callback=_make_json_validator_callback("debate_pessimist", RiskVerdictOutput),
     )
