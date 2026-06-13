@@ -126,7 +126,7 @@ def test_research_file_callback_empty_output_no_write(caplog):
         asyncio.run(cb(ctx))
 
     assert "research_report_path" not in ctx.state
-    assert any("EMPTY" in r.message for r in caplog.records)
+    assert any("status=empty" in r.message for r in caplog.records)
 
 
 def test_create_research_agent_after_callback_writes_file():

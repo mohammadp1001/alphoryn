@@ -143,3 +143,27 @@ def db_write_span(table: str, record_id: str) -> Generator[trace.Span, None, Non
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
+
+
+def log_action(
+    component: str,
+    action: str,
+    level: int = logging.INFO,
+    **labels: Any,
+) -> None:
+    """Emit a structured log line '[component] action label=value ...' with Cloud Logging labels.
+
+    Use instead of bare logger.debug/info calls so every coordinator and subagent action
+    carries consistent labels that Cloud Logging can index and filter on.
+
+    Args:
+        component: Source component, e.g. 'coordinator', 'research_agent'.
+        action:    Short verb phrase, e.g. 'portfolio_fetch', 'session_init'.
+        level:     Python logging level (default INFO).
+        **labels:  Arbitrary key=value pairs appended to the message and to the
+                   log record's `extra` dict for structured Cloud Logging queries.
+    """
+    _log = logging.getLogger(f"agent.{component}")
+    label_str = "  ".join(f"{k}={v}" for k, v in labels.items())
+    msg = f"[{component}] {action}" + (f"  {label_str}" if label_str else "")
+    _log.log(level, "%s", msg, extra={"component": component, "action": action, **labels})

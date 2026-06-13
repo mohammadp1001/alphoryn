@@ -48,26 +48,38 @@ def make_agent_log_callbacks(
                 )
         except Exception:
             pass
-        logger.debug(
-            "AGENT ▶  %-20s  request = %s",
+        logger.info(
+            "[%s] ▶  request=%s",
             agent_name,
             request_text,
+            extra={"agent": agent_name, "event": "agent_start"},
         )
 
     async def after_callback(callback_context: CallbackContext) -> None:
         output = callback_context.state.get(output_key)
         if output is not None:
-            logger.debug(
-                "AGENT ◀  %-20s  %s =\n%s",
+            logger.info(
+                "[%s] ◀  output_key=%s",
                 agent_name,
                 output_key,
+                extra={"agent": agent_name, "event": "agent_done", "output_key": output_key},
+            )
+            logger.debug(
+                "[%s] ◀  output=\n%s",
+                agent_name,
                 _serialise(output),
+                extra={"agent": agent_name, "event": "agent_output", "output_key": output_key},
             )
         else:
             logger.warning(
-                "AGENT ◀  %-20s  state key '%s' is EMPTY — output_schema enforcement may have failed",
+                "[%s] ◀  output_key=%s is EMPTY — output_schema enforcement may have failed",
                 agent_name,
                 output_key,
+                extra={
+                    "agent": agent_name,
+                    "event": "agent_empty_output",
+                    "output_key": output_key,
+                },
             )
 
     return before_callback, after_callback
@@ -89,7 +101,13 @@ def make_research_file_callback(
         text = callback_context.state.get(output_key)
         if not text:
             logger.warning(
-                "research file-callback: state key '%s' is EMPTY — no file written", output_key
+                "[research_agent] file_write  output_key=%s  status=empty",
+                output_key,
+                extra={
+                    "agent": "research_agent",
+                    "event": "file_write_skipped",
+                    "output_key": output_key,
+                },
             )
             return
         ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
@@ -100,6 +118,16 @@ def make_research_file_callback(
 
         _register(session_id=session_id, path=str(path), file_type="research", symbol=symbol)
         callback_context.state["research_report_path"] = str(path)
-        logger.debug("research file-callback: wrote %s", path)
+        logger.info(
+            "[research_agent] file_write  path=%s  symbol=%s",
+            path,
+            symbol,
+            extra={
+                "agent": "research_agent",
+                "event": "file_write_done",
+                "symbol": symbol,
+                "path": str(path),
+            },
+        )
 
     return after_callback

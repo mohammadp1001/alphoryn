@@ -47,18 +47,35 @@ def log_io(fn: Callable[..., Any]) -> Callable[..., Any]:
         except Exception:
             args_repr = repr(args) + " " + repr(kwargs)
 
-        _logger.debug("TOOL ▶  %-36s  in  = %s", name, args_repr)
+        _logger.debug(
+            "[tool:%s] ▶  in=%s",
+            name,
+            args_repr,
+            extra={"tool": name, "event": "tool_start"},
+        )
 
         t0 = time.monotonic()
         try:
             result = await fn(*args, **kwargs)
         except Exception as exc:
             elapsed_ms = (time.monotonic() - t0) * 1000
-            _logger.error("TOOL ✗  %-36s  [%.0fms]  error = %s", name, elapsed_ms, exc)
+            _logger.error(
+                "[tool:%s] ✗  elapsed_ms=%.0f  error=%s",
+                name,
+                elapsed_ms,
+                exc,
+                extra={"tool": name, "event": "tool_error", "elapsed_ms": int(elapsed_ms)},
+            )
             raise
 
         elapsed_ms = (time.monotonic() - t0) * 1000
-        _logger.debug("TOOL ◀  %-36s  [%.0fms]  out = %s", name, elapsed_ms, _serialise(result))
+        _logger.debug(
+            "[tool:%s] ◀  elapsed_ms=%.0f  out=%s",
+            name,
+            elapsed_ms,
+            _serialise(result),
+            extra={"tool": name, "event": "tool_done", "elapsed_ms": int(elapsed_ms)},
+        )
         return result
 
     return wrapper
