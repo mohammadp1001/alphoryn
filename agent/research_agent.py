@@ -15,7 +15,7 @@ from tools.news import get_news
 
 logger = logging.getLogger("agent.research_agent")
 
-_DEFAULT_RESEARCH_MODEL = "openrouter/openai/gpt-4o-mini"
+_DEFAULT_RESEARCH_MODEL = "openrouter/google/gemma-4-31b-it:free"
 _RESEARCH_OUTPUT_KEY = "research_output"
 
 
@@ -35,7 +35,7 @@ def create_research_agent(
     Args:
         session_id: Active session UUID — used by the file-write after-callback.
         symbol: ETF ticker the agent will research — used in the output file name.
-        model: LLM to use. Default: openrouter/openai/gpt-4o-mini via LiteLlm.
+        model: LLM to use. Default: openrouter/google/gemma-4-31b-it:free via LiteLlm.
     """
     if model is None:
         model = _lite_llm(_DEFAULT_RESEARCH_MODEL)
