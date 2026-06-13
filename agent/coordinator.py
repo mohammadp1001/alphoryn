@@ -99,7 +99,7 @@ def create_coordinator(
     universe_symbols = ETF_UNIVERSES.get(params.universe, DEFAULT_ETF_UNIVERSE)
     symbols_str = ", ".join(universe_symbols)
     exchange_tz = UNIVERSE_EXCHANGE_TZ.get(params.universe, "America/New_York")
-    session_expires_at = (plan_state.started_at + params.duration).isoformat()
+    session_expires_at = (plan_state.started_at + params.duration).isoformat() + "Z"
 
     from config import MAX_STRATEGY_CYCLES
 
