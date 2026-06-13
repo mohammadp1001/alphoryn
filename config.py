@@ -6,6 +6,7 @@ from pathlib import Path
 CONFIG_DIR = Path.home() / ".algotrade"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 DB_PATH = CONFIG_DIR / "algotrade.db"
+REPORTS_DIR = Path("reports")
 
 # ── ETF universe ─────────────────────────────────────────────────────────────
 ETF_UNIVERSES: dict[str, list[str]] = {

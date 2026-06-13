@@ -175,9 +175,7 @@ def test_write_analysis_report_creates_file(tmp_path, monkeypatch):
 
     monkeypatch.setattr(wb, "register_session_file", lambda **kw: "fake-id")
 
-    with patch("workflows.base.Path", wraps=Path) as _p:
-        _ = _p  # keep unused import happy
-        result = wb.write_analysis_report("sess-1", "XLK", "MOMENTUM", "# Test\n")
+    result = wb.write_analysis_report("sess-1", "XLK", "MOMENTUM", "# Test\n")
 
     assert result.endswith(".md")
     assert Path(result).exists()

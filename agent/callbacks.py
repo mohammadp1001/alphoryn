@@ -6,10 +6,10 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 
 from google.adk.agents.callback_context import CallbackContext  # type: ignore[import]
 
+import config
 from infra.rate_limiter import acquire_gemini
 
 logger = logging.getLogger("agent.callbacks")
@@ -114,7 +114,7 @@ def make_research_file_callback(
         # research agent is created before the coordinator has selected a symbol.
         active_symbol = callback_context.state.get("active_symbol") or symbol
         ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-        path = Path("reports") / session_id / "research" / f"{active_symbol}_{ts}.md"
+        path = config.REPORTS_DIR / session_id / "research" / f"{active_symbol}_{ts}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(str(text), encoding="utf-8")
         from db.schema import register_session_file as _register
