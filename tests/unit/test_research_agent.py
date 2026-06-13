@@ -169,9 +169,7 @@ def test_research_file_callback_uses_active_symbol_from_state():
     ):
         # Created with empty symbol (as coordinator does at startup)
         cb = make_research_file_callback("sess-sym", "", "research_output")
-        ctx = _FakeCallbackCtx(
-            state={"research_output": "# Report", "active_symbol": "EWG"}
-        )
+        ctx = _FakeCallbackCtx(state={"research_output": "# Report", "active_symbol": "EWG"})
         asyncio.run(cb(ctx))
 
     path_str = ctx.state["research_report_path"]
