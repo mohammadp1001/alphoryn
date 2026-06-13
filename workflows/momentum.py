@@ -25,6 +25,7 @@ async def run_momentum_analysis(session_id: str, symbol: str) -> dict:
     logger.info("run_momentum_analysis symbol=%s session=%s", symbol, session_id)
 
     from tools.analysis.tools import (
+        compute_bollinger,
         compute_macd,
         compute_rsi,
         detect_crossover,
@@ -84,8 +85,18 @@ async def run_momentum_analysis(session_id: str, symbol: str) -> dict:
         f"- Volume trend: {momentum.get('volume_trend_contribution', 'N/A')}\n"
     )
 
+    # Bollinger %B (needed for composite score)
+    bb = await compute_bollinger(symbol, closes, period=20)
+    pct_b = bb.get("pct_b") or 0.5
+
     # Technical composite score
-    tech = await score_technical(symbol, closes, strategy="MOMENTUM")
+    tech = await score_technical(
+        symbol,
+        "MOMENTUM",
+        rsi_current=float(rsi.get("current") or 50.0),
+        macd_histogram=float(macd.get("current_histogram") or 0.0),
+        pct_b=float(pct_b),
+    )
     sections.append(
         f"## Technical Score\n"
         f"- Composite: **{tech.get('composite_score', 'N/A')}**\n"

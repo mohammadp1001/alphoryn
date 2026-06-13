@@ -26,6 +26,8 @@ async def run_mean_reversion_analysis(session_id: str, symbol: str) -> dict:
     from tools.analysis.tools import (
         compute_atr,
         compute_bollinger,
+        compute_macd,
+        compute_rsi,
         detect_support_resistance,
         score_technical,
     )
@@ -70,8 +72,18 @@ async def run_mean_reversion_analysis(session_id: str, symbol: str) -> dict:
         f"- Levels found: {len(sr.get('levels', []))}\n"
     )
 
+    # RSI and MACD (required inputs for composite score)
+    rsi = await compute_rsi(symbol, closes, period=14)
+    macd = await compute_macd(symbol, closes)
+
     # Technical composite score
-    tech = await score_technical(symbol, closes, strategy="MEAN_REVERSION")
+    tech = await score_technical(
+        symbol,
+        "MEAN_REVERSION",
+        rsi_current=float(rsi.get("current") or 50.0),
+        macd_histogram=float(macd.get("current_histogram") or 0.0),
+        pct_b=float(bb.get("pct_b") or 0.5),
+    )
     sections.append(
         f"## Technical Score\n"
         f"- Composite: **{tech.get('composite_score', 'N/A')}**\n"
