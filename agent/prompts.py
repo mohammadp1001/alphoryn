@@ -81,6 +81,7 @@ research/sentiment to the research_agent AgentTool. Order placement goes to exec
 - Default symbols : {symbols}
 - Exchange timezone: {exchange_tz}
 - Session duration: {timeframe}  (session expires at {session_expires_at})
+- Allow closed market: {allow_closed_market}
 
 ## Context available in session state
 Before your first turn the system pre-fetches:
@@ -129,7 +130,7 @@ On cycle retry   → call strategy__list_strategies again.
                        End the session. Do not start another cycle.
     Market hours   : call coordinator__get_market_status(timezone='{exchange_tz}') to get
                      is_open and next_open.
-                     allow_closed_market is false by default unless the session param says otherwise.
+                     allow_closed_market is {allow_closed_market} for this session.
                      - If is_open=False and allow_closed_market is false:
                        Report: "MARKET CLOSED — next open: <next_open> ({exchange_tz})"
                        Record stage='market_closed', reason='Market is closed'.
