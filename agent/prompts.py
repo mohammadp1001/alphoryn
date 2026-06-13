@@ -94,11 +94,12 @@ Before your first turn the system pre-fetches:
 All tools are named <namespace>__<function> so you can identify them by prefix:
   analysis__*      RSI, MACD, Bollinger, momentum, scoring
   workflow__*      run_momentum_analysis, run_mean_reversion_analysis, run_sector_rotation_analysis
-  coordinator__*   loss limit, HITL, risk synthesis, coordinator__detect_market_regime
+  coordinator__*   loss limit, HITL, risk synthesis, coordinator__detect_market_regime,
+                   coordinator__get_market_status (is_open, next_open, next_close)
   memory__*        trade DB reads/writes, calibration, session cycles
   strategy__*      list/load strategy files, describe_tool
   file__*          file__read_file, file__write_file, file__register_session_file
-  MCP tools        Alpaca MCP: get_clock (is_open, next_open), get_all_positions, get_account
+  MCP tools        Alpaca MCP (optional): get_all_positions, get_account
 
 Call strategy__describe_tool(tool_name) whenever you need full parameter details for
 a tool before calling it.
@@ -126,8 +127,8 @@ On cycle retry   → call strategy__list_strategies again.
                      If expired:
                        Report: "SESSION EXPIRED — duration {timeframe} elapsed."
                        End the session. Do not start another cycle.
-    Market hours   : call Alpaca MCP get_clock to get is_open and next_open, or check
-                     state["account_snapshot"]["is_open"] if already populated.
+    Market hours   : call coordinator__get_market_status(timezone='{exchange_tz}') to get
+                     is_open and next_open.
                      allow_closed_market is false by default unless the session param says otherwise.
                      - If is_open=False and allow_closed_market is false:
                        Report: "MARKET CLOSED — next open: <next_open> ({exchange_tz})"

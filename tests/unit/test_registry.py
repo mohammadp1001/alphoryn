@@ -30,7 +30,7 @@ def test_memory_tools_list_populated():
 def test_coordinator_tools_list_populated():
     from tools.registry import COORDINATOR_TOOLS
 
-    assert len(COORDINATOR_TOOLS) == 7
+    assert len(COORDINATOR_TOOLS) == 8
 
 
 def test_strategy_tools_list_populated():
@@ -176,6 +176,13 @@ def test_coordinator_tools_has_detect_market_regime():
 
     names = {t.name for t in COORDINATOR_TOOLS}
     assert "coordinator__detect_market_regime" in names
+
+
+def test_coordinator_tools_has_get_market_status():
+    from tools.registry import COORDINATOR_TOOLS
+
+    names = {t.name for t in COORDINATOR_TOOLS}
+    assert "coordinator__get_market_status" in names
 
 
 def test_all_coordinator_tools_includes_workflow_tools():

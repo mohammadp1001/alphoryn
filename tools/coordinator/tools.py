@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 from infra.observability import get_logger
 
@@ -473,4 +473,65 @@ async def detect_market_regime(
         yield_curve_spread=round(yield_10y - yield_2y, 3),
         benchmark_symbol=benchmark_symbol,
         benchmark_return_20d=benchmark_return_20d,
+    ).model_dump()
+
+
+async def get_market_status(timezone: str = "America/New_York") -> dict:
+    """Return whether the exchange is currently open, and when it next opens or closes.
+
+    Falls back gracefully when market hours cannot be determined.
+
+    Args:
+        timezone: IANA timezone string for the exchange, e.g. 'America/New_York',
+                  'Europe/Berlin', 'Europe/London'.
+
+    Returns:
+        dict with 'is_open', 'next_open', 'next_close', 'timestamp', 'timezone'.
+    """
+    import zoneinfo
+
+    from tools.schemas import MarketStatusResponse
+
+    try:
+        tz = zoneinfo.ZoneInfo(timezone)
+    except Exception:
+        tz = zoneinfo.ZoneInfo("America/New_York")
+        timezone = "America/New_York"
+
+    now = datetime.now(tz)
+
+    # Standard regular-session hours by timezone
+    _HOURS: dict[str, tuple[time, time]] = {
+        "America/New_York": (time(9, 30), time(16, 0)),
+        "Europe/Berlin": (time(9, 0), time(17, 30)),
+        "Europe/London": (time(8, 0), time(16, 30)),
+    }
+    open_t, close_t = _HOURS.get(timezone, (time(9, 30), time(16, 0)))
+
+    market_open = now.replace(hour=open_t.hour, minute=open_t.minute, second=0, microsecond=0)
+    market_close = now.replace(hour=close_t.hour, minute=close_t.minute, second=0, microsecond=0)
+
+    is_weekday = now.weekday() < 5
+    is_open = is_weekday and market_open <= now <= market_close
+
+    if is_open:
+        next_open_str = None
+        next_close_str = market_close.isoformat()
+    else:
+        # Find next business day
+        candidate = now + timedelta(days=1)
+        while candidate.weekday() >= 5:
+            candidate += timedelta(days=1)
+        next_day_open = candidate.replace(
+            hour=open_t.hour, minute=open_t.minute, second=0, microsecond=0
+        )
+        next_open_str = next_day_open.isoformat()
+        next_close_str = None
+
+    return MarketStatusResponse(
+        is_open=is_open,
+        next_open=next_open_str,
+        next_close=next_close_str,
+        timestamp=now.isoformat(),
+        timezone=timezone,
     ).model_dump()

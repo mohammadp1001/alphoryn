@@ -145,6 +145,13 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
+# Attributes already present on a bare LogRecord — passing these in extra= raises KeyError.
+# We also include 'session_id' because our LogRecordFactory injects it on every record.
+_RESERVED_LOG_ATTRS: frozenset[str] = frozenset(
+    logging.LogRecord("", 0, "", 0, "", (), None).__dict__
+) | {"session_id"}
+
+
 def log_action(
     component: str,
     action: str,
@@ -162,8 +169,16 @@ def log_action(
         level:     Python logging level (default INFO).
         **labels:  Arbitrary key=value pairs appended to the message and to the
                    log record's `extra` dict for structured Cloud Logging queries.
+                   Keys that collide with built-in LogRecord attributes (e.g. 'session_id'
+                   injected by our LogRecordFactory) are kept in the message text but
+                   silently omitted from `extra` to avoid KeyError.
     """
     _log = logging.getLogger(f"agent.{component}")
     label_str = "  ".join(f"{k}={v}" for k, v in labels.items())
     msg = f"[{component}] {action}" + (f"  {label_str}" if label_str else "")
-    _log.log(level, "%s", msg, extra={"component": component, "action": action, **labels})
+    safe_extra = {
+        k: v
+        for k, v in {"component": component, "action": action, **labels}.items()
+        if k not in _RESERVED_LOG_ATTRS
+    }
+    _log.log(level, "%s", msg, extra=safe_extra)
