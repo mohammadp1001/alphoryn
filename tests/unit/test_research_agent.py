@@ -34,6 +34,22 @@ def test_create_research_agent_default_model():
     assert agent.model.model == _DEFAULT_RESEARCH_MODEL
 
 
+def test_create_research_agent_configures_litellm_fallbacks():
+    import litellm  # type: ignore[import]
+
+    from agent.research_agent import (
+        _DEFAULT_RESEARCH_MODEL,
+        _RESEARCH_FALLBACK_MODELS,
+        create_research_agent,
+    )
+
+    create_research_agent("sess-fb", "XLK")
+    assert isinstance(litellm.fallbacks, list)
+    assert len(litellm.fallbacks) == 1
+    assert litellm.fallbacks[0]["model"] == _DEFAULT_RESEARCH_MODEL
+    assert litellm.fallbacks[0]["fallbacks"] == _RESEARCH_FALLBACK_MODELS
+
+
 def test_create_research_agent_custom_model():
     from agent.research_agent import create_research_agent
 
