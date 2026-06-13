@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from infra.observability import get_logger
@@ -39,9 +40,13 @@ async def write_file(path: str, content: str) -> dict:
     """
     logger.info("write_file path=%s bytes=%d", path, len(content))
     p = Path(path)
+    # Strip characters that are illegal in Windows filenames (colons, etc.) from the
+    # final path component only — directory separators in the parent are intentional.
+    safe_name = re.sub(r'[<>:"|?*]', "-", p.name)
+    p = p.parent / safe_name
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(content, encoding="utf-8")
-    return WriteFileResponse(path=path, written=True).model_dump()
+    return WriteFileResponse(path=str(p), written=True).model_dump()
 
 
 async def register_session_file(

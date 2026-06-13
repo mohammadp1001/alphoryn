@@ -211,6 +211,17 @@ def test_write_file_overwrites_existing(tmp_path: Path) -> None:
     assert f.read_text(encoding="utf-8") == "new content"
 
 
+def test_write_file_sanitizes_colons_in_filename(tmp_path: Path) -> None:
+    # LLM-generated paths may use ISO timestamps with colons (invalid on Windows).
+    colon_path = str(tmp_path / "EWG_research_2026-06-13T15:42:56.md")
+    from tools.file_tools import write_file
+
+    result = asyncio.run(write_file(colon_path, "content"))
+    assert result["written"] is True
+    assert ":" not in Path(result["path"]).name
+    assert Path(result["path"]).read_text(encoding="utf-8") == "content"
+
+
 # ── tools.file_tools: register_session_file ───────────────────────────────────
 
 
