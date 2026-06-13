@@ -31,7 +31,7 @@ async def run_momentum_analysis(session_id: str, symbol: str) -> dict:
         detect_momentum,
         score_technical,
     )
-    from tools.market.tools import get_52w_range, get_ohlcv
+    from tools.data import get_52w_range, get_ohlcv
 
     # Fetch OHLCV data
     ohlcv = await get_ohlcv(symbol, "1Day", 60)

@@ -9,22 +9,10 @@ def test_registry_imports_without_error():
     import tools.registry  # noqa: F401
 
 
-def test_market_tools_list_populated():
-    from tools.registry import MARKET_TOOLS
-
-    assert len(MARKET_TOOLS) == 12
-
-
 def test_analysis_tools_list_populated():
     from tools.registry import ANALYSIS_TOOLS
 
     assert len(ANALYSIS_TOOLS) == 14
-
-
-def test_research_tools_list_populated():
-    from tools.registry import RESEARCH_TOOLS
-
-    assert len(RESEARCH_TOOLS) == 13
 
 
 def test_execution_tools_list_populated():
@@ -77,15 +65,6 @@ def test_all_coordinator_tools_includes_strategy():
 # ── Tool type checks ──────────────────────────────────────────────────────────
 
 
-def test_market_tools_are_function_tools():
-    from google.adk.tools import FunctionTool  # type: ignore[import]
-
-    from tools.registry import MARKET_TOOLS
-
-    for tool in MARKET_TOOLS:
-        assert isinstance(tool, FunctionTool)
-
-
 def test_execution_tools_are_function_tools():
     from google.adk.tools import FunctionTool  # type: ignore[import]
 
@@ -116,25 +95,11 @@ def test_coordinator_tools_are_function_tools():
 # ── Namespace prefix convention ───────────────────────────────────────────────
 
 
-def test_market_tools_have_market_prefix():
-    from tools.registry import MARKET_TOOLS
-
-    for tool in MARKET_TOOLS:
-        assert tool.name.startswith("market__"), f"Expected market__ prefix: {tool.name}"
-
-
 def test_analysis_tools_have_analysis_prefix():
     from tools.registry import ANALYSIS_TOOLS
 
     for tool in ANALYSIS_TOOLS:
         assert tool.name.startswith("analysis__"), f"Expected analysis__ prefix: {tool.name}"
-
-
-def test_research_tools_have_research_prefix():
-    from tools.registry import RESEARCH_TOOLS
-
-    for tool in RESEARCH_TOOLS:
-        assert tool.name.startswith("research__"), f"Expected research__ prefix: {tool.name}"
 
 
 def test_execution_tools_have_execution_prefix():
@@ -211,26 +176,6 @@ def test_coordinator_tools_has_detect_market_regime():
 
     names = {t.name for t in COORDINATOR_TOOLS}
     assert "coordinator__detect_market_regime" in names
-
-
-def test_all_coordinator_tools_excludes_market_tools():
-    from tools.registry import ALL_COORDINATOR_TOOLS, MARKET_TOOLS
-
-    market_names = {t.name for t in MARKET_TOOLS}
-    coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
-    assert market_names.isdisjoint(coord_names), (
-        f"Market tools must not be in ALL_COORDINATOR_TOOLS: {market_names & coord_names}"
-    )
-
-
-def test_all_coordinator_tools_excludes_research_tools():
-    from tools.registry import ALL_COORDINATOR_TOOLS, RESEARCH_TOOLS
-
-    research_names = {t.name for t in RESEARCH_TOOLS}
-    coord_names = {t.name for t in ALL_COORDINATOR_TOOLS}
-    assert research_names.isdisjoint(coord_names), (
-        f"Research tools must not be in ALL_COORDINATOR_TOOLS: {research_names & coord_names}"
-    )
 
 
 def test_all_coordinator_tools_includes_workflow_tools():

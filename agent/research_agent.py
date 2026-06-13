@@ -11,7 +11,7 @@ from google.adk.tools import FunctionTool  # type: ignore[import]
 from agent.callbacks import make_agent_log_callbacks, make_research_file_callback
 from agent.prompts import RESEARCH_AGENT_INSTRUCTION
 from tools.file_tools import read_file
-from tools.research.tools import get_news
+from tools.news import get_news
 
 logger = logging.getLogger("agent.research_agent")
 

@@ -241,9 +241,9 @@ def test_describe_tool_not_found():
 def test_describe_tool_found():
     import tools.strategy.tools as st
 
-    # market__get_ohlcv is a real registered tool
-    result = asyncio.run(st.describe_tool("market__get_ohlcv"))
-    assert result["tool_name"] == "market__get_ohlcv"
+    # coordinator__detect_market_regime is a real registered tool
+    result = asyncio.run(st.describe_tool("coordinator__detect_market_regime"))
+    assert result["tool_name"] == "coordinator__detect_market_regime"
     assert "docstring" in result
     assert isinstance(result["parameters"], list)
 
@@ -251,10 +251,10 @@ def test_describe_tool_found():
 def test_describe_tool_has_parameter_info():
     import tools.strategy.tools as st
 
-    result = asyncio.run(st.describe_tool("market__get_ohlcv"))
-    # get_ohlcv has parameters: symbol, timeframe, bars
+    result = asyncio.run(st.describe_tool("coordinator__detect_market_regime"))
+    # detect_market_regime has parameters: benchmark_symbol, vix_symbol, etc.
     param_names = [p["name"] for p in result["parameters"]]
-    assert "symbol" in param_names
+    assert "benchmark_symbol" in param_names
 
 
 def test_describe_tool_skips_tool_context_param():
@@ -271,7 +271,7 @@ def test_describe_tool_skips_tool_context_param():
 
     import tools.strategy.tools as st
 
-    with patch("tools.registry.MARKET_TOOLS", [mock_ft]):
+    with patch("tools.registry.ANALYSIS_TOOLS", [mock_ft]):
         result = asyncio.run(st.describe_tool("test__fake_tool"))
 
     param_names = [p["name"] for p in result["parameters"]]

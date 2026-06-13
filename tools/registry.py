@@ -5,12 +5,10 @@ Tool names follow the convention  {namespace}__{function_name}  so the coordinat
 LLM can filter by namespace prefix before reading full descriptions.
 
 Namespace slices:
-    MARKET_TOOLS      → market__*      (price, volume, market data)
     ANALYSIS_TOOLS    → analysis__*    (technical indicators, ranking)
-    RESEARCH_TOOLS    → research__*    (macro, sentiment, regime)
     EXECUTION_TOOLS   → execution__*   (orders, portfolio — execution BaseAgent only)
     MEMORY_TOOLS      → memory__*      (DB reads/writes)
-    COORDINATOR_TOOLS → coordinator__* (session control, HITL, risk synthesis)
+    COORDINATOR_TOOLS → coordinator__* (session control, HITL, risk synthesis, regime)
     STRATEGY_TOOLS    → strategy__*    (strategy files + describe_tool meta-tool)
     FILE_TOOLS        → file__*        (read_file, write_file, register_session_file)
     WORKFLOW_TOOLS    → workflow__*    (run_momentum_analysis, run_mean_reversion_analysis,
@@ -69,20 +67,6 @@ from tools.execution.tools import (
     place_market_order,
 )
 from tools.file_tools import read_file, register_session_file, write_file
-from tools.market.tools import (
-    get_52w_range,
-    get_benchmark_return,
-    get_etf_holdings,
-    get_intraday_bars,
-    get_market_status,
-    get_ohlcv,
-    get_order_book,
-    get_quote,
-    get_sector_map,
-    get_spread,
-    get_volume_profile,
-    screen_etfs,
-)
 
 # ── memory.* ─────────────────────────────────────────────────────────────────
 from tools.memory.tools import (
@@ -93,23 +77,6 @@ from tools.memory.tools import (
     record_cycle,
     resolve_trade,
     write_trade,
-)
-
-# ── research.* ───────────────────────────────────────────────────────────────
-from tools.research.tools import (
-    compare_etfs,
-    detect_market_regime,
-    get_analyst_ratings,
-    get_dividend_history,
-    get_earnings_calendar,
-    get_economic_calendar,
-    get_etf_metrics,
-    get_expense_ratios,
-    get_fund_flows,
-    get_macro_data,
-    get_news,
-    get_sector_performance,
-    get_sentiment,
 )
 
 # ── strategy.* ───────────────────────────────────────────────────────────────
@@ -138,21 +105,6 @@ def _tool(fn: Callable[..., Any], namespace: str) -> FunctionTool:
 
 # ── Wrapped FunctionTools ─────────────────────────────────────────────────────
 
-MARKET_TOOLS: list[FunctionTool] = [
-    _tool(get_ohlcv, "market"),
-    _tool(get_quote, "market"),
-    _tool(get_spread, "market"),
-    _tool(get_order_book, "market"),
-    _tool(screen_etfs, "market"),
-    _tool(get_etf_holdings, "market"),
-    _tool(get_sector_map, "market"),
-    _tool(get_52w_range, "market"),
-    _tool(get_volume_profile, "market"),
-    _tool(get_benchmark_return, "market"),
-    _tool(get_intraday_bars, "market"),
-    _tool(get_market_status, "market"),
-]
-
 ANALYSIS_TOOLS: list[FunctionTool] = [
     _tool(compute_rsi, "analysis"),
     _tool(compute_macd, "analysis"),
@@ -168,22 +120,6 @@ ANALYSIS_TOOLS: list[FunctionTool] = [
     _tool(calc_max_drawdown, "analysis"),
     _tool(calc_correlation, "analysis"),
     _tool(score_technical, "analysis"),
-]
-
-RESEARCH_TOOLS: list[FunctionTool] = [
-    _tool(get_news, "research"),
-    _tool(get_sentiment, "research"),
-    _tool(get_earnings_calendar, "research"),
-    _tool(get_macro_data, "research"),
-    _tool(get_fund_flows, "research"),
-    _tool(get_etf_metrics, "research"),
-    _tool(compare_etfs, "research"),
-    _tool(get_expense_ratios, "research"),
-    _tool(get_sector_performance, "research"),
-    _tool(get_dividend_history, "research"),
-    _tool(get_economic_calendar, "research"),
-    _tool(detect_market_regime, "research"),
-    _tool(get_analyst_ratings, "research"),
 ]
 
 # Execution tools — ONLY assigned to the execution BaseAgent, never the coordinator

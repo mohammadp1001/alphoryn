@@ -29,7 +29,7 @@ async def run_mean_reversion_analysis(session_id: str, symbol: str) -> dict:
         detect_support_resistance,
         score_technical,
     )
-    from tools.market.tools import get_ohlcv
+    from tools.data import get_ohlcv
 
     ohlcv = await get_ohlcv(symbol, "1Day", 60)
     bars = ohlcv.get("bars", [])
