@@ -68,29 +68,37 @@ async def get_ohlcv(symbol: str, timeframe: str, bars: int) -> dict:
     end = datetime.utcnow()
     start = end - timedelta(days=bars * 2)  # over-fetch, trim to bars
 
-    await acquire_alpaca_data()
-    if _is_crypto(symbol):
-        from alpaca.data.requests import CryptoBarsRequest  # type: ignore[import]
+    _alpaca_key = os.environ.get("ALPACA_DATA_KEY") or os.environ.get("ALPACA_API_KEY")
+    bar_list = []
 
-        alpaca_sym = symbol.replace("-", "/")
-        with api_call_span("alpaca_data", "get_crypto_bars", symbol=symbol):
-            resp = _crypto_client().get_crypto_bars(
-                CryptoBarsRequest(symbol_or_symbols=alpaca_sym, timeframe=tf, start=start, end=end)
-            )
-        lookup_key = alpaca_sym
-    else:
-        with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
-            resp = _data_client().get_stock_bars(
-                StockBarsRequest(
-                    symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex"
+    if _alpaca_key:
+        await acquire_alpaca_data()
+        if _is_crypto(symbol):
+            from alpaca.data.requests import CryptoBarsRequest  # type: ignore[import]
+
+            alpaca_sym = symbol.replace("-", "/")
+            with api_call_span("alpaca_data", "get_crypto_bars", symbol=symbol):
+                resp = _crypto_client().get_crypto_bars(
+                    CryptoBarsRequest(
+                        symbol_or_symbols=alpaca_sym, timeframe=tf, start=start, end=end
+                    )
                 )
-            )
-        lookup_key = symbol
+            lookup_key = alpaca_sym
+        else:
+            with api_call_span("alpaca_data", "get_stock_bars", symbol=symbol):
+                resp = _data_client().get_stock_bars(
+                    StockBarsRequest(
+                        symbol_or_symbols=symbol, timeframe=tf, start=start, end=end, feed="iex"
+                    )
+                )
+            lookup_key = symbol
 
-    try:
-        bar_list = resp[lookup_key]
-    except (KeyError, TypeError):
-        bar_list = []
+        try:
+            bar_list = resp[lookup_key]
+        except (KeyError, TypeError):
+            bar_list = []
+    else:
+        logger.info("get_ohlcv no Alpaca credentials, skipping to yfinance for %s", symbol)
     result = [
         {
             "timestamp": b.timestamp.isoformat(),

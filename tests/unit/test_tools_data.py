@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -110,6 +111,7 @@ def test_get_ohlcv_alpaca_path_returns_bars():
     mock_resp = {"SPY": [bar]}
 
     with (
+        patch.dict(os.environ, {"ALPACA_API_KEY": "test-key", "ALPACA_API_SECRET": "test-secret"}),
         patch("infra.rate_limiter.acquire_alpaca_data", new_callable=AsyncMock),
         patch("tools.data._data_client") as mock_dc,
         patch("tools.data._is_crypto", return_value=False),
@@ -130,6 +132,7 @@ def test_get_ohlcv_crypto_path():
     mock_resp = {"BTC/USD": [bar]}
 
     with (
+        patch.dict(os.environ, {"ALPACA_API_KEY": "test-key", "ALPACA_API_SECRET": "test-secret"}),
         patch("infra.rate_limiter.acquire_alpaca_data", new_callable=AsyncMock),
         patch("tools.data._crypto_client") as mock_cc,
         patch("tools.data._is_crypto", return_value=True),
@@ -160,6 +163,7 @@ def test_get_ohlcv_falls_back_to_yfinance_when_alpaca_empty():
     mock_yf.download.return_value = hist
 
     with (
+        patch.dict(os.environ, {"ALPACA_API_KEY": "test-key", "ALPACA_API_SECRET": "test-secret"}),
         patch("infra.rate_limiter.acquire_alpaca_data", new_callable=AsyncMock),
         patch("infra.rate_limiter.acquire_yfinance", new_callable=AsyncMock),
         patch("tools.data._data_client") as mock_dc,
@@ -180,6 +184,7 @@ def test_get_ohlcv_yfinance_empty_returns_empty_bars():
     mock_yf.download.return_value = pd.DataFrame()
 
     with (
+        patch.dict(os.environ, {"ALPACA_API_KEY": "test-key", "ALPACA_API_SECRET": "test-secret"}),
         patch("infra.rate_limiter.acquire_alpaca_data", new_callable=AsyncMock),
         patch("infra.rate_limiter.acquire_yfinance", new_callable=AsyncMock),
         patch("tools.data._data_client") as mock_dc,
@@ -195,9 +200,25 @@ def test_get_ohlcv_yfinance_empty_returns_empty_bars():
     assert result["bars"] == []
 
 
-def test_data_client_creates_stock_client():
-    import os
+def test_get_ohlcv_no_credentials_skips_to_yfinance():
+    mock_yf = MagicMock()
+    mock_yf.download.return_value = pd.DataFrame()
 
+    with (
+        patch.dict(os.environ, {"ALPACA_API_KEY": "", "ALPACA_DATA_KEY": ""}),
+        patch("infra.rate_limiter.acquire_yfinance", new_callable=AsyncMock),
+        patch("tools.data.api_call_span"),
+        patch.dict(sys.modules, {"yfinance": mock_yf}),
+    ):
+        from tools.data import get_ohlcv
+
+        result = asyncio.run(get_ohlcv("EWG", "1Day", 5))
+
+    assert result["bars"] == []
+    mock_yf.download.assert_called_once()
+
+
+def test_data_client_creates_stock_client():
     with patch.dict(os.environ, {"ALPACA_API_KEY": "k", "ALPACA_API_SECRET": "s"}):
         from tools.data import _data_client
 
@@ -206,8 +227,6 @@ def test_data_client_creates_stock_client():
 
 
 def test_crypto_client_creates_crypto_client():
-    import os
-
     with patch.dict(os.environ, {"ALPACA_API_KEY": "k", "ALPACA_API_SECRET": "s"}):
         from tools.data import _crypto_client
 
