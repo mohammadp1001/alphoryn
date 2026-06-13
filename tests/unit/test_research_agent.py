@@ -155,3 +155,25 @@ def test_research_file_callback_path_under_reports_dir():
     assert "research" in path_str
     assert "sess-dir" in path_str
     assert "reports" in path_str
+
+
+def test_research_file_callback_uses_active_symbol_from_state():
+    """active_symbol in state takes priority over the closed-over symbol."""
+    from agent.callbacks import make_research_file_callback
+
+    calls = []
+
+    with patch(
+        "db.schema.register_session_file",
+        side_effect=lambda **kw: calls.append(kw) or "id",
+    ):
+        # Created with empty symbol (as coordinator does at startup)
+        cb = make_research_file_callback("sess-sym", "", "research_output")
+        ctx = _FakeCallbackCtx(
+            state={"research_output": "# Report", "active_symbol": "EWG"}
+        )
+        asyncio.run(cb(ctx))
+
+    path_str = ctx.state["research_report_path"]
+    assert "EWG" in path_str
+    assert calls[0]["symbol"] == "EWG"
