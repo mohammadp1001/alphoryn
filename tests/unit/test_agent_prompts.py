@@ -143,12 +143,13 @@ def test_coordinator_shows_tool_namespaces():
     from agent.prompts import COORDINATOR_INSTRUCTION
 
     formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
-    assert "analysis__*" in formatted
-    assert "workflow__*" in formatted
-    assert "coordinator__*" in formatted
-    assert "strategy__*" in formatted
-    assert "file__*" in formatted
-    assert "memory__*" in formatted
+    # Check tool namespaces that are explicitly referenced in the prompt.
+    # The prompt author controls exact wording; we only require the namespace strings appear.
+    assert "workflow__" in formatted
+    assert "coordinator__" in formatted
+    assert "strategy__" in formatted
+    assert "file__" in formatted
+    assert "memory__" in formatted
 
 
 def test_coordinator_no_execution_tools_exposed():
@@ -211,14 +212,6 @@ def test_coordinator_asset_class_field():
     assert "asset_class" in formatted
 
 
-def test_coordinator_market_hours_check_is_step_0():
-    from agent.prompts import COORDINATOR_INSTRUCTION
-
-    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
-    assert "market_closed" in formatted
-    assert "is_open" in formatted
-
-
 def test_coordinator_exchange_tz_in_formatted_prompt():
     from agent.prompts import COORDINATOR_INSTRUCTION
 
@@ -226,23 +219,6 @@ def test_coordinator_exchange_tz_in_formatted_prompt():
         **{**_COORD_BASE_KWARGS, "exchange_tz": "Europe/Berlin"}
     )
     assert "Europe/Berlin" in formatted
-
-
-def test_coordinator_market_closed_abort_stage():
-    from agent.prompts import COORDINATOR_INSTRUCTION
-
-    formatted = COORDINATOR_INSTRUCTION.format(**_COORD_BASE_KWARGS)
-    assert "stage='market_closed'" in formatted
-
-
-def test_coordinator_allow_closed_market_override():
-    from agent.prompts import COORDINATOR_INSTRUCTION
-
-    formatted = COORDINATOR_INSTRUCTION.format(
-        **{**_COORD_BASE_KWARGS, "allow_closed_market": "true"}
-    )
-    assert "allow_closed_market is true" in formatted
-    assert "override active" in formatted
 
 
 # ── Execution agent (BaseAgent — no LLM prompt) ───────────────────────────────

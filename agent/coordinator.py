@@ -29,6 +29,7 @@ from google.adk.tools import AgentTool  # type: ignore[import]
 
 from agent.debate_agents import create_debate_optimist, create_debate_pessimist
 from agent.execution_agent import create_execution_agent
+from agent.preflight import run_preflight
 from agent.prompts import COORDINATOR_INSTRUCTION
 from agent.research_agent import create_research_agent
 from infra.observability import log_action
@@ -141,17 +142,31 @@ def create_coordinator(
 
 
 def _make_before_callback(params: SessionParams, plan_state: PlanState):
-    """Return a before_agent_callback that pre-fetches portfolio/account into state."""
+    """Return a before_agent_callback that runs pre-flight checks then pre-fetches portfolio.
 
-    async def before_callback(callback_context: CallbackContext) -> None:
+    Pre-flight sequence (deterministic — no LLM involved):
+      0. Session expiry + market hours gate
+      1. Loss limit check
+      2. Resolve unresolved trades (session-start only)
+
+    Returns a Content object to abort the coordinator turn when any check fails;
+    returns None to let the coordinator proceed normally.
+    """
+    from config import UNIVERSE_EXCHANGE_TZ
+
+    exchange_tz = UNIVERSE_EXCHANGE_TZ.get(params.universe, "America/New_York")
+    session_expires_at = plan_state.started_at + params.duration
+
+    async def before_callback(callback_context: CallbackContext):  # -> Optional[Content]
         from infra.rate_limiter import acquire_gemini
 
         await acquire_gemini()
 
         state = callback_context.state
 
-        # One-time session initialisation
-        if "session_initialised" not in state:
+        # ── One-time session initialisation ───────────────────────────────────
+        is_first_run = "session_initialised" not in state
+        if is_first_run:
             from db.schema import init_db
 
             init_db()
@@ -161,8 +176,7 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
             state["strategies_tried_this_cycle"] = []
             log_action("coordinator", "session_init", session_id=plan_state.session_id)
 
-        # Pre-fetch portfolio and account snapshots before each coordinator turn.
-        # Credentials must be present in env; if not, snapshots are skipped (paper mode).
+        # ── Pre-fetch portfolio and account snapshots ─────────────────────────
         api_key = os.environ.get("ALPACA_API_KEY", "")
         api_secret = os.environ.get("ALPACA_API_SECRET", "")
         if api_key and api_secret:
@@ -225,6 +239,45 @@ def _make_before_callback(params: SessionParams, plan_state: PlanState):
             )
             state.setdefault("account_snapshot", {})
             state.setdefault("portfolio_snapshot", {"positions": [], "position_count": 0})
+
+        # ── Deterministic pre-flight checks ───────────────────────────────────
+        portfolio = state.get("portfolio_snapshot", {})
+        unrealised_pnl = sum(
+            p.get("unrealised_pnl", 0.0) for p in portfolio.get("positions", [])
+        )
+
+        result = await run_preflight(
+            session_id=plan_state.session_id,
+            session_expires_at=session_expires_at,
+            exchange_tz=exchange_tz,
+            allow_closed_market=params.allow_closed_market,
+            loss_limit_eur=params.loss_limit_eur,
+            session_realised_pnl_eur=state.get("session_realised_pnl_eur", 0.0),
+            unrealised_pnl_eur=unrealised_pnl,
+            resolve_trades=is_first_run,
+        )
+
+        for msg in result.messages:
+            log_action("coordinator", "preflight", message=msg)
+
+        if not result.ok:
+            state["session_abort"] = {
+                "stage": result.abort_stage,
+                "reason": result.abort_reason,
+            }
+            log_action(
+                "coordinator",
+                "preflight_abort",
+                logging.WARNING,
+                stage=result.abort_stage,
+                reason=result.abort_reason,
+                session_id=plan_state.session_id,
+            )
+            from google.genai.types import Content, Part  # type: ignore[import]
+
+            return Content(role="model", parts=[Part(text=result.report)])
+
+        return None
 
     return before_callback
 
