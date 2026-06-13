@@ -46,6 +46,7 @@ from tools.analysis.tools import (
 # ── coordinator.* ────────────────────────────────────────────────────────────
 from tools.coordinator.tools import (
     check_loss_limit,
+    get_market_status,
     get_session_summary,
     request_hitl,
     resolve_unresolved_trades,
@@ -157,6 +158,7 @@ COORDINATOR_TOOLS: list[FunctionTool] = [
     _tool(update_plan_state, "coordinator"),
     _tool(get_session_summary, "coordinator"),
     _tool(coordinator_detect_market_regime, "coordinator"),
+    _tool(get_market_status, "coordinator"),
 ]
 
 STRATEGY_TOOLS: list[FunctionTool] = [
