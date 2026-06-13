@@ -345,9 +345,7 @@ def test_coordinator_before_callback_initializes_strategies_tried():
 
     from unittest.mock import patch
 
-    with patch("agent.coordinator.os.environ.get", return_value=""), patch(
-        "db.schema.init_db"
-    ):
+    with patch("agent.coordinator.os.environ.get", return_value=""), patch("db.schema.init_db"):
         asyncio.run(agent.before_agent_callback(ctx))
 
     assert "strategies_tried_this_cycle" in state

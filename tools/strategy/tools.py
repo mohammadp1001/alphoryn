@@ -89,12 +89,7 @@ async def describe_tool(tool_name: str) -> dict:
     from tools import registry as _reg  # type: ignore[import]
 
     all_tools = (
-        _reg.MARKET_TOOLS
-        + _reg.ANALYSIS_TOOLS
-        + _reg.RESEARCH_TOOLS
-        + _reg.MEMORY_TOOLS
-        + _reg.COORDINATOR_TOOLS
-        + _reg.STRATEGY_TOOLS
+        _reg.ANALYSIS_TOOLS + _reg.MEMORY_TOOLS + _reg.COORDINATOR_TOOLS + _reg.STRATEGY_TOOLS
     )
     for ft in all_tools:
         if ft.name == tool_name or getattr(ft.func, "__name__", "") == tool_name:

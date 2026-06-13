@@ -224,7 +224,7 @@ def test_run_momentum_analysis_returns_dict(tmp_path, monkeypatch):
     monkeypatch.setattr(wb, "register_session_file", lambda **kw: "id")
 
     with (
-        patch("tools.market.tools.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
+        patch("tools.data.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
         patch("tools.analysis.tools.compute_rsi", new=AsyncMock(return_value=_fake_rsi())),
         patch("tools.analysis.tools.compute_macd", new=AsyncMock(return_value=_fake_macd())),
         patch(
@@ -239,7 +239,7 @@ def test_run_momentum_analysis_returns_dict(tmp_path, monkeypatch):
             "tools.analysis.tools.score_technical",
             new=AsyncMock(return_value=_fake_tech_score()),
         ),
-        patch("tools.market.tools.get_52w_range", new=AsyncMock(return_value=_fake_52w())),
+        patch("tools.data.get_52w_range", new=AsyncMock(return_value=_fake_52w())),
     ):
         from workflows.momentum import run_momentum_analysis
 
@@ -257,7 +257,7 @@ def test_run_momentum_analysis_writes_file(tmp_path, monkeypatch):
     monkeypatch.setattr(wb, "register_session_file", lambda **kw: "id")
 
     with (
-        patch("tools.market.tools.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
+        patch("tools.data.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
         patch("tools.analysis.tools.compute_rsi", new=AsyncMock(return_value=_fake_rsi())),
         patch("tools.analysis.tools.compute_macd", new=AsyncMock(return_value=_fake_macd())),
         patch(
@@ -272,7 +272,7 @@ def test_run_momentum_analysis_writes_file(tmp_path, monkeypatch):
             "tools.analysis.tools.score_technical",
             new=AsyncMock(return_value=_fake_tech_score()),
         ),
-        patch("tools.market.tools.get_52w_range", new=AsyncMock(return_value=_fake_52w())),
+        patch("tools.data.get_52w_range", new=AsyncMock(return_value=_fake_52w())),
     ):
         from workflows.momentum import run_momentum_analysis
 
@@ -289,7 +289,7 @@ def test_run_momentum_analysis_insufficient_data(tmp_path, monkeypatch):
     monkeypatch.setattr(wb, "register_session_file", lambda **kw: "id")
     short_ohlcv = _fake_ohlcv(n=5)  # fewer than 26 bars
 
-    with patch("tools.market.tools.get_ohlcv", new=AsyncMock(return_value=short_ohlcv)):
+    with patch("tools.data.get_ohlcv", new=AsyncMock(return_value=short_ohlcv)):
         from workflows.momentum import run_momentum_analysis
 
         result = asyncio.run(run_momentum_analysis("sess-short", "XLK"))
@@ -308,7 +308,7 @@ def test_run_mean_reversion_analysis_returns_dict(tmp_path, monkeypatch):
     monkeypatch.setattr(wb, "register_session_file", lambda **kw: "id")
 
     with (
-        patch("tools.market.tools.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
+        patch("tools.data.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
         patch(
             "tools.analysis.tools.compute_bollinger",
             new=AsyncMock(return_value=_fake_bollinger()),
@@ -338,7 +338,7 @@ def test_run_mean_reversion_analysis_insufficient_data(tmp_path, monkeypatch):
     monkeypatch.setattr(wb, "register_session_file", lambda **kw: "id")
     short_ohlcv = _fake_ohlcv(n=5)
 
-    with patch("tools.market.tools.get_ohlcv", new=AsyncMock(return_value=short_ohlcv)):
+    with patch("tools.data.get_ohlcv", new=AsyncMock(return_value=short_ohlcv)):
         from workflows.mean_reversion import run_mean_reversion_analysis
 
         result = asyncio.run(run_mean_reversion_analysis("sess-short-mr", "XLK"))
@@ -357,17 +357,17 @@ def test_run_sector_rotation_analysis_returns_dict(tmp_path, monkeypatch):
     monkeypatch.setattr(wb, "register_session_file", lambda **kw: "id")
 
     with (
-        patch("tools.market.tools.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
+        patch("tools.data.get_ohlcv", new=AsyncMock(return_value=_fake_ohlcv())),
         patch(
-            "tools.research.tools.get_etf_metrics",
+            "tools.fundamentals.get_etf_metrics",
             new=AsyncMock(return_value=_fake_etf_metrics()),
         ),
         patch(
-            "tools.research.tools.get_fund_flows",
+            "tools.fundamentals.get_fund_flows",
             new=AsyncMock(return_value=_fake_fund_flows()),
         ),
         patch(
-            "tools.research.tools.get_sector_performance",
+            "tools.fundamentals.get_sector_performance",
             new=AsyncMock(return_value=_fake_sector_perf()),
         ),
         patch("tools.analysis.tools.compute_beta", new=AsyncMock(return_value=_fake_beta())),
@@ -389,17 +389,17 @@ def test_run_sector_rotation_analysis_short_closes_skips_beta(tmp_path, monkeypa
     short_ohlcv = _fake_ohlcv(n=5)
 
     with (
-        patch("tools.market.tools.get_ohlcv", new=AsyncMock(return_value=short_ohlcv)),
+        patch("tools.data.get_ohlcv", new=AsyncMock(return_value=short_ohlcv)),
         patch(
-            "tools.research.tools.get_etf_metrics",
+            "tools.fundamentals.get_etf_metrics",
             new=AsyncMock(return_value=_fake_etf_metrics()),
         ),
         patch(
-            "tools.research.tools.get_fund_flows",
+            "tools.fundamentals.get_fund_flows",
             new=AsyncMock(return_value=_fake_fund_flows()),
         ),
         patch(
-            "tools.research.tools.get_sector_performance",
+            "tools.fundamentals.get_sector_performance",
             new=AsyncMock(return_value=_fake_sector_perf()),
         ),
     ):

@@ -398,25 +398,79 @@ async def detect_market_regime(
     yield_10y_symbol: str = "^TNX",
     yield_2y_symbol: str = "^IRX",
 ) -> dict:
-    """Classify the current macro market regime using benchmark and indicator data.
+    """Classify the current macro market regime by fetching live macro data and classifying.
 
-    Re-exports research.detect_market_regime as coordinator__detect_market_regime so
-    the coordinator can classify the regime at session start without research__* tools.
+    Fetches VIX, treasury yields, and 20-day benchmark return from yfinance, then applies
+    regime classification rules.
 
     Args:
         benchmark_symbol: Equity benchmark ticker (e.g. 'SPY', 'EWG').
-        vix_symbol: VIX ticker.
-        yield_10y_symbol: 10-year yield ticker.
-        yield_2y_symbol: 2-year yield ticker.
+        vix_symbol: VIX ticker (default '^VIX').
+        yield_10y_symbol: 10-year yield ticker (default '^TNX', quotes in tenths).
+        yield_2y_symbol: 2-year yield ticker (default '^IRX', quotes in tenths).
 
     Returns:
-        MarketRegimeOutput fields: regime, vix, yield_10y, yield_2y, reasoning, source.
+        dict with 'regime', 'vix', 'yield_10y', 'yield_2y', 'yield_curve_spread',
+        'benchmark_symbol', 'benchmark_return_20d', 'reasoning'.
     """
-    from tools.research.tools import detect_market_regime as _detect
+    from infra.rate_limiter import acquire_yfinance
+    from tools.schemas import MarketRegimeResponse
 
-    return await _detect(
+    await acquire_yfinance()
+    import yfinance as yf  # type: ignore[import]
+
+    def _last_close(sym: str) -> float:
+        try:
+            info = yf.Ticker(sym).info
+            return float(info.get("regularMarketPrice") or info.get("currentPrice", 0.0))
+        except Exception:
+            return 0.0
+
+    vix = _last_close(vix_symbol)
+    # ^TNX-family symbols quote in tenths of a percent
+    yield_10y = _last_close(yield_10y_symbol) / 10
+    yield_2y = _last_close(yield_2y_symbol) / 10
+
+    try:
+        hist = yf.download(benchmark_symbol, period="1mo", progress=False)["Close"]
+        benchmark_return_20d = (
+            float((hist.iloc[-1] / hist.iloc[0] - 1) * 100) if len(hist) >= 2 else 0.0
+        )
+    except Exception:
+        benchmark_return_20d = 0.0
+
+    if vix > 30:
+        regime = "CRISIS"
+        reasoning = f"VIX={vix:.1f} signals extreme fear; market in crisis mode"
+    elif vix > 20:
+        regime = "HIGH_VOL"
+        reasoning = f"VIX={vix:.1f} elevated; high volatility regime"
+    elif benchmark_return_20d > 2.0 and vix < 15:
+        regime = "BULL_TREND"
+        reasoning = (
+            f"Low volatility (VIX={vix:.1f}) with positive "
+            f"{benchmark_symbol} momentum ({benchmark_return_20d:.1f}%)"
+        )
+    elif benchmark_return_20d < -2.0:
+        regime = "BEAR_TREND"
+        reasoning = (
+            f"Negative {benchmark_symbol} 20d momentum "
+            f"({benchmark_return_20d:.1f}%); bear trend conditions"
+        )
+    else:
+        regime = "LOW_VOL_RANGE"
+        reasoning = (
+            f"VIX={vix:.1f}, {benchmark_symbol} 20d={benchmark_return_20d:.1f}%; "
+            f"low-vol range-bound market"
+        )
+
+    return MarketRegimeResponse(
+        regime=regime,
+        reasoning=reasoning,
+        vix=vix,
+        yield_10y=yield_10y,
+        yield_2y=yield_2y,
+        yield_curve_spread=round(yield_10y - yield_2y, 3),
         benchmark_symbol=benchmark_symbol,
-        vix_symbol=vix_symbol,
-        yield_10y_symbol=yield_10y_symbol,
-        yield_2y_symbol=yield_2y_symbol,
-    )
+        benchmark_return_20d=benchmark_return_20d,
+    ).model_dump()

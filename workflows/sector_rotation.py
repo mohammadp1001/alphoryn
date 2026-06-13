@@ -24,8 +24,8 @@ async def run_sector_rotation_analysis(session_id: str, symbol: str) -> dict:
     logger.info("run_sector_rotation_analysis symbol=%s session=%s", symbol, session_id)
 
     from tools.analysis.tools import compute_beta
-    from tools.market.tools import get_ohlcv
-    from tools.research.tools import get_etf_metrics, get_fund_flows, get_sector_performance
+    from tools.data import get_ohlcv
+    from tools.fundamentals import get_etf_metrics, get_fund_flows, get_sector_performance
 
     ohlcv = await get_ohlcv(symbol, "1Day", 60)
     bars = ohlcv.get("bars", [])
