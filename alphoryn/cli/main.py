@@ -6,6 +6,7 @@ Commands:
   history — show session history from the memory bank
 """
 
+import json
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -178,13 +179,24 @@ def status(
     )
     typer.echo(f"Sessions: {completed} completed, {remaining} remaining")
     typer.echo("")
+    try:
+        cfg_snap = json.loads(latest_run.config_snapshot or "{}")
+        etf1_ticker = cfg_snap.get("etf1", "ETF1")
+        etf2_ticker = cfg_snap.get("etf2", "ETF2")
+    except (json.JSONDecodeError, AttributeError):
+        etf1_ticker = "ETF1"
+        etf2_ticker = "ETF2"
+
+    pos_by_etf = {pos.etf: pos for pos in open_positions}
+
     typer.echo("Open positions:")
-    if not open_positions:
-        typer.echo("  (no open positions)")
-    else:
-        for pos in open_positions:
+    for label, ticker in [("ETF1", etf1_ticker), ("ETF2", etf2_ticker)]:
+        pos = pos_by_etf.get(ticker)
+        if pos is None:
+            typer.echo(f"  {label} {ticker}  (no open position)")
+        else:
             typer.echo(
-                f"  {pos.etf}  {pos.strategy}  {pos.direction}"
+                f"  {label} {ticker}  {pos.strategy}  {pos.direction}"
                 f" @ {pos.entry_price:.2f}"
                 f"  Stop: {pos.stop_loss_price:.2f}"
                 f"  Status: {pos.status}"
