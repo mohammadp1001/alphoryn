@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ etf }} — Momentum — {{ session_id }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h1 { font-size: 1.3rem; border-bottom: 2px solid #333; padding-bottom: .5rem; }
+    h2 { font-size: 1rem; margin-top: 1.8rem; color: #444; text-transform: uppercase; letter-spacing: .05em; }
+    .meta { color: #666; font-size: .875rem; margin-bottom: 1.5rem; }
+    .badge { display: inline-block; padding: .2rem .6rem; border-radius: 4px; font-size: .8rem; font-weight: 600; }
+    .BUY  { background: #d1fae5; color: #065f46; }
+    .SELL { background: #fee2e2; color: #991b1b; }
+    .HOLD { background: #e5e7eb; color: #374151; }
+    .EXECUTED          { background: #d1fae5; color: #065f46; }
+    .SKIPPED_BUDGET    { background: #fef3c7; color: #92400e; }
+    .SKIPPED_MARKET_CLOSED { background: #e5e7eb; color: #374151; }
+    .SKIPPED_API_ERROR { background: #fee2e2; color: #991b1b; }
+    table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+    th, td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; font-weight: 600; }
+    section { margin-bottom: 1.5rem; }
+    .thesis-box { background: #f0f9ff; border-left: 4px solid #0284c7; padding: 1rem 1.2rem; white-space: pre-wrap; font-size: .92rem; line-height: 1.6; }
+    .memory-box { background: #fafafa; border-left: 3px solid #9ca3af; padding: .6rem 1rem; font-size: .875rem; color: #555; margin-top: .5rem; }
+    .no-position { color: #9ca3af; font-style: italic; }
+    .positive { color: #065f46; }
+    .negative { color: #991b1b; }
+  </style>
+</head>
+<body>
+
+<h1>{{ etf }} &mdash; Momentum &mdash; <span class="badge {{ decision }}">{{ decision }}</span></h1>
+<p class="meta">
+  Session: <strong>{{ session_id }}</strong> &nbsp;|&nbsp;
+  Candle close: <strong>{{ candle_close_at }}</strong> &nbsp;|&nbsp;
+  Strategy: <strong>MOMENTUM</strong>
+  {% if execution_result %}&nbsp;|&nbsp; Execution: <span class="badge {{ execution_result }}">{{ execution_result }}</span>{% endif %}
+</p>
+
+<section id="investment-thesis">
+  <h2>Investment Thesis</h2>
+  <div class="thesis-box">{{ reasoning }}</div>
+  {% if memory_summary %}
+  <div class="memory-box">Memory context: {{ memory_summary }}</div>
+  {% endif %}
+</section>
+
+<section id="signals">
+  <h2>Signal Snapshot</h2>
+  <table>
+    <thead><tr><th>Indicator</th><th>Value</th><th>Threshold</th></tr></thead>
+    <tbody>
+      <tr><td>Current Price</td><td>${{ "%.2f"|format(signals.current_price) }}</td><td>—</td></tr>
+      <tr><td>EMA 20</td><td>${{ "%.2f"|format(signals.ema_20) }}</td><td>Price &gt; EMA20 for trend</td></tr>
+      <tr><td>EMA 50</td><td>${{ "%.2f"|format(signals.ema_50) }}</td><td>EMA20 &gt; EMA50 for trend</td></tr>
+      <tr><td>Price vs EMA 20</td>
+        <td class="{{ 'positive' if signals.price_vs_ema_20_pct >= 0 else 'negative' }}">{{ "%.2f"|format(signals.price_vs_ema_20_pct) }}%</td>
+        <td>-2.0% to +0.5% for pullback</td>
+      </tr>
+      <tr><td>ADX (14)</td><td>{{ "%.1f"|format(signals.adx_14) }}</td><td>&gt; 25 for trend</td></tr>
+      <tr><td>RSI (14)</td><td>{{ "%.1f"|format(signals.rsi_14) }}</td><td>50–75 for trend; &lt; 70 for pullback</td></tr>
+      <tr><td>MACD Line</td><td>{{ "%.4f"|format(signals.macd_line) }}</td><td>&gt; 0 for bullish</td></tr>
+      <tr><td>MACD Signal</td><td>{{ "%.4f"|format(signals.macd_signal) }}</td><td>—</td></tr>
+      <tr><td>MACD Histogram</td>
+        <td class="{{ 'positive' if signals.macd_histogram >= 0 else 'negative' }}">{{ "%.4f"|format(signals.macd_histogram) }}</td>
+        <td>&gt; 0 for bullish momentum</td>
+      </tr>
+      <tr><td>Bollinger %B</td><td>{{ "%.3f"|format(signals.bollinger_pct_b) }}</td><td>&gt; 1.0 for breakout</td></tr>
+      <tr><td>Volume vs Avg</td><td>{{ "%.2f"|format(signals.volume_vs_avg) }}x</td><td>&ge; 1.5x for breakout</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{% if position %}
+<section id="position">
+  <h2>Position</h2>
+  <table>
+    <tbody>
+      <tr><td>Entry Price</td><td>${{ "%.2f"|format(position.entry_price) }}</td></tr>
+      <tr><td>Lot Size</td><td>{{ position.lot_size }} shares</td></tr>
+      <tr><td>Hard Stop Loss</td><td>${{ "%.2f"|format(position.stop_loss_price) }}</td></tr>
+      <tr><td>Trail %</td><td>1.5%</td></tr>
+      {% if position.trailing_stop_high_watermark is defined and position.trailing_stop_high_watermark %}
+      <tr><td>Trailing Stop High Watermark</td><td>${{ "%.2f"|format(position.trailing_stop_high_watermark) }}</td></tr>
+      <tr><td>Current Trailing Stop</td><td>${{ "%.2f"|format(position.trailing_stop_high_watermark * 0.985) }}</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section id="position">
+  <h2>Position</h2>
+  <p class="no-position">No position opened this session.</p>
+</section>
+{% endif %}
+
+</body>
+</html>

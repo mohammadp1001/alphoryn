@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "alphoryn"
+version = "0.0.1"
+description = "Automated ETF paper trading system using LLM agents (Google ADK + Gemini)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.13"
+dependencies = [
+    "google-adk>=1.0.0",
+    "alpaca-py>=0.29.0",
+    "alpaca-mcp-server>=0.1.0",
+    "typer>=0.12.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "sqlalchemy>=2.0.0",
+    "google-cloud-secret-manager>=2.20.0",
+    "google-cloud-logging>=3.10.0",
+    "jinja2>=3.1.0",
+]
+
+[project.scripts]
+alphoryn = "alphoryn.cli.main:app"
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5.0",
+    "pytest>=8.2.0",
+    "pytest-cov>=5.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["alphoryn"]
+
+# ---------------------------------------------------------------------------
+# Ruff — zero violations required (constitution Principle II, CI gate)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit (security)
+    "B",   # flake8-bugbear
+    "A",   # flake8-builtins
+    "C4",  # flake8-comprehensions
+    "T20", # flake8-print (no stray print statements)
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "S101", # assert used in tests
+    "S105", # hardcoded passwords (false positives on test fixtures)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["alphoryn"]
+
+# ---------------------------------------------------------------------------
+# pytest — 100% coverage enforced (constitution Principle II, CI gate)
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "--cov=alphoryn",
+    "--cov-report=term-missing",
+    "--cov-fail-under=100",
+    "-v",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["alphoryn"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = false
+# No pragma: no cover allowed (constitution Principle II)

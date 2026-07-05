@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ etf }} — Mean Reversion — {{ session_id }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h1 { font-size: 1.3rem; border-bottom: 2px solid #333; padding-bottom: .5rem; }
+    h2 { font-size: 1rem; margin-top: 1.8rem; color: #444; text-transform: uppercase; letter-spacing: .05em; }
+    .meta { color: #666; font-size: .875rem; margin-bottom: 1.5rem; }
+    .badge { display: inline-block; padding: .2rem .6rem; border-radius: 4px; font-size: .8rem; font-weight: 600; }
+    .BUY  { background: #d1fae5; color: #065f46; }
+    .SELL { background: #fee2e2; color: #991b1b; }
+    .HOLD { background: #e5e7eb; color: #374151; }
+    .EXECUTED          { background: #d1fae5; color: #065f46; }
+    .SKIPPED_BUDGET    { background: #fef3c7; color: #92400e; }
+    .SKIPPED_MARKET_CLOSED { background: #e5e7eb; color: #374151; }
+    .SKIPPED_API_ERROR { background: #fee2e2; color: #991b1b; }
+    table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+    th, td { text-align: left; padding: .4rem .7rem; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; font-weight: 600; }
+    section { margin-bottom: 1.5rem; }
+    .thesis-box { background: #f0f9ff; border-left: 4px solid #0284c7; padding: 1rem 1.2rem; white-space: pre-wrap; font-size: .92rem; line-height: 1.6; }
+    .memory-box { background: #fafafa; border-left: 3px solid #9ca3af; padding: .6rem 1rem; font-size: .875rem; color: #555; margin-top: .5rem; }
+    .no-position { color: #9ca3af; font-style: italic; }
+  </style>
+</head>
+<body>
+
+<h1>{{ etf }} &mdash; Mean Reversion &mdash; <span class="badge {{ decision }}">{{ decision }}</span></h1>
+<p class="meta">
+  Session: <strong>{{ session_id }}</strong> &nbsp;|&nbsp;
+  Candle close: <strong>{{ candle_close_at }}</strong> &nbsp;|&nbsp;
+  Strategy: <strong>MEAN REVERSION</strong>
+  {% if execution_result %}&nbsp;|&nbsp; Execution: <span class="badge {{ execution_result }}">{{ execution_result }}</span>{% endif %}
+</p>
+
+<section id="investment-thesis">
+  <h2>Investment Thesis</h2>
+  <div class="thesis-box">{{ reasoning }}</div>
+  {% if memory_summary %}
+  <div class="memory-box">Memory context: {{ memory_summary }}</div>
+  {% endif %}
+</section>
+
+<section id="signals">
+  <h2>Signal Snapshot</h2>
+  <table>
+    <thead><tr><th>Indicator</th><th>Value</th><th>Threshold</th></tr></thead>
+    <tbody>
+      <tr><td>Current Price</td><td>${{ "%.2f"|format(signals.current_price) }}</td><td>—</td></tr>
+      <tr><td>SMA 20</td><td>${{ "%.2f"|format(signals.sma_20) }}</td><td>Profit target (mean)</td></tr>
+      <tr><td>Price vs SMA 20</td><td>{{ "%.2f"|format(signals.price_vs_sma_20_pct) }}%</td><td>&lt; -1.0% for entry</td></tr>
+      <tr><td>RSI (14)</td><td>{{ "%.1f"|format(signals.rsi_14) }}</td><td>&lt; 40 for entry</td></tr>
+      <tr><td>Bollinger %B</td><td>{{ "%.3f"|format(signals.bollinger_pct_b) }}</td><td>&lt; 0.25 for entry</td></tr>
+      <tr><td>ADX (14)</td><td>{{ "%.1f"|format(signals.adx_14) }}</td><td>&lt; 25 ranging; &lt; 20 for entry</td></tr>
+      <tr><td>Volume vs Avg</td><td>{{ "%.2f"|format(signals.volume_vs_avg) }}x</td><td>&ge; 0.70 for entry</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{% if position %}
+<section id="position">
+  <h2>Position</h2>
+  <table>
+    <tbody>
+      <tr><td>Entry Price</td><td>${{ "%.2f"|format(position.entry_price) }}</td></tr>
+      <tr><td>Lot Size</td><td>{{ position.lot_size }} shares</td></tr>
+      <tr><td>Stop Loss</td><td>${{ "%.2f"|format(position.stop_loss_price) }}</td></tr>
+      <tr><td>Profit Target</td><td>${{ "%.2f"|format(position.exit_target.value) }} (SMA 20)</td></tr>
+    </tbody>
+  </table>
+</section>
+{% else %}
+<section id="position">
+  <h2>Position</h2>
+  <p class="no-position">No position opened this session.</p>
+</section>
+{% endif %}
+
+</body>
+</html>
