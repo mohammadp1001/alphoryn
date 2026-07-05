@@ -241,7 +241,7 @@ def history(
     for sess in sessions:
         etf1_col = _format_decision(sess.etf1_strategy, sess.etf1_decision, sess.etf1_execution_result)
         etf2_col = _format_decision(sess.etf2_strategy, sess.etf2_decision, sess.etf2_execution_result)
-        close_str = sess.candle_close_at.strftime("%Y-%m-%d %H:%M") if sess.candle_close_at else "—"
+        close_str = sess.candle_close_at.strftime("%Y-%m-%d %H:%M")
         typer.echo(f"{sess.id:<25} {close_str:<22} {etf1_col:<22} {etf2_col}")
 
 
@@ -252,7 +252,3 @@ def _format_decision(strategy: str | None, decision: str | None, result: str | N
     if result == "EXECUTED":
         return f"{strategy_abbr} → {decision} (exec)"
     return f"{strategy_abbr} → {decision}"
-
-
-if __name__ == "__main__":
-    app()
