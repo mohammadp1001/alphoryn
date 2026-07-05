@@ -34,15 +34,15 @@
 
 ### Stage 1 — No dependencies (implement in parallel)
 
-- [ ] T004 [P] Implement `AlphorynConfig` Pydantic `BaseSettings` model in `alphoryn/config/models.py` (all fields from `data-model.md §Config Model`: `etf1`, `etf2`, `candle_timeframe`, `run_duration`, `exchange`, `session_money_budget`, `stop_loss_pct`, `max_startup_latency_seconds`, `currency`, `memory_db_path`; derived fields `session_count`, `alpaca_paper_mode`)
-- [ ] T005 [P] Implement `alphoryn/secrets/client.py` (fetch `alphoryn-alpaca-api-key` and `alphoryn-alpaca-secret-key` from GCP Secret Manager via Application Default Credentials; inject as `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` env vars; raise `SecretsError` on failure per `research.md §API Key Management`)
-- [ ] T006 [P] Implement `alphoryn/telemetry/logger.py` (system-wide structured event emitter; all 14 event types from `research.md §Telemetry`; common fields: `event_type`, `session_id`, `component`, `etf`, `timestamp`, `latency_ms`, `payload`; Cloud Logging upload via `google-cloud-logging`; on Cloud Logging unavailable: write to stderr and continue — never block execution per constitution Principle IV)
+- [x] T004 [P] Implement `AlphorynConfig` Pydantic `BaseSettings` model in `alphoryn/config/models.py` (all fields from `data-model.md §Config Model`: `etf1`, `etf2`, `candle_timeframe`, `run_duration`, `exchange`, `session_money_budget`, `stop_loss_pct`, `max_startup_latency_seconds`, `currency`, `memory_db_path`; derived fields `session_count`, `alpaca_paper_mode`)
+- [x] T005 [P] Implement `alphoryn/secrets/client.py` (fetch `alphoryn-alpaca-api-key` and `alphoryn-alpaca-secret-key` from GCP Secret Manager via Application Default Credentials; inject as `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` env vars; raise `SecretsError` on failure per `research.md §API Key Management`)
+- [x] T006 [P] Implement `alphoryn/telemetry/logger.py` (system-wide structured event emitter; all 14 event types from `research.md §Telemetry`; common fields: `event_type`, `session_id`, `component`, `etf`, `timestamp`, `latency_ms`, `payload`; Cloud Logging upload via `google-cloud-logging`; on Cloud Logging unavailable: write to stderr and continue — never block execution per constitution Principle IV)
 
 ### Stage 2 — Depends on Stage 1
 
-- [ ] T007 Implement `alphoryn/config/loader.py` (layered config resolution: load JSON file at `--config` path or `./config.json`, apply non-None CLI overrides, validate merged result into `AlphorynConfig`; field-level error on invalid input; depends on T004)
-- [ ] T008 [P] Implement `alphoryn/memory/schema.py` (SQLAlchemy ORM models for all five entities per `data-model.md §Database Entities`: `Run`, `Session`, `Position`, `FeedbackEvaluation`, `MemoryEntry`; all columns, types, FK constraints, and `Position.status` enum values; depends on T004)
-- [ ] T009 Implement `alphoryn/memory/bank.py` (startup load query for all `status=OPEN` positions across all runs; raise `MemoryBankError` on inaccessible/corrupt DB; per-session writes for `Session`, `Position`, `MemoryEntry`; `FeedbackEvaluation` write + `Position.status` update; carry-over position blocking query; depends on T008)
+- [x] T007 Implement `alphoryn/config/loader.py` (layered config resolution: load JSON file at `--config` path or `./config.json`, apply non-None CLI overrides, validate merged result into `AlphorynConfig`; field-level error on invalid input; depends on T004)
+- [x] T008 [P] Implement `alphoryn/memory/schema.py` (SQLAlchemy ORM models for all five entities per `data-model.md §Database Entities`: `Run`, `Session`, `Position`, `FeedbackEvaluation`, `MemoryEntry`; all columns, types, FK constraints, and `Position.status` enum values; depends on T004)
+- [x] T009 Implement `alphoryn/memory/bank.py` (startup load query for all `status=OPEN` positions across all runs; raise `MemoryBankError` on inaccessible/corrupt DB; per-session writes for `Session`, `Position`, `MemoryEntry`; `FeedbackEvaluation` write + `Position.status` update; carry-over position blocking query; depends on T008)
 
 ### Unit Tests for Stage 1 + 2 (parallel after modules above)
 
