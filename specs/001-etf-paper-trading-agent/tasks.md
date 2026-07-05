@@ -72,8 +72,8 @@
 
 - [x] T016 [US1] Implement candle boundary alignment and market hours check in `alphoryn/scheduler/scheduler.py` (query Alpaca market calendar API via `alpaca-py` to get next market open and candle close timestamps; compute wait time; if wait exceeds `max_startup_latency_seconds` emit warning and proceed; display countdown to stdout)
 - [x] T017 [US1] Implement `alphoryn run` startup path in `alphoryn/cli/main.py` (Typer app; load config via `config/loader.py`; fetch secrets via `secrets/client.py`; load memory bank open positions via `memory/bank.py`; compute `session_count`; warn on fractional sessions; display startup output per `contracts/cli.md`; pass control to scheduler)
-- [ ] T018 [US1] Implement `alphoryn status` command in `alphoryn/cli/main.py` (query memory bank for current run + open positions; display format per `contracts/cli.md`; `--db` path option)
-- [ ] T019 [US1] Implement `alphoryn history` command in `alphoryn/cli/main.py` (query memory bank sessions by run; `--run` filter; `--db` path option; display table most-recent-first per `contracts/cli.md`)
+- [x] T018 [US1] Implement `alphoryn status` command in `alphoryn/cli/main.py` (query memory bank for current run + open positions; display format per `contracts/cli.md`; `--db` path option)
+- [x] T019 [US1] Implement `alphoryn history` command in `alphoryn/cli/main.py` (query memory bank sessions by run; `--run` filter; `--db` path option; display table most-recent-first per `contracts/cli.md`)
 - [ ] T020 [US1] Integration test: full startup cycle in `tests/integration/test_startup.py` (stub `alpaca-py` calendar API + stub Secret Manager; valid config → reaches waiting state, session count matches; fractional session count → warning emitted; invalid config → exit code 1; missing memory bank → exit code 2; Secret Manager unreachable → exit code 3)
 
 **Checkpoint**: User Story 1 fully functional — `alphoryn run/status/history` all respond correctly
