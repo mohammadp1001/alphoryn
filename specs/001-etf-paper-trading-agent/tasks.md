@@ -46,10 +46,10 @@
 
 ### Unit Tests for Stage 1 + 2 (parallel after modules above)
 
-- [ ] T010 [P] Unit tests for `alphoryn/config/` in `tests/unit/test_config.py` (`AlphorynConfig` field validation, required fields, defaults, `session_count` derivation, loader JSON→CLI override resolution, invalid config raises `ValidationError`)
-- [ ] T011 [P] Unit tests for `alphoryn/secrets/client.py` in `tests/unit/test_secrets.py` (mock `google-cloud-secret-manager`; successful fetch injects env vars; fetch failure raises `SecretsError`)
-- [ ] T012 [P] Unit tests for `alphoryn/telemetry/logger.py` in `tests/unit/test_telemetry.py` (all 14 event types emit correct schema; Cloud Logging failure → stderr output, execution continues; `latency_ms` and `session_id` present on every event)
-- [ ] T013 Unit tests for `alphoryn/memory/` in `tests/unit/test_memory.py` (in-memory SQLite; schema integrity for all five entities; startup load returns OPEN positions from multiple runs; corrupt DB raises `MemoryBankError`; per-session write ordering; `FeedbackEvaluation.attempt_count ≤ 3` invariant)
+- [x] T010 [P] Unit tests for `alphoryn/config/` in `tests/unit/test_config.py` (`AlphorynConfig` field validation, required fields, defaults, `session_count` derivation, loader JSON→CLI override resolution, invalid config raises `ValidationError`)
+- [x] T011 [P] Unit tests for `alphoryn/secrets/client.py` in `tests/unit/test_secrets.py` (mock `google-cloud-secret-manager`; successful fetch injects env vars; fetch failure raises `SecretsError`)
+- [x] T012 [P] Unit tests for `alphoryn/telemetry/logger.py` in `tests/unit/test_telemetry.py` (all 14 event types emit correct schema; Cloud Logging failure → stderr output, execution continues; `latency_ms` and `session_id` present on every event)
+- [x] T013 Unit tests for `alphoryn/memory/` in `tests/unit/test_memory.py` (in-memory SQLite; schema integrity for all five entities; startup load returns OPEN positions from multiple runs; corrupt DB raises `MemoryBankError`; per-session write ordering; `FeedbackEvaluation.attempt_count ≤ 3` invariant)
 
 **Checkpoint**: Foundation ready — user story implementation can begin
 
