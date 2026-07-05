@@ -192,7 +192,7 @@ def test_format_decision_mean_reversion_hold() -> None:
 def test_status_shows_open_positions(tmp_path: Path) -> None:
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    run_id = bank.start_run('{"etf1":"SPY"}', 6)
+    run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
 
     from alphoryn.memory.schema import Position, Session as Sess
 
@@ -225,10 +225,26 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["status", "--db", str(db)])
     assert result.exit_code == 0
-    assert "SPY" in result.output
+    assert "ETF1 SPY" in result.output
     assert "MOMENTUM" in result.output
     assert "BUY" in result.output
     assert "450.00" in result.output
+    assert "ETF2 QQQ  (no open position)" in result.output
+
+
+def test_status_falls_back_to_generic_labels_on_bad_config_snapshot(
+    tmp_path: Path,
+) -> None:
+    """config_snapshot with invalid JSON → falls back to ETF1/ETF2 labels."""
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    # store non-JSON garbage as config_snapshot
+    bank.start_run("not-valid-json", 6)
+
+    result = runner.invoke(app, ["status", "--db", str(db)])
+    assert result.exit_code == 0
+    assert "ETF1 ETF1" in result.output
+    assert "ETF2 ETF2" in result.output
 
 
 # ---------------------------------------------------------------------------
