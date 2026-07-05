@@ -1,0 +1,11 @@
+{
+  "etf1": "SPY",
+  "etf2": "QQQ",
+  "candle_timeframe": "1H",
+  "run_duration": "24H",
+  "currency": "USD",
+  "stop_loss_pct": 0.02,
+  "session_money_budget": null,
+  "max_startup_latency_seconds": 60,
+  "memory_db_path": "~/.alphoryn/memory.db"
+}
