@@ -13,7 +13,8 @@ import pytest
 from typer.testing import CliRunner
 
 from alphoryn.cli.main import app
-from alphoryn.memory.bank import MemoryBankError
+from alphoryn.config.loader import load_config
+from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.secrets.client import SecretsError
 
 runner = CliRunner()
@@ -199,8 +200,6 @@ def test_status_shows_no_runs_when_db_empty(tmp_path: Path) -> None:
 
 
 def test_status_shows_current_run(tmp_path: Path) -> None:
-    from alphoryn.memory.bank import MemoryBank
-
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     bank.start_run('{"etf1":"SPY"}', 6)
@@ -240,8 +239,6 @@ def test_history_shows_no_runs_when_db_empty(tmp_path: Path) -> None:
 
 
 def test_history_shows_table_header(tmp_path: Path) -> None:
-    from alphoryn.memory.bank import MemoryBank
-
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     bank.start_run('{"etf1":"SPY"}', 6)
@@ -262,8 +259,6 @@ def test_history_exit_code_2_on_bad_db(tmp_path: Path) -> None:
 
 
 def test_history_filter_by_run(tmp_path: Path) -> None:
-    from alphoryn.memory.bank import MemoryBank
-
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     bank.start_run('{"etf1":"SPY"}', 6)
@@ -307,14 +302,9 @@ def test_run_help_lists_expected_options() -> None:
 
 def test_config_example_file_loads_without_error(tmp_path: Path) -> None:
     """config.json.example must be valid JSON that passes AlphorynConfig validation."""
-    import json
-    from pathlib import Path
-
     example = Path(__file__).parents[2] / "config.json.example"
     assert example.exists(), "config.json.example is missing from repo root"
     data = json.loads(example.read_text(encoding="utf-8"))
-    from alphoryn.config.loader import load_config
-
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(json.dumps(data), encoding="utf-8")
     cfg = load_config(str(cfg_file))
@@ -336,7 +326,5 @@ def test_memory_bank_initializes_at_default_path(tmp_path: Path, monkeypatch) ->
     monkeypatch.setenv("HOME", str(fake_home))
 
     db_path = str((fake_home / ".alphoryn" / "memory.db").expanduser())
-    from alphoryn.memory.bank import MemoryBank
-
     MemoryBank(db_path)
     assert (fake_home / ".alphoryn" / "memory.db").exists()

@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy.orm import Session as DBSession
+
 from alphoryn.execution.agent import ETFDecision, ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import Position, Session
@@ -32,8 +34,6 @@ def _init_bank(db_path: Path) -> MemoryBank:
 def _write_run_and_session(bank: MemoryBank) -> tuple[int, str]:
     run_id = bank.start_run(config_snapshot="{}", session_count_planned=10)
     session_id = f"run-{run_id}/session-001"
-    from sqlalchemy.orm import Session as DBSession
-
     with DBSession(bank._engine) as s:
         sess = Session(
             id=session_id,
@@ -127,8 +127,6 @@ def test_stop_loss_sets_status_closed_stop_loss(tmp_path: Path) -> None:
 
     with patch("alphoryn.monitor.monitor.TradingClient"):
         monitor._check_positions()
-
-    from sqlalchemy.orm import Session as DBSession
 
     with DBSession(bank._engine) as s:
         pos = s.query(Position).filter(Position.id == pos_id).one()
@@ -235,8 +233,6 @@ def test_trailing_stop_watermark_updated_in_db(tmp_path: Path) -> None:
     with patch("alphoryn.monitor.monitor.TradingClient"):
         monitor._check_positions()
 
-    from sqlalchemy.orm import Session as DBSession
-
     with DBSession(bank._engine) as s:
         pos = s.query(Position).filter(Position.id == pos_id).one()
         assert pos.trailing_stop_high_watermark == 475.0
@@ -259,8 +255,6 @@ def test_trailing_stop_hit_closes_position_in_db(tmp_path: Path) -> None:
 
     with patch("alphoryn.monitor.monitor.TradingClient"):
         monitor._check_positions()
-
-    from sqlalchemy.orm import Session as DBSession
 
     with DBSession(bank._engine) as s:
         pos = s.query(Position).filter(Position.id == pos_id).one()
@@ -289,8 +283,6 @@ def test_window_expiry_closes_position_in_db(tmp_path: Path) -> None:
 
     with patch("alphoryn.monitor.monitor.TradingClient"):
         monitor._check_positions()
-
-    from sqlalchemy.orm import Session as DBSession
 
     with DBSession(bank._engine) as s:
         pos = s.query(Position).filter(Position.id == pos_id).one()

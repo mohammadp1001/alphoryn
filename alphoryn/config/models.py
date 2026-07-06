@@ -1,7 +1,10 @@
+import logging
 import math
 from typing import Literal
 
 from pydantic import BaseModel, field_validator
+
+_logger = logging.getLogger(__name__)
 
 _TIMEFRAME_SECONDS: dict[str, int] = {
     "30min": 1800,
@@ -17,6 +20,7 @@ def _parse_duration_seconds(value: str) -> int:
         return int(v[:-1]) * 3600
     if v.endswith("MIN"):
         return int(v[:-3]) * 60
+    _logger.error("Unsupported duration format: %r — expected e.g. '24H' or '30MIN'", value)
     raise ValueError(f"Unsupported duration format: {value!r}. Expected e.g. '24H' or '30MIN'.")
 
 
@@ -42,6 +46,7 @@ class AlphorynConfig(BaseModel):
     @classmethod
     def validate_stop_loss_pct(cls, v: float) -> float:
         if not 0 < v < 1:
+            _logger.error("Invalid stop_loss_pct=%s — must be between 0 and 1 exclusive", v)
             raise ValueError(f"stop_loss_pct must be between 0 and 1 exclusive, got {v}")
         return v
 

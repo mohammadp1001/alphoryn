@@ -3,6 +3,8 @@ import sys
 from datetime import UTC, datetime
 from typing import Any
 
+import google.cloud.logging as _gcloud_logging
+
 EVENT_TYPES = frozenset(
     {
         "AGENT_DECISION",
@@ -35,9 +37,7 @@ class TelemetryLogger:
         self._log_name = log_name
         self._cloud_logger: object | None = None
         try:
-            import google.cloud.logging
-
-            client = google.cloud.logging.Client()
+            client = _gcloud_logging.Client()
             self._cloud_logger = client.logger(log_name)
         except Exception:  # noqa: S110
             pass  # Cloud Logging unavailable — stderr fallback active

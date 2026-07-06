@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import Session as DBSession
 
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
@@ -100,7 +100,6 @@ def test_get_engine_expands_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 def test_create_tables_creates_all_five_entities() -> None:
     engine = create_engine("sqlite:///:memory:")
     create_tables(engine)
-    from sqlalchemy import inspect
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     assert tables == {"runs", "sessions", "positions", "feedback_evaluations", "memory_entries"}
@@ -109,7 +108,6 @@ def test_create_tables_creates_all_five_entities() -> None:
 def test_run_columns() -> None:
     engine = create_engine("sqlite:///:memory:")
     create_tables(engine)
-    from sqlalchemy import inspect
     cols = {c["name"] for c in inspect(engine).get_columns("runs")}
     assert {"id", "started_at", "ended_at", "config_snapshot", "session_count_planned"} <= cols
 
@@ -159,7 +157,6 @@ def test_memory_bank_init_corrupt_db_raises(tmp_path: Path) -> None:
 def test_memory_bank_init_creates_tables(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     bank = MemoryBank(str(db_path))
-    from sqlalchemy import inspect
     tables = set(inspect(bank._engine).get_table_names())
     assert "runs" in tables
     assert "positions" in tables
