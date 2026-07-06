@@ -1,0 +1,371 @@
+"""Unit tests for alphoryn/agents/main_agent.py (T026 scope)."""
+
+import json
+from datetime import UTC, datetime
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from alphoryn.agents.main_agent import (
+    MainAgent,
+    MainAgentError,
+    _build_prompt,
+    _parse_decision,
+)
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+_CANDLE_CLOSE_AT = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+
+_DECISION_DICT = {
+    "session_id": "sess-001",
+    "etf1": {
+        "etf": "SPY",
+        "action": "BUY",
+        "strategy": "MEAN_REVERSION",
+        "lot_size": 5,
+        "exit_target": {"type": "price_level", "value": 450.0},
+        "reasoning": "ADX low, price below SMA.",
+    },
+    "etf2": {
+        "etf": "QQQ",
+        "action": "HOLD",
+        "strategy": "MOMENTUM",
+        "lot_size": None,
+        "exit_target": None,
+        "reasoning": "No regime qualified.",
+    },
+}
+
+
+def _make_event(
+    *,
+    is_final: bool = False,
+    text: str | None = None,
+    function_calls: list | None = None,
+    function_responses: list | None = None,
+) -> MagicMock:
+    event = MagicMock()
+    event.get_function_calls.return_value = function_calls or []
+    event.get_function_responses.return_value = function_responses or []
+    event.is_final_response.return_value = is_final
+    if text is not None:
+        event.content.parts = [MagicMock(text=text)]
+    else:
+        event.content = None
+    return event
+
+
+def _make_fc(name: str = "build_snapshot") -> MagicMock:
+    fc = MagicMock()
+    fc.name = name
+    fc.args = {"etf1": "SPY", "etf2": "QQQ", "candle_close_at": "2024-01-15T15:00:00+00:00"}
+    return fc
+
+
+def _make_fr(name: str = "build_snapshot") -> MagicMock:
+    fr = MagicMock()
+    fr.name = name
+    fr.response = {"captured_at": "2024-01-15T15:00:00+00:00"}
+    return fr
+
+
+def _make_agent(mock_client: MagicMock | None = None) -> tuple[MainAgent, MagicMock]:
+    if mock_client is None:
+        mock_client = MagicMock()
+    logger = MagicMock()
+    with patch("alphoryn.agents.main_agent.LlmAgent"):
+        agent = MainAgent(mock_client, logger)
+    return agent, logger
+
+
+# ---------------------------------------------------------------------------
+# MainAgent.__init__
+# ---------------------------------------------------------------------------
+
+
+def test_init_creates_llm_agent_with_model_and_tools() -> None:
+    mock_client = MagicMock()
+    logger = MagicMock()
+    with patch("alphoryn.agents.main_agent.LlmAgent") as mock_llm_cls:
+        MainAgent(mock_client, logger)
+    mock_llm_cls.assert_called_once()
+    kwargs = mock_llm_cls.call_args.kwargs
+    assert kwargs["name"] == "alphoryn_main_agent"
+    assert kwargs["model"] == "gemini-2.0-flash"
+    assert mock_client.build_snapshot in kwargs["tools"]
+
+
+# ---------------------------------------------------------------------------
+# decide — happy path
+# ---------------------------------------------------------------------------
+
+
+def test_decide_returns_session_decision_from_final_event() -> None:
+    agent, logger = _make_agent()
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+
+        decision = agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    assert decision.session_id == "sess-001"
+    assert decision.etf1.action == "BUY"
+    assert decision.etf2.action == "HOLD"
+
+
+def test_decide_emits_agent_decision_telemetry() -> None:
+    agent, logger = _make_agent()
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+
+        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    emitted_types = [c.args[0] for c in logger.emit.call_args_list]
+    assert "AGENT_DECISION" in emitted_types
+
+
+def test_decide_passes_session_id_to_telemetry() -> None:
+    agent, logger = _make_agent()
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+
+        agent.decide("sess-xyz", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    for c in logger.emit.call_args_list:
+        assert c.kwargs.get("session_id") == "sess-xyz"
+
+
+# ---------------------------------------------------------------------------
+# decide — tool call events
+# ---------------------------------------------------------------------------
+
+
+def test_decide_tool_call_event_emits_tool_call_telemetry() -> None:
+    agent, logger = _make_agent()
+    fc = _make_fc("build_snapshot")
+    tool_call_event = _make_event(function_calls=[fc])
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([tool_call_event, final_event])
+
+        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    emitted_types = [c.args[0] for c in logger.emit.call_args_list]
+    assert "TOOL_CALL" in emitted_types
+
+
+def test_decide_multiple_tool_calls_emit_multiple_tool_call_events() -> None:
+    agent, logger = _make_agent()
+    fc1 = _make_fc("build_snapshot")
+    fc2 = _make_fc("build_snapshot")
+    tool_call_event = _make_event(function_calls=[fc1, fc2])
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([tool_call_event, final_event])
+
+        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    tool_call_events = [
+        c for c in logger.emit.call_args_list if c.args[0] == "TOOL_CALL"
+    ]
+    assert len(tool_call_events) == 2
+
+
+# ---------------------------------------------------------------------------
+# decide — tool response events
+# ---------------------------------------------------------------------------
+
+
+def test_decide_build_snapshot_response_emits_signal_snapshot_built() -> None:
+    agent, logger = _make_agent()
+    fr = _make_fr("build_snapshot")
+    response_event = _make_event(function_responses=[fr])
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([response_event, final_event])
+
+        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    emitted_types = [c.args[0] for c in logger.emit.call_args_list]
+    assert "SIGNAL_SNAPSHOT_BUILT" in emitted_types
+
+
+def test_decide_non_build_snapshot_response_does_not_emit_snapshot_built() -> None:
+    agent, logger = _make_agent()
+    fr = _make_fr("other_tool")
+    response_event = _make_event(function_responses=[fr])
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([response_event, final_event])
+
+        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    emitted_types = [c.args[0] for c in logger.emit.call_args_list]
+    assert "SIGNAL_SNAPSHOT_BUILT" not in emitted_types
+
+
+# ---------------------------------------------------------------------------
+# decide — error paths
+# ---------------------------------------------------------------------------
+
+
+def test_decide_no_final_response_raises_main_agent_error() -> None:
+    agent, _ = _make_agent()
+    non_final_event = _make_event(is_final=False)
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([non_final_event])
+
+        with pytest.raises(MainAgentError, match="no final response"):
+            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+
+def test_decide_final_event_with_no_content_raises_main_agent_error() -> None:
+    agent, _ = _make_agent()
+    event = _make_event(is_final=True, text=None)
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([event])
+
+        with pytest.raises(MainAgentError, match="no final response"):
+            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+
+def test_decide_invalid_json_raises_main_agent_error() -> None:
+    agent, _ = _make_agent()
+    final_event = _make_event(is_final=True, text="not-valid-json{{{")
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+
+        with pytest.raises(MainAgentError, match="not valid JSON"):
+            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+
+def test_decide_invalid_decision_structure_raises_main_agent_error() -> None:
+    agent, _ = _make_agent()
+    bad_data = {"session_id": "sess-001", "etf1": "wrong", "etf2": "wrong"}
+    final_event = _make_event(is_final=True, text=json.dumps(bad_data))
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+
+        with pytest.raises(MainAgentError, match="Invalid SessionDecision"):
+            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+
+# ---------------------------------------------------------------------------
+# decide — memory entries
+# ---------------------------------------------------------------------------
+
+
+def test_decide_with_memory_entries_includes_them_in_runner_call() -> None:
+    agent, _ = _make_agent()
+    final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
+    entries = [{"etf": "SPY", "outcome_judgment": "CORRECT"}]
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+
+        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT, memory_entries=entries)
+
+    # Verify run was called with Content containing memory_entries in the text
+    run_call = mock_runner.run.call_args
+    message_content = run_call.kwargs["new_message"]
+    text = message_content.parts[0].text
+    assert "memory_entries" in text
+    assert "CORRECT" in text
+
+
+# ---------------------------------------------------------------------------
+# _build_prompt
+# ---------------------------------------------------------------------------
+
+
+def test_build_prompt_contains_session_and_etf_fields() -> None:
+    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, None)
+    assert "session_id: sess-1" in prompt
+    assert "etf1: SPY" in prompt
+    assert "etf2: QQQ" in prompt
+    assert "candle_close_at:" in prompt
+
+
+def test_build_prompt_without_memory_entries_excludes_memory_key() -> None:
+    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, None)
+    assert "memory_entries" not in prompt
+
+
+def test_build_prompt_with_memory_entries_includes_json() -> None:
+    entries = [{"etf": "SPY", "outcome_judgment": "INCORRECT"}]
+    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, entries)
+    assert "memory_entries" in prompt
+    assert "INCORRECT" in prompt
+
+
+def test_build_prompt_with_empty_memory_entries_excludes_key() -> None:
+    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, [])
+    assert "memory_entries" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# _parse_decision
+# ---------------------------------------------------------------------------
+
+
+def test_parse_decision_returns_session_decision() -> None:
+    decision = _parse_decision(_DECISION_DICT)
+    assert decision.session_id == "sess-001"
+    assert decision.etf1.etf == "SPY"
+    assert decision.etf2.etf == "QQQ"
+
+
+def test_parse_decision_missing_key_raises_main_agent_error() -> None:
+    bad_data = {"session_id": "sess-001", "etf2": _DECISION_DICT["etf2"]}
+    with pytest.raises(MainAgentError, match="Invalid SessionDecision"):
+        _parse_decision(bad_data)
+
+
+def test_parse_decision_non_dict_etf_raises_main_agent_error() -> None:
+    bad_data = {
+        "session_id": "sess-001",
+        "etf1": "not-a-dict",
+        "etf2": _DECISION_DICT["etf2"],
+    }
+    with pytest.raises(MainAgentError, match="Invalid SessionDecision"):
+        _parse_decision(bad_data)
