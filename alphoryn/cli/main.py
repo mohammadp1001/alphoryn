@@ -21,6 +21,7 @@ from alphoryn.memory.schema import Position, Run
 from alphoryn.memory.schema import Session as SessionModel
 from alphoryn.scheduler.scheduler import Scheduler
 from alphoryn.secrets.client import SecretsError, load_alpaca_credentials
+from alphoryn.telemetry.logger import TelemetryLogger
 
 _VERSION = "0.0.1"
 
@@ -131,7 +132,7 @@ def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
 
 def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
     """Run the scheduler. Separate function so tests can patch it."""
-    scheduler = Scheduler(cfg, bank)
+    scheduler = Scheduler(cfg, bank, logger=TelemetryLogger())
     scheduler.run()
 
 
