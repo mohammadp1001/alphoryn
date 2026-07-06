@@ -43,7 +43,7 @@ def _make_client() -> object:
         SecretsError: If the client cannot be instantiated (e.g. auth failure).
     """
     try:
-        from google.cloud import secretmanager  # noqa: PLC0415
+        from google.cloud import secretmanager
         return secretmanager.SecretManagerServiceClient()
     except Exception as exc:
         raise SecretsError(f"Cannot connect to GCP Secret Manager: {exc}") from exc

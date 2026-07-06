@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from alphoryn.config.loader import load_config
 from alphoryn.config.models import AlphorynConfig, _parse_duration_seconds
 
-
 # ---------------------------------------------------------------------------
 # _parse_duration_seconds
 # ---------------------------------------------------------------------------

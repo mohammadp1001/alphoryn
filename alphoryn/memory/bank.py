@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session as DBSession
 
@@ -69,7 +69,7 @@ class MemoryBank:
         """Create a Run record and return its ID."""
         with DBSession(self._engine) as s:
             run = Run(
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 config_snapshot=config_snapshot,
                 session_count_planned=session_count_planned,
             )
@@ -82,7 +82,7 @@ class MemoryBank:
         """Mark a Run as ended."""
         with DBSession(self._engine) as s:
             run = s.query(Run).filter(Run.id == run_id).one()
-            run.ended_at = datetime.now(timezone.utc)
+            run.ended_at = datetime.now(UTC)
             s.commit()
 
     # ------------------------------------------------------------------
@@ -197,6 +197,11 @@ class MemoryBank:
                 .all()
             )
             return [p for p in candidates if p.feedback_evaluation is None]
+
+    def get_session(self, session_id: str) -> Session | None:
+        """Return a Session record by ID, or None if not found."""
+        with DBSession(self._engine) as s:
+            return s.query(Session).filter(Session.id == session_id).one_or_none()
 
     def get_recent_memory_entries(self, etf: str, limit: int = 5) -> list[MemoryEntry]:
         """Return the most recent MemoryEntry records for a given ETF."""

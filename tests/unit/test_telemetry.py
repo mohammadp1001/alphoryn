@@ -1,12 +1,10 @@
 import json
-import sys
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from alphoryn.telemetry.logger import EVENT_TYPES, TelemetryLogger
-
 
 # ---------------------------------------------------------------------------
 # EVENT_TYPES constant

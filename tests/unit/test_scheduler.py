@@ -713,3 +713,146 @@ def test_run_market_closed_no_logger_does_not_raise() -> None:
         patch.object(sched, "is_market_open", side_effect=market_open_side_effect),
     ):
         sched.run()
+
+
+# ---------------------------------------------------------------------------
+# _run_feedback (T038)
+# ---------------------------------------------------------------------------
+
+
+def _full_scheduler_with_feedback(**extra) -> Scheduler:
+    """Build a scheduler with feedback_agent configured."""
+    bank = MagicMock()
+    bank.start_run.return_value = 1
+    bank.get_positions_due_for_feedback.return_value = []
+    cfg = AlphorynConfig(
+        etf1="SPY",
+        etf2="QQQ",
+        candle_timeframe="1H",
+        run_duration="1H",
+        max_startup_latency_seconds=3600,
+    )
+    main_agent = MagicMock()
+    main_agent.decide.return_value = _FIXTURE_DECISION
+    feedback_agent = MagicMock()
+    logger = MagicMock()
+    return Scheduler(
+        cfg,
+        bank,
+        main_agent=main_agent,
+        execution_agent=MagicMock(),
+        feedback_agent=feedback_agent,
+        logger=logger,
+        **extra,
+    )
+
+
+def _make_mock_position() -> MagicMock:
+    pos = MagicMock()
+    pos.id = 99
+    pos.session_id = "run-1/session-0001"
+    pos.etf = "SPY"
+    pos.strategy = "MEAN_REVERSION"
+    pos.entry_price = 450.0
+    pos.exit_price = 458.0
+    pos.exit_reason = "PROFIT_TARGET"
+    return pos
+
+
+def test_run_feedback_no_feedback_agent_returns_early() -> None:
+    sched = _full_scheduler()
+    sched._feedback_agent = None
+    sched._bank.get_positions_due_for_feedback.return_value = [_make_mock_position()]
+    sched._run_feedback("run-1/session-0002", 2)
+    sched._bank.get_positions_due_for_feedback.assert_not_called()
+
+
+def test_run_feedback_queries_bank_for_due_positions() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._bank.get_positions_due_for_feedback.return_value = []
+    sched._run_feedback("run-1/session-0002", 2)
+    sched._bank.get_positions_due_for_feedback.assert_called_once_with(2)
+
+
+def test_run_feedback_invokes_feedback_agent_per_position() -> None:
+    sched = _full_scheduler_with_feedback()
+    pos1 = _make_mock_position()
+    pos2 = _make_mock_position()
+    pos2.id = 100
+    pos2.etf = "QQQ"
+    sched._bank.get_positions_due_for_feedback.return_value = [pos1, pos2]
+    sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
+
+    sched._run_feedback("run-1/session-0002", 2)
+
+    assert sched._feedback_agent.evaluate.call_count == 2
+
+
+def test_run_feedback_passes_correct_session_id_to_evaluate() -> None:
+    sched = _full_scheduler_with_feedback()
+    pos = _make_mock_position()
+    sched._bank.get_positions_due_for_feedback.return_value = [pos]
+    sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
+
+    sched._run_feedback("run-1/session-0002", 2)
+
+    call_kwargs = sched._feedback_agent.evaluate.call_args
+    assert call_kwargs.args[1] == "run-1/session-0002"
+
+
+def test_run_feedback_no_positions_does_nothing() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._bank.get_positions_due_for_feedback.return_value = []
+    sched._run_feedback("run-1/session-0002", 2)
+    sched._feedback_agent.evaluate.assert_not_called()
+
+
+def test_run_feedback_uses_html_report_path_from_session() -> None:
+    sched = _full_scheduler_with_feedback()
+    pos = _make_mock_position()
+    sched._bank.get_positions_due_for_feedback.return_value = [pos]
+    mock_session = MagicMock(html_report_path="/reports/run-1/session.html")
+    sched._bank.get_session.return_value = mock_session
+
+    sched._run_feedback("run-1/session-0002", 2)
+
+    fi = sched._feedback_agent.evaluate.call_args.args[0]
+    assert fi.html_report_path == "/reports/run-1/session.html"
+
+
+def test_run_feedback_no_entry_session_uses_empty_string_for_path() -> None:
+    sched = _full_scheduler_with_feedback()
+    pos = _make_mock_position()
+    sched._bank.get_positions_due_for_feedback.return_value = [pos]
+    sched._bank.get_session.return_value = None  # session not found
+
+    sched._run_feedback("run-1/session-0002", 2)
+
+    fi = sched._feedback_agent.evaluate.call_args.args[0]
+    assert fi.html_report_path == ""
+
+
+def test_process_session_calls_run_feedback_before_investigation() -> None:
+    sched = _full_scheduler_with_feedback()
+
+    call_order = []
+
+    def mock_feedback(*args):
+        call_order.append("feedback")
+
+    def mock_investigation(*args, **kwargs):
+        call_order.append("investigation")
+        return _FIXTURE_DECISION
+
+    with (
+        patch.object(sched, "_run_feedback", side_effect=mock_feedback),
+        patch.object(sched, "_run_investigation", side_effect=mock_investigation),
+    ):
+        sched._process_session(
+            run_id=1,
+            session_id="run-1/session-0001",
+            session_ordinal=1,
+            candle_close_at=datetime.now(UTC),
+        )
+
+    assert call_order == ["feedback", "investigation"]

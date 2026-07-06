@@ -11,11 +11,10 @@ Covers branches not exercised by the T014 contract tests:
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from alphoryn.cli.main import _format_decision, _warn_fractional_sessions, app
@@ -137,7 +136,7 @@ def test_fractional_session_warning_appears_in_run_output(tmp_path: Path) -> Non
 
 
 def test_start_scheduler_creates_and_runs_scheduler() -> None:
-    from alphoryn.cli.main import _start_scheduler  # noqa: PLC0415
+    from alphoryn.cli.main import _start_scheduler
 
     cfg = AlphorynConfig(etf1="SPY", etf2="QQQ")
     bank = MagicMock()
@@ -194,15 +193,16 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
     bank = MemoryBank(str(db))
     run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
 
-    from alphoryn.memory.schema import Position, Session as Sess
+    from alphoryn.memory.schema import Position
+    from alphoryn.memory.schema import Session as Sess
 
     sess_id = f"run-{run_id}/session-0001"
     with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:
         sess = Sess(
             id=sess_id,
             run_id=run_id,
-            candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc),
-            created_at=datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc),
+            candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+            created_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
             status="COMPLETED",
         )
         s.add(sess)
@@ -213,7 +213,7 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
             strategy="MOMENTUM",
             direction="BUY",
             entry_price=450.0,
-            entry_time=datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc),
+            entry_time=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
             lot_size=10.0,
             stop_loss_price=441.0,
             exit_target='{"type":"fixed","target_price":460.0}',
@@ -264,8 +264,8 @@ def test_history_shows_session_rows(tmp_path: Path) -> None:
         sess = Sess(
             id=sess_id,
             run_id=run_id,
-            candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc),
-            created_at=datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc),
+            candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+            created_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
             status="COMPLETED",
             etf1_strategy="MEAN_REVERSION",
             etf1_decision="BUY",
