@@ -16,8 +16,12 @@ from datetime import datetime
 from typing import Literal
 from unittest.mock import MagicMock, patch
 
+import sqlalchemy.orm as orm
+
 from alphoryn.execution.agent import ExecutionAgent
 from alphoryn.memory.bank import MemoryBank
+from alphoryn.memory.schema import Position
+from alphoryn.memory.schema import Session as Sess
 
 # ---------------------------------------------------------------------------
 # Decision dataclasses (mirror of contracts/agents.md)
@@ -196,11 +200,6 @@ def test_existing_open_position_blocks_new_buy(tmp_path) -> None:
     bank = MemoryBank(str(tmp_path / "memory.db"))
     run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
 
-    import sqlalchemy.orm as orm
-
-    from alphoryn.memory.schema import Position
-    from alphoryn.memory.schema import Session as Sess
-
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:
         s.add(
@@ -250,11 +249,6 @@ def test_open_position_on_etf1_does_not_block_etf2(tmp_path) -> None:
     """OPEN position on SPY does not block BUY on QQQ."""
     bank = MemoryBank(str(tmp_path / "memory.db"))
     run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
-
-    import sqlalchemy.orm as orm
-
-    from alphoryn.memory.schema import Position
-    from alphoryn.memory.schema import Session as Sess
 
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:

@@ -12,14 +12,17 @@ Covers branches not exercised by the T014 contract tests:
 
 import json
 from datetime import UTC, datetime
+from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
-from alphoryn.cli.main import _format_decision, _warn_fractional_sessions, app
+from alphoryn.cli.main import _format_decision, _start_scheduler, _warn_fractional_sessions, app
 from alphoryn.config.models import AlphorynConfig
 from alphoryn.memory.bank import MemoryBank
+from alphoryn.memory.schema import Position
+from alphoryn.memory.schema import Session as Sess
 
 runner = CliRunner()
 
@@ -103,8 +106,6 @@ def test_warn_fractional_sessions_emits_warning_when_fractional() -> None:
     cfg = AlphorynConfig(
         etf1="SPY", etf2="QQQ", candle_timeframe="4H", run_duration="10H"
     )
-    from io import StringIO
-
     with patch("sys.stderr", StringIO()) as buf:
         _warn_fractional_sessions(cfg)
     assert "WARN" in buf.getvalue()
@@ -116,8 +117,6 @@ def test_warn_fractional_sessions_silent_when_exact() -> None:
     cfg = AlphorynConfig(
         etf1="SPY", etf2="QQQ", candle_timeframe="4H", run_duration="24H"
     )
-    from io import StringIO
-
     with patch("sys.stderr", StringIO()) as buf:
         _warn_fractional_sessions(cfg)
     assert buf.getvalue() == ""
@@ -136,15 +135,11 @@ def test_fractional_session_warning_appears_in_run_output(tmp_path: Path) -> Non
 
 
 def test_start_scheduler_creates_and_runs_scheduler() -> None:
-    from alphoryn.cli.main import _start_scheduler
-
     cfg = AlphorynConfig(etf1="SPY", etf2="QQQ")
     bank = MagicMock()
     mock_scheduler = MagicMock()
 
-    # _start_scheduler does `from alphoryn.scheduler.scheduler import Scheduler`
-    # inside the function — patch at the source module.
-    with patch("alphoryn.scheduler.scheduler.Scheduler", return_value=mock_scheduler):
+    with patch("alphoryn.cli.main.Scheduler", return_value=mock_scheduler):
         _start_scheduler(cfg, bank)
 
     mock_scheduler.run.assert_called_once()
@@ -192,9 +187,6 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
-
-    from alphoryn.memory.schema import Position
-    from alphoryn.memory.schema import Session as Sess
 
     sess_id = f"run-{run_id}/session-0001"
     with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:
@@ -256,8 +248,6 @@ def test_history_shows_session_rows(tmp_path: Path) -> None:
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     run_id = bank.start_run('{"etf1":"SPY"}', 6)
-
-    from alphoryn.memory.schema import Session as Sess
 
     sess_id = f"run-{run_id}/session-0001"
     with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:

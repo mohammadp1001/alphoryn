@@ -104,7 +104,7 @@ def test_init_creates_llm_agent_with_model_and_tools() -> None:
 
 
 def test_decide_returns_session_decision_from_final_event() -> None:
-    agent, logger = _make_agent()
+    agent, _logger = _make_agent()
     final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
 
     with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
