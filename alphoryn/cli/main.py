@@ -124,7 +124,7 @@ def run(
 
 def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
     """Emit a warning when session count is fractional (rounded down)."""
-    _timeframe_seconds = {"30min": 1800, "1H": 3600, "4H": 14400}
+    _timeframe_seconds = {"10min": 600, "15min": 900, "30min": 1800, "1H": 3600, "4H": 14400}
     run_secs = _parse_duration_seconds(cfg.run_duration)
     candle_secs = _timeframe_seconds[cfg.candle_timeframe]
     if run_secs % candle_secs != 0:

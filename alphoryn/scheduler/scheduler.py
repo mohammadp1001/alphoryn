@@ -27,9 +27,15 @@ from alphoryn.memory.schema import MemoryEntry, Session
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.telemetry.logger import TelemetryLogger
 
-_TIMEFRAME_SECONDS: dict[str, int] = {"30min": 1800, "1H": 3600, "4H": 14400}
-_INVESTIGATION_BUDGET_SECS = 52 * 60
-_EXECUTE_BUDGET_SECS = 7 * 60
+_TIMEFRAME_SECONDS: dict[str, int] = {
+    "10min": 600,
+    "15min": 900,
+    "30min": 1800,
+    "1H": 3600,
+    "4H": 14400,
+}
+_INVESTIGATION_BUDGET_FRACTION = 0.80
+_EXECUTE_BUDGET_FRACTION = 0.20
 _HEARTBEAT_INTERVAL_SECS = 5 * 60
 
 
@@ -38,7 +44,7 @@ class Scheduler:
 
     At startup: aligns to the next candle close, prints a countdown to stdout.
     Full session loop (T030): main_agent → execution_agent → HTML report → bank writes.
-    Budget enforcement (T029): 52-min investigation cap; 7-min execute cap; heartbeat.
+    Budget enforcement (T029): 80% of candle for investigation, 20% for execute; heartbeat.
     """
 
     def __init__(
@@ -62,13 +68,16 @@ class Scheduler:
         self._feedback_agent = feedback_agent
         self._report_generator = report_generator
         self._logger = logger
+        candle_secs = _TIMEFRAME_SECONDS[cfg.candle_timeframe]
         self._investigation_budget = (
             _investigation_budget_secs
             if _investigation_budget_secs is not None
-            else _INVESTIGATION_BUDGET_SECS
+            else int(candle_secs * _INVESTIGATION_BUDGET_FRACTION)
         )
         self._execute_budget = (
-            _execute_budget_secs if _execute_budget_secs is not None else _EXECUTE_BUDGET_SECS
+            _execute_budget_secs
+            if _execute_budget_secs is not None
+            else int(candle_secs * _EXECUTE_BUDGET_FRACTION)
         )
         self._heartbeat_interval = (
             _heartbeat_interval_secs
