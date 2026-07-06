@@ -30,8 +30,8 @@ alphoryn --help
 ### 2. Store Alpaca credentials in Google Secret Manager
 
 ```bash
-echo -n "YOUR_ALPACA_API_KEY"    | gcloud secrets create alphoryn-alpaca-api-key    --data-file=-
-echo -n "YOUR_ALPACA_SECRET_KEY" | gcloud secrets create alphoryn-alpaca-secret-key --data-file=-
+echo -n "YOUR_ALPACA_API_KEY"    | gcloud secrets create alpaca-api-key    --data-file=-
+echo -n "YOUR_ALPACA_SECRET_KEY" | gcloud secrets create alpaca-api-secret --data-file=-
 ```
 
 ### 3. Create a config file
