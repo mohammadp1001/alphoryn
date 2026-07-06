@@ -9,6 +9,7 @@ import concurrent.futures
 import json
 import math
 import os
+import sys
 import threading
 import time
 from datetime import UTC, datetime
@@ -162,7 +163,7 @@ class Scheduler:
     # ------------------------------------------------------------------
 
     def wait_for_candle_close(self, target: datetime, *, _sleep: object = None) -> None:
-        """Print a countdown line and sleep until *target*.
+        """Print a live countdown bar and sleep until *target*.
 
         Args:
             target:  The UTC datetime to wait until.
@@ -174,30 +175,37 @@ class Scheduler:
         _do_sleep = _sleep if _sleep is not None else time.sleep
 
         now = datetime.now(UTC)
-        wait_secs = (target - now).total_seconds()
+        total_secs = max(0.0, (target - now).total_seconds())
 
-        if wait_secs > self._cfg.max_startup_latency_seconds:
+        if total_secs > self._cfg.max_startup_latency_seconds:
             typer.echo(
-                f"WARN: {wait_secs:.0f}s wait to next candle exceeds "
+                f"WARN: {total_secs:.0f}s wait to next candle exceeds "
                 f"max_startup_latency_seconds={self._cfg.max_startup_latency_seconds}. "
                 "Proceeding.",
                 err=True,
             )
 
         close_str = target.strftime("%Y-%m-%d %H:%M UTC")
-        remaining = max(0.0, wait_secs)
-        mins, secs_part = divmod(int(remaining), 60)
-        typer.echo(
-            f"Waiting for next candle close at {close_str}"
-            f" ({mins} min {secs_part:02d} sec)"
-        )
+        bar_width = 30
 
         while True:
             now = datetime.now(UTC)
-            remaining = (target - now).total_seconds()
+            remaining = max(0.0, (target - now).total_seconds())
+            elapsed = total_secs - remaining
+            filled = int(bar_width * elapsed / total_secs) if total_secs > 0 else bar_width
+            bar = "█" * filled + "░" * (bar_width - filled)
+            mins, secs_part = divmod(int(remaining), 60)
+            sys.stdout.write(
+                f"\rWaiting for next candle close at {close_str}"
+                f"  [{bar}]  {mins:02d}:{secs_part:02d} remaining"
+            )
+            sys.stdout.flush()
             if remaining <= 0:
                 break
-            _do_sleep(min(10.0, remaining))
+            _do_sleep(min(1.0, remaining))
+
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
     # ------------------------------------------------------------------
     # Session budget helpers (T029)
