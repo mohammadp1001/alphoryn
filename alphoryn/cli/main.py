@@ -130,8 +130,9 @@ def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
 def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
     """Import and run the scheduler. Separate function so tests can patch it."""
     from alphoryn.scheduler.scheduler import Scheduler
+    from alphoryn.telemetry.logger import TelemetryLogger
 
-    scheduler = Scheduler(cfg, bank)
+    scheduler = Scheduler(cfg, bank, logger=TelemetryLogger())
     scheduler.run()
 
 
