@@ -1,6 +1,6 @@
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 EVENT_TYPES = frozenset(
@@ -35,11 +35,11 @@ class TelemetryLogger:
         self._log_name = log_name
         self._cloud_logger: object | None = None
         try:
-            import google.cloud.logging  # noqa: PLC0415
+            import google.cloud.logging
 
             client = google.cloud.logging.Client()
             self._cloud_logger = client.logger(log_name)
-        except Exception:
+        except Exception:  # noqa: S110
             pass  # Cloud Logging unavailable — stderr fallback active
 
     def emit(
@@ -67,7 +67,7 @@ class TelemetryLogger:
             "session_id": session_id,
             "component": component,
             "etf": etf,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "latency_ms": latency_ms,
             "payload": payload,
         }
@@ -75,7 +75,7 @@ class TelemetryLogger:
             try:
                 self._cloud_logger.log_struct(event)  # type: ignore[union-attr]
                 return
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         # Fallback: write to stderr (constitution Principle IV)
-        print(json.dumps(event, default=str), file=sys.stderr)
+        print(json.dumps(event, default=str), file=sys.stderr)  # noqa: T201

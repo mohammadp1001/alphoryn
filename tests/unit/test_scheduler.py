@@ -1,10 +1,8 @@
 """Unit tests for alphoryn/scheduler/scheduler.py (T016 scope)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import StringIO
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from alphoryn.config.models import AlphorynConfig
 from alphoryn.scheduler.scheduler import Scheduler
@@ -39,24 +37,24 @@ def _scheduler(**cfg_kwargs) -> Scheduler:
 def test_next_candle_close_1h_not_on_boundary() -> None:
     sched = _scheduler(candle_timeframe="1H")
     # 14:22:00 UTC → next boundary is 15:00:00
-    now = datetime(2024, 1, 15, 14, 22, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 14, 22, 0, tzinfo=UTC)
     result = sched.compute_next_candle_close(now)
-    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=timezone.utc)
+    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
 
 
 def test_next_candle_close_1h_exactly_on_boundary() -> None:
     sched = _scheduler(candle_timeframe="1H")
     # Exactly on the boundary → next is +1H
-    now = datetime(2024, 1, 15, 14, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 14, 0, 0, tzinfo=UTC)
     result = sched.compute_next_candle_close(now)
-    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=timezone.utc)
+    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
 
 
 def test_next_candle_close_1h_one_second_before_boundary() -> None:
     sched = _scheduler(candle_timeframe="1H")
-    now = datetime(2024, 1, 15, 14, 59, 59, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 14, 59, 59, tzinfo=UTC)
     result = sched.compute_next_candle_close(now)
-    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=timezone.utc)
+    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -66,16 +64,16 @@ def test_next_candle_close_1h_one_second_before_boundary() -> None:
 
 def test_next_candle_close_30min_at_15_minutes() -> None:
     sched = _scheduler(candle_timeframe="30min")
-    now = datetime(2024, 1, 15, 14, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 14, 15, 0, tzinfo=UTC)
     result = sched.compute_next_candle_close(now)
-    assert result == datetime(2024, 1, 15, 14, 30, 0, tzinfo=timezone.utc)
+    assert result == datetime(2024, 1, 15, 14, 30, 0, tzinfo=UTC)
 
 
 def test_next_candle_close_30min_at_45_minutes() -> None:
     sched = _scheduler(candle_timeframe="30min")
-    now = datetime(2024, 1, 15, 14, 45, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 14, 45, 0, tzinfo=UTC)
     result = sched.compute_next_candle_close(now)
-    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=timezone.utc)
+    assert result == datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -85,22 +83,22 @@ def test_next_candle_close_30min_at_45_minutes() -> None:
 
 def test_next_candle_close_4h_at_10_utc() -> None:
     sched = _scheduler(candle_timeframe="4H")
-    now = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
     result = sched.compute_next_candle_close(now)
-    assert result == datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+    assert result == datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
 
 
 def test_next_candle_close_4h_at_23_utc() -> None:
     sched = _scheduler(candle_timeframe="4H")
-    now = datetime(2024, 1, 15, 23, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 23, 0, 0, tzinfo=UTC)
     result = sched.compute_next_candle_close(now)
-    assert result == datetime(2024, 1, 16, 0, 0, 0, tzinfo=timezone.utc)
+    assert result == datetime(2024, 1, 16, 0, 0, 0, tzinfo=UTC)
 
 
 def test_next_candle_close_result_always_after_now() -> None:
     for tf in ("30min", "1H", "4H"):
         sched = _scheduler(candle_timeframe=tf)
-        now = datetime(2024, 1, 15, 14, 33, 27, tzinfo=timezone.utc)
+        now = datetime(2024, 1, 15, 14, 33, 27, tzinfo=UTC)
         result = sched.compute_next_candle_close(now)
         assert result > now
 
@@ -142,8 +140,8 @@ def test_get_market_clock_calls_alpaca_trading_client() -> None:
 def test_next_market_open_close_success() -> None:
     sched = _scheduler()
     mock_clock = MagicMock()
-    t_open = datetime(2024, 1, 15, 14, 30, tzinfo=timezone.utc)
-    t_close = datetime(2024, 1, 15, 21, 0, tzinfo=timezone.utc)
+    t_open = datetime(2024, 1, 15, 14, 30, tzinfo=UTC)
+    t_close = datetime(2024, 1, 15, 21, 0, tzinfo=UTC)
     mock_clock.next_open = t_open
     mock_clock.next_close = t_close
 
@@ -199,7 +197,7 @@ def test_is_market_open_fallback_true_on_api_error() -> None:
 
 def test_wait_for_candle_close_prints_countdown_line() -> None:
     sched = _scheduler(max_startup_latency_seconds=300)
-    future = datetime.now(timezone.utc).replace(microsecond=0)
+    future = datetime.now(UTC).replace(microsecond=0)
     # target already passed → immediate exit
     with patch("alphoryn.scheduler.scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = future.replace(second=future.second + 1)
@@ -214,10 +212,10 @@ def test_wait_for_candle_close_prints_countdown_line() -> None:
 
 def test_wait_for_candle_close_warns_on_long_wait() -> None:
     sched = _scheduler(max_startup_latency_seconds=10)
-    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=timezone.utc)
+    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
 
-    now_before = datetime(2024, 1, 15, 15, 45, 0, tzinfo=timezone.utc)  # 15 min wait
-    now_after = datetime(2024, 1, 15, 16, 0, 1, tzinfo=timezone.utc)   # past target
+    now_before = datetime(2024, 1, 15, 15, 45, 0, tzinfo=UTC)  # 15 min wait
+    now_after = datetime(2024, 1, 15, 16, 0, 1, tzinfo=UTC)   # past target
 
     call_count = [0]
 
@@ -238,8 +236,8 @@ def test_wait_for_candle_close_warns_on_long_wait() -> None:
 
 def test_wait_for_candle_close_no_warn_within_latency() -> None:
     sched = _scheduler(max_startup_latency_seconds=3600)
-    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=timezone.utc)
-    now_val = datetime(2024, 1, 15, 15, 59, 0, tzinfo=timezone.utc)  # 60s wait
+    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
+    now_val = datetime(2024, 1, 15, 15, 59, 0, tzinfo=UTC)  # 60s wait
 
     call_count = [0]
 
@@ -247,7 +245,7 @@ def test_wait_for_candle_close_no_warn_within_latency() -> None:
         call_count[0] += 1
         if call_count[0] == 1:
             return now_val
-        return datetime(2024, 1, 15, 16, 0, 1, tzinfo=timezone.utc)
+        return datetime(2024, 1, 15, 16, 0, 1, tzinfo=UTC)
 
     with patch("alphoryn.scheduler.scheduler.datetime") as mock_dt:
         mock_dt.now.side_effect = fake_now
@@ -261,13 +259,13 @@ def test_wait_for_candle_close_no_warn_within_latency() -> None:
 
 def test_wait_for_candle_close_sleeps_in_10s_increments() -> None:
     sched = _scheduler(max_startup_latency_seconds=3600)
-    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=timezone.utc)
+    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
 
     times = [
-        datetime(2024, 1, 15, 15, 59, 35, tzinfo=timezone.utc),  # 25s remaining
-        datetime(2024, 1, 15, 15, 59, 45, tzinfo=timezone.utc),  # 15s remaining
-        datetime(2024, 1, 15, 15, 59, 55, tzinfo=timezone.utc),  # 5s remaining
-        datetime(2024, 1, 15, 16, 0, 1, tzinfo=timezone.utc),    # past target → exit
+        datetime(2024, 1, 15, 15, 59, 35, tzinfo=UTC),  # 25s remaining
+        datetime(2024, 1, 15, 15, 59, 45, tzinfo=UTC),  # 15s remaining
+        datetime(2024, 1, 15, 15, 59, 55, tzinfo=UTC),  # 5s remaining
+        datetime(2024, 1, 15, 16, 0, 1, tzinfo=UTC),    # past target → exit
     ]
     idx = [0]
 
@@ -295,8 +293,7 @@ def test_wait_for_candle_close_sleeps_in_10s_increments() -> None:
 
 def test_run_waits_until_next_candle_close() -> None:
     sched = _scheduler(candle_timeframe="1H")
-    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=timezone.utc)
-    wait_calls: list = []
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
     with (
         patch.object(sched, "compute_next_candle_close", return_value=mock_target),
         patch.object(sched, "wait_for_candle_close") as mock_wait,

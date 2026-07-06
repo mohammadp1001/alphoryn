@@ -10,23 +10,27 @@ Alpaca SDK calls are stubbed via unittest.mock.
 """
 
 import dataclasses
-from datetime import datetime, timezone
+import random as _rng
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alphoryn.market_data.client import ETFSignals, MarketDataClient, SignalSnapshot
+from alphoryn.market_data.client import (
+    ETFSignals,
+    MarketDataClient,
+    SignalSnapshot,
+    _compute_adx,
+    _compute_rsi,
+)
+
+_rng.seed(42)
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 _N_BARS = 60  # enough for EMA-50 + extra history
-
-# Seed so results are deterministic across test runs.
-import random as _rng
-
-_rng.seed(42)
 
 
 def _make_bar(close: float, volume: float = 1_000_000.0) -> MagicMock:
@@ -56,7 +60,7 @@ def _client() -> MarketDataClient:
 
 def _stub_data_fetch(client: MarketDataClient, etf_signals: ETFSignals):
     """Monkeypatch _data_fetch to return a given ETFSignals object."""
-    client._data_fetch = MagicMock(return_value=etf_signals)  # noqa: SLF001
+    client._data_fetch = MagicMock(return_value=etf_signals)
 
 
 def _spy_signals(
@@ -125,12 +129,12 @@ def test_etf_signals_has_all_15_fields() -> None:
 
 
 def test_signal_snapshot_is_frozen_dataclass() -> None:
-    now = datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
     sig = _spy_signals()
     snap = SignalSnapshot(captured_at=now, etf1_signals=sig, etf2_signals=sig)
     assert dataclasses.is_dataclass(snap)
     with pytest.raises((AttributeError, dataclasses.FrozenInstanceError)):
-        snap.captured_at = datetime.now(timezone.utc)  # type: ignore[misc]
+        snap.captured_at = datetime.now(UTC)  # type: ignore[misc]
 
 
 def test_signal_snapshot_fields() -> None:
@@ -145,10 +149,10 @@ def test_signal_snapshot_fields() -> None:
 
 def test_build_snapshot_returns_signal_snapshot() -> None:
     client = _client()
-    now = datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
     spy_sig = _spy_signals()
     qqq_sig = _spy_signals(current_price=450.0, ema_20=445.0)
-    client._data_fetch = MagicMock(side_effect=[spy_sig, qqq_sig])  # noqa: SLF001
+    client._data_fetch = MagicMock(side_effect=[spy_sig, qqq_sig])
     snap = client.build_snapshot("SPY", "QQQ", now)
     assert isinstance(snap, SignalSnapshot)
     assert snap.captured_at == now
@@ -158,12 +162,12 @@ def test_build_snapshot_returns_signal_snapshot() -> None:
 
 def test_build_snapshot_calls_data_fetch_for_both_etfs() -> None:
     client = _client()
-    now = datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc)
+    now = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
     spy_sig = _spy_signals()
-    client._data_fetch = MagicMock(return_value=spy_sig)  # noqa: SLF001
+    client._data_fetch = MagicMock(return_value=spy_sig)
     client.build_snapshot("SPY", "QQQ", now)
-    assert client._data_fetch.call_count == 2  # noqa: SLF001
-    calls = client._data_fetch.call_args_list  # noqa: SLF001
+    assert client._data_fetch.call_count == 2
+    calls = client._data_fetch.call_args_list
     assert calls[0][0][0] == "SPY"
     assert calls[1][0][0] == "QQQ"
 
@@ -189,7 +193,7 @@ def _patched_data_fetch(bars: list, etf: str = "SPY") -> ETFSignals:
     mock_response.__getitem__ = MagicMock(return_value=bars)
     with patch("alphoryn.market_data.client.StockHistoricalDataClient") as mock_cls:
         mock_cls.return_value.get_stock_bars.return_value = mock_response
-        return client._data_fetch(etf, datetime(2024, 1, 15, 15, 0, tzinfo=timezone.utc))  # noqa: SLF001
+        return client._data_fetch(etf, datetime(2024, 1, 15, 15, 0, tzinfo=UTC))
 
 
 def test_data_fetch_returns_etf_signals_instance() -> None:
@@ -271,6 +275,45 @@ def test_bollinger_pct_b_formula() -> None:
     if band_width > 0:
         expected_pct_b = (result.current_price - result.bollinger_lower) / band_width
         assert result.bollinger_pct_b == pytest.approx(expected_pct_b, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# get_latest_price
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Helper function edge cases (coverage for branch paths)
+# ---------------------------------------------------------------------------
+
+
+def test_rsi_with_losses_takes_ratio_path() -> None:
+    # Mix of gains and losses → avg_loss > 0 → hits the rs = avg_gain/avg_loss branch
+    closes = [100.0, 102.0, 99.0, 101.0, 98.0, 103.0, 97.0, 104.0, 96.0, 105.0,
+              94.0, 106.0, 93.0, 107.0, 92.0]
+    result = _compute_rsi(closes, 14)
+    assert 0.0 <= result < 100.0  # < 100 confirms avg_loss != 0 path was taken
+
+
+def test_adx_returns_zero_for_series_shorter_than_period() -> None:
+    # n < period + 1 → early return 0.0
+    result = _compute_adx([100.0, 101.0], [99.0, 99.5], [99.5, 100.0], 14)
+    assert result == 0.0
+
+
+def test_adx_returns_zero_when_atr_is_zero() -> None:
+    # All bars at exactly the same price → TR = 0 → ATR = 0 → return 0.0
+    n = 20
+    p = 100.0
+    result = _compute_adx([p] * n, [p] * n, [p] * n, 14)
+    assert result == 0.0
+
+
+def test_adx_returns_zero_when_no_directional_movement() -> None:
+    # Flat prices with spread → ATR > 0, DM+ = DM- = 0 → di_sum = 0 → return 0.0
+    n = 20
+    result = _compute_adx([100.2] * n, [99.8] * n, [100.0] * n, 14)
+    assert result == 0.0
 
 
 # ---------------------------------------------------------------------------

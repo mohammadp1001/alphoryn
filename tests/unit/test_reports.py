@@ -9,9 +9,6 @@ Tests are written BEFORE the implementation (TDD). They verify:
 """
 
 from pathlib import Path
-from unittest.mock import MagicMock
-
-import pytest
 
 from alphoryn.reports.generator import ReportGenerator
 
