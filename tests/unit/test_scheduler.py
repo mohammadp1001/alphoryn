@@ -1,10 +1,12 @@
-"""Unit tests for alphoryn/scheduler/scheduler.py (T016 scope)."""
+"""Unit tests for alphoryn/scheduler/scheduler.py (T016 + T029/T030 scope)."""
 
+import threading
 from datetime import UTC, datetime
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from alphoryn.config.models import AlphorynConfig
+from alphoryn.execution.agent import ETFDecision, SessionDecision
 from alphoryn.scheduler.scheduler import Scheduler
 
 # ---------------------------------------------------------------------------
@@ -302,3 +304,412 @@ def test_run_waits_until_next_candle_close() -> None:
     mock_wait.assert_called_once()
     call_kwargs = mock_wait.call_args
     assert call_kwargs[0][0] == mock_target
+
+
+# ---------------------------------------------------------------------------
+# run — full session loop (T029 / T030)
+# ---------------------------------------------------------------------------
+
+_FIXTURE_DECISION = SessionDecision(
+    session_id="run-1/session-0001",
+    etf1=ETFDecision(
+        etf="SPY",
+        action="BUY",
+        strategy="MEAN_REVERSION",
+        lot_size=5,
+        exit_target={"type": "price_level", "value": 460.0},
+        reasoning="ADX low.",
+    ),
+    etf2=ETFDecision(
+        etf="QQQ",
+        action="HOLD",
+        strategy="MOMENTUM",
+        lot_size=None,
+        exit_target=None,
+        reasoning="No regime.",
+    ),
+)
+
+
+def _full_scheduler(**extra) -> Scheduler:
+    """Build a scheduler with 1 session and mock agents/logger."""
+    bank = MagicMock()
+    bank.start_run.return_value = 1
+    cfg = AlphorynConfig(
+        etf1="SPY",
+        etf2="QQQ",
+        candle_timeframe="1H",
+        run_duration="1H",  # session_count = 1
+        max_startup_latency_seconds=3600,
+    )
+    main_agent = MagicMock()
+    main_agent.decide.return_value = _FIXTURE_DECISION
+    execution_agent = MagicMock()
+    logger = MagicMock()
+    return Scheduler(
+        cfg,
+        bank,
+        main_agent=main_agent,
+        execution_agent=execution_agent,
+        logger=logger,
+        **extra,
+    )
+
+
+def _run_with_no_wait(sched: Scheduler) -> None:
+    """Run the scheduler with all waits and market checks stubbed out."""
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close"),
+        patch.object(sched, "is_market_open", return_value=True),
+    ):
+        sched.run()
+
+
+def test_run_startup_only_when_no_agents() -> None:
+    sched = _scheduler(candle_timeframe="1H")
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close") as mock_wait,
+    ):
+        sched.run()
+    mock_wait.assert_called_once()  # startup alignment only
+
+
+def test_run_starts_run_in_bank() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    sched._bank.start_run.assert_called_once()
+
+
+def test_run_ends_run_in_bank() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    sched._bank.end_run.assert_called_once_with(1)
+
+
+def test_run_emits_session_start_telemetry() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    emitted = [c.args[0] for c in sched._logger.emit.call_args_list]
+    assert "SESSION_START" in emitted
+
+
+def test_run_emits_session_end_telemetry() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    emitted = [c.args[0] for c in sched._logger.emit.call_args_list]
+    assert "SESSION_END" in emitted
+
+
+def test_run_writes_session_to_bank() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    sched._bank.write_session.assert_called_once()
+
+
+def test_run_writes_memory_entries_for_both_etfs() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    assert sched._bank.write_memory_entry.call_count == 2
+
+
+def test_run_calls_main_agent_decide() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    sched._main_agent.decide.assert_called_once()
+
+
+def test_run_calls_execution_agent_execute() -> None:
+    sched = _full_scheduler()
+    _run_with_no_wait(sched)
+    sched._execution_agent.execute.assert_called_once_with(_FIXTURE_DECISION)
+
+
+# ---------------------------------------------------------------------------
+# Market closed — MARKET_CLOSED telemetry, session not counted
+# ---------------------------------------------------------------------------
+
+
+def test_run_emits_market_closed_when_market_closed() -> None:
+    sched = _full_scheduler()
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+
+    call_count = [0]
+
+    def market_open_side_effect() -> bool:
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return False  # first check: closed
+        return True  # second check: open
+
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close"),
+        patch.object(sched, "is_market_open", side_effect=market_open_side_effect),
+    ):
+        sched.run()
+
+    emitted = [c.args[0] for c in sched._logger.emit.call_args_list]
+    assert "MARKET_CLOSED" in emitted
+
+
+def test_run_does_not_count_closed_market_session() -> None:
+    sched = _full_scheduler()
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+
+    call_count = [0]
+
+    def market_open_side_effect() -> bool:
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return False  # first: closed (not counted)
+        return True  # second: open (counted)
+
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close"),
+        patch.object(sched, "is_market_open", side_effect=market_open_side_effect),
+    ):
+        sched.run()
+
+    # Still processes exactly 1 session (session_count=1)
+    sched._bank.write_session.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Budget timeout (T029)
+# ---------------------------------------------------------------------------
+
+
+def test_investigation_timeout_emits_budget_timeout() -> None:
+    sched = _full_scheduler(_investigation_budget_secs=0)
+    # Make decide() block long enough for timeout
+    import time
+
+    sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
+
+    _run_with_no_wait(sched)
+
+    emitted = [c.args[0] for c in sched._logger.emit.call_args_list]
+    assert "BUDGET_TIMEOUT" in emitted
+
+
+def test_investigation_timeout_writes_skipped_session() -> None:
+    sched = _full_scheduler(_investigation_budget_secs=0)
+    import time
+
+    sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
+
+    _run_with_no_wait(sched)
+
+    sched._bank.write_session.assert_called_once()
+    session_arg = sched._bank.write_session.call_args.args[0]
+    assert session_arg.status == "SKIPPED_TIMEOUT"
+
+
+def test_execute_timeout_emits_budget_timeout() -> None:
+    sched = _full_scheduler(_execute_budget_secs=0)
+    import time
+
+    sched._execution_agent.execute.side_effect = lambda *a: time.sleep(0.5)
+
+    _run_with_no_wait(sched)
+
+    emitted = [c.args[0] for c in sched._logger.emit.call_args_list]
+    assert "BUDGET_TIMEOUT" in emitted
+
+
+# ---------------------------------------------------------------------------
+# Heartbeat (T029)
+# ---------------------------------------------------------------------------
+
+
+class _ControlledEvent(threading.Event):
+    """Fires the loop body exactly N times before stopping."""
+
+    def __init__(self, fire_count: int = 1) -> None:
+        super().__init__()
+        self._remaining = fire_count
+
+    def wait(self, timeout: float | None = None) -> bool:  # type: ignore[override]
+        if self._remaining > 0:
+            self._remaining -= 1
+            return False  # not set → heartbeat body executes
+        self.set()
+        return True  # set → loop exits
+
+
+def test_heartbeat_loop_prints_investigating_line(capsys) -> None:
+    sched = _full_scheduler(_heartbeat_interval_secs=1)
+    stop = _ControlledEvent(fire_count=1)
+    sched._heartbeat_loop("run-1/session-0001", stop)
+    captured = capsys.readouterr()
+    assert "investigating" in captured.out
+
+
+def test_heartbeat_loop_exits_when_stop_event_set() -> None:
+    sched = _full_scheduler(_heartbeat_interval_secs=1)
+    stop = _ControlledEvent(fire_count=0)  # stops immediately
+    sched._heartbeat_loop("run-1/session-0001", stop)
+    # If it didn't exit, the test would hang
+
+
+# ---------------------------------------------------------------------------
+# _run_investigation — direct tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_investigation_returns_decision_on_success() -> None:
+    sched = _full_scheduler()
+    result = sched._run_investigation("sess-001", datetime.now(UTC))
+    assert result == _FIXTURE_DECISION
+
+
+def test_run_investigation_returns_none_on_timeout() -> None:
+    import time
+
+    sched = _full_scheduler(_investigation_budget_secs=0)
+    sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
+    result = sched._run_investigation("sess-001", datetime.now(UTC))
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _run_execute — direct tests
+# ---------------------------------------------------------------------------
+
+
+def test_run_execute_calls_execution_agent() -> None:
+    sched = _full_scheduler()
+    sched._run_execute(_FIXTURE_DECISION)
+    sched._execution_agent.execute.assert_called_once_with(_FIXTURE_DECISION)
+
+
+# ---------------------------------------------------------------------------
+# _process_session — decision is None (timeout path)
+# ---------------------------------------------------------------------------
+
+
+def test_process_session_with_none_decision_writes_skipped_session() -> None:
+    sched = _full_scheduler()
+    sched._main_agent = None  # force decision = None via direct override
+
+    # Manually patch _run_investigation to return None
+    with patch.object(sched, "_run_investigation", return_value=None):
+        sched._process_session(
+            run_id=1,
+            session_id="run-1/session-0001",
+            session_ordinal=1,
+            candle_close_at=datetime.now(UTC),
+        )
+
+    session_arg = sched._bank.write_session.call_args.args[0]
+    assert session_arg.status == "SKIPPED_TIMEOUT"
+    sched._bank.write_memory_entry.assert_not_called()
+
+
+def test_process_session_no_report_when_report_generator_is_none() -> None:
+    sched = _full_scheduler()
+    sched._report_generator = None
+
+    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+        sched._process_session(
+            run_id=1,
+            session_id="run-1/session-0001",
+            session_ordinal=1,
+            candle_close_at=datetime.now(UTC),
+        )
+
+    session_arg = sched._bank.write_session.call_args.args[0]
+    assert session_arg.html_report_path is None
+
+
+def test_process_session_with_report_generator_writes_path() -> None:
+    sched = _full_scheduler()
+    mock_gen = MagicMock()
+    mock_gen.write.return_value = "/reports/run-1/session-0001.html"
+    sched._report_generator = mock_gen
+
+    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+        sched._process_session(
+            run_id=1,
+            session_id="run-1/session-0001",
+            session_ordinal=1,
+            candle_close_at=datetime.now(UTC),
+        )
+
+    session_arg = sched._bank.write_session.call_args.args[0]
+    assert session_arg.html_report_path == "/reports/run-1/session-0001.html"
+
+
+def test_process_session_execution_agent_none_skips_execute() -> None:
+    sched = _full_scheduler()
+    sched._execution_agent = None
+
+    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+        sched._process_session(
+            run_id=1,
+            session_id="run-1/session-0001",
+            session_ordinal=1,
+            candle_close_at=datetime.now(UTC),
+        )
+
+    # No execute call; bank still written
+    sched._bank.write_session.assert_called_once()
+
+
+def test_process_session_no_logger_does_not_raise() -> None:
+    sched = _full_scheduler()
+    sched._logger = None
+
+    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+        sched._process_session(
+            run_id=1,
+            session_id="run-1/session-0001",
+            session_ordinal=1,
+            candle_close_at=datetime.now(UTC),
+        )
+
+
+def test_investigation_timeout_no_logger_returns_none() -> None:
+    import time
+
+    sched = _full_scheduler(_investigation_budget_secs=0)
+    sched._logger = None
+    sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
+    result = sched._run_investigation("sess-001", datetime.now(UTC))
+    assert result is None
+
+
+def test_execute_timeout_no_logger_does_not_raise() -> None:
+    import time
+
+    sched = _full_scheduler(_execute_budget_secs=0)
+    sched._logger = None
+    sched._execution_agent.execute.side_effect = lambda *a: time.sleep(0.5)
+    # Should not raise
+    sched._run_execute(_FIXTURE_DECISION)
+
+
+def test_run_market_closed_no_logger_does_not_raise() -> None:
+    sched = _full_scheduler()
+    sched._logger = None
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+
+    call_count = [0]
+
+    def market_open_side_effect() -> bool:
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return False  # first: closed
+        return True  # second: open
+
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close"),
+        patch.object(sched, "is_market_open", side_effect=market_open_side_effect),
+    ):
+        sched.run()
