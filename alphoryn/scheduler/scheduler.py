@@ -21,6 +21,7 @@ from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import MemoryEntry, Session
 
 if TYPE_CHECKING:
+    from alphoryn.agents.feedback_agent import FeedbackAgent, FeedbackInput
     from alphoryn.agents.main_agent import MainAgent
     from alphoryn.execution.agent import ExecutionAgent, SessionDecision
     from alphoryn.reports.generator import ReportGenerator
@@ -47,6 +48,7 @@ class Scheduler:
         *,
         main_agent: "MainAgent | None" = None,
         execution_agent: "ExecutionAgent | None" = None,
+        feedback_agent: "FeedbackAgent | None" = None,
         report_generator: "ReportGenerator | None" = None,
         logger: "TelemetryLogger | None" = None,
         _investigation_budget_secs: int | None = None,
@@ -57,6 +59,7 @@ class Scheduler:
         self._bank = bank
         self._main_agent = main_agent
         self._execution_agent = execution_agent
+        self._feedback_agent = feedback_agent
         self._report_generator = report_generator
         self._logger = logger
         self._investigation_budget = (
@@ -273,6 +276,35 @@ class Scheduler:
     # Full session loop (T030)
     # ------------------------------------------------------------------
 
+    def _run_feedback(self, session_id: str, session_ordinal: int) -> None:
+        """Run feedback evaluation for positions due at this session ordinal.
+
+        Called before investigation so the learning loop closes before new decisions.
+        """
+        if self._feedback_agent is None:
+            return
+        from alphoryn.agents.feedback_agent import FeedbackInput
+
+        positions = self._bank.get_positions_due_for_feedback(session_ordinal)
+        for pos in positions:
+            entry_session = self._bank.get_session(pos.session_id)
+            html_report_path = (
+                entry_session.html_report_path
+                if entry_session is not None
+                else ""
+            )
+            feedback_input = FeedbackInput(
+                position_id=pos.id,
+                session_id=pos.session_id,
+                etf=pos.etf,
+                strategy=pos.strategy,
+                html_report_path=html_report_path or "",
+                entry_price=pos.entry_price,
+                exit_price=pos.exit_price or pos.entry_price,
+                exit_reason=pos.exit_reason or "UNKNOWN",
+            )
+            self._feedback_agent.evaluate(feedback_input, session_id)
+
     def _process_session(
         self,
         run_id: int,
@@ -280,9 +312,11 @@ class Scheduler:
         session_ordinal: int,
         candle_close_at: datetime,
     ) -> None:
-        """Execute one complete investigation → decide → execute → report cycle."""
+        """Execute one complete feedback → investigation → decide → execute → report cycle."""
         if self._logger is not None:
             self._logger.emit("SESSION_START", "scheduler", {}, session_id=session_id)
+
+        self._run_feedback(session_id, session_ordinal)
 
         t0 = datetime.now(UTC)
         decision = self._run_investigation(session_id, candle_close_at)

@@ -4,9 +4,9 @@ Uses an in-memory SQLite database (:memory:) so no filesystem access is
 needed and every test starts from a clean state.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -14,7 +14,6 @@ from sqlalchemy.orm import Session as DBSession
 
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.memory.schema import (
-    Base,
     FeedbackEvaluation,
     MemoryEntry,
     Position,
@@ -24,12 +23,11 @@ from alphoryn.memory.schema import (
     get_engine,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_NOW = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
 
 
 def _in_memory_bank() -> MemoryBank:
@@ -517,7 +515,7 @@ def test_get_recent_memory_entries_returns_latest_first() -> None:
             session_id=session_id,
             decision="BUY",
             regime_context="{}",
-            created_at=datetime(2024, 1, i + 1, tzinfo=timezone.utc),
+            created_at=datetime(2024, 1, i + 1, tzinfo=UTC),
         )
         bank.write_memory_entry(entry)
 
@@ -555,6 +553,27 @@ def test_get_recent_memory_entries_filters_by_etf() -> None:
 # ---------------------------------------------------------------------------
 # FeedbackEvaluation.attempt_count default
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# get_session
+# ---------------------------------------------------------------------------
+
+
+def test_get_session_returns_session_when_found() -> None:
+    bank = _in_memory_bank()
+    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    sess = _sample_session(run_id)
+    bank.write_session(sess)
+    result = bank.get_session(sess.id)
+    assert result is not None
+    assert result.id == sess.id
+
+
+def test_get_session_returns_none_when_not_found() -> None:
+    bank = _in_memory_bank()
+    result = bank.get_session("run-999/session-0001")
+    assert result is None
 
 
 def test_feedback_evaluation_attempt_count_default_is_one() -> None:
