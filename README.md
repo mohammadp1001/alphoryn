@@ -1,6 +1,6 @@
 # alphoryn
 
-Autonomous ETF paper trading agent. Uses Google ADK + Gemini to analyse market signals for two ETFs (SPY/QQQ) and execute paper trades via Alpaca. Secrets live in Google Secret Manager; positions and session history are stored in a local SQLite memory bank.
+Autonomous ETF paper trading agent.
 
 ---
 
@@ -81,14 +81,3 @@ alphoryn history
 alphoryn history --run 1
 ```
 
----
-
-## Troubleshooting
-
-| Error | Cause | Fix |
-|---|---|---|
-| Exit code 1 | Invalid or missing config | Check `config.json` has `etf1` and `etf2` |
-| Exit code 2: memory bank inaccessible | `~/.alphoryn/memory.db` corrupt | Delete the file and restart (positions lost) |
-| Exit code 3: Secret Manager unreachable | GCP credentials not set | Run `gcloud auth application-default login` |
-| `APIError: 403` | Invalid Alpaca API key | Regenerate key at alpaca.markets and update GCP secrets |
-| `etf1 == etf2` validation error | Duplicate ticker | Set different tickers in config |
