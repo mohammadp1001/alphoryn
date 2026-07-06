@@ -1,8 +1,9 @@
 {
   "etf1": "SPY",
   "etf2": "QQQ",
-  "candle_timeframe": "1H",
+  "candle_timeframe": "15min",
   "run_duration": "24H",
+  "extended_hours": true,
   "currency": "USD",
   "stop_loss_pct": 0.02,
   "session_money_budget": null,
