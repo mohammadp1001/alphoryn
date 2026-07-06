@@ -49,7 +49,7 @@ def run(
         float | None, typer.Option(help="Session money budget in USD. Overrides config.")
     ] = None,
     stop_loss: Annotated[
-        float | None, typer.Option(help="Stop-loss percentage (0–1). Overrides config.")
+        float | None, typer.Option(help="Stop-loss percentage (0-1). Overrides config.")
     ] = None,
 ) -> None:
     """Start a paper trading session."""
@@ -116,9 +116,9 @@ def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
     """Emit a warning when session count is fractional (rounded down)."""
     from alphoryn.config.models import _parse_duration_seconds
 
-    _TIMEFRAME_SECONDS = {"30min": 1800, "1H": 3600, "4H": 14400}
+    _timeframe_seconds = {"30min": 1800, "1H": 3600, "4H": 14400}
     run_secs = _parse_duration_seconds(cfg.run_duration)
-    candle_secs = _TIMEFRAME_SECONDS[cfg.candle_timeframe]
+    candle_secs = _timeframe_seconds[cfg.candle_timeframe]
     if run_secs % candle_secs != 0:
         typer.echo(
             f"WARN: {cfg.run_duration} is not evenly divisible by {cfg.candle_timeframe};"
@@ -129,7 +129,7 @@ def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
 
 def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
     """Import and run the scheduler. Separate function so tests can patch it."""
-    from alphoryn.scheduler.scheduler import Scheduler  # noqa: PLC0415
+    from alphoryn.scheduler.scheduler import Scheduler
 
     scheduler = Scheduler(cfg, bank)
     scheduler.run()
@@ -152,7 +152,7 @@ def status(
         bank = MemoryBank(db_path)
     except MemoryBankError as exc:
         typer.echo(f"Memory bank error: {exc}", err=True)
-        raise typer.Exit(2)
+        raise typer.Exit(2) from exc
 
     from sqlalchemy.orm import Session as DBSession
 
@@ -223,7 +223,7 @@ def history(
         bank = MemoryBank(db_path)
     except MemoryBankError as exc:
         typer.echo(f"Memory bank error: {exc}", err=True)
-        raise typer.Exit(2)
+        raise typer.Exit(2) from exc
 
     from sqlalchemy.orm import Session as DBSession
 
@@ -251,8 +251,12 @@ def history(
     typer.echo(header)
     typer.echo("-" * len(header))
     for sess in sessions:
-        etf1_col = _format_decision(sess.etf1_strategy, sess.etf1_decision, sess.etf1_execution_result)
-        etf2_col = _format_decision(sess.etf2_strategy, sess.etf2_decision, sess.etf2_execution_result)
+        etf1_col = _format_decision(
+            sess.etf1_strategy, sess.etf1_decision, sess.etf1_execution_result
+        )
+        etf2_col = _format_decision(
+            sess.etf2_strategy, sess.etf2_decision, sess.etf2_execution_result
+        )
         close_str = sess.candle_close_at.strftime("%Y-%m-%d %H:%M")
         typer.echo(f"{sess.id:<25} {close_str:<22} {etf1_col:<22} {etf2_col}")
 

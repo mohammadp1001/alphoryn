@@ -3,8 +3,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from alphoryn.secrets.client import SecretsError, _fetch_and_inject, _make_client, load_alpaca_credentials
-
+from alphoryn.secrets.client import (
+    SecretsError,
+    _fetch_and_inject,
+    _make_client,
+    load_alpaca_credentials,
+)
 
 # ---------------------------------------------------------------------------
 # _make_client
@@ -84,7 +88,10 @@ def test_fetch_and_inject_decode_error_raises_secrets_error() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _mock_client_factory(api_key_value: str = "test-api-key", secret_key_value: str = "test-secret") -> MagicMock:
+def _mock_client_factory(
+    api_key_value: str = "test-api-key",
+    secret_key_value: str = "test-secret-val",  # noqa: S107
+) -> MagicMock:
     """Build a mock Secret Manager client that returns preset secret values."""
 
     def side_effect(request):  # type: ignore[no-untyped-def]
@@ -113,7 +120,7 @@ def test_load_alpaca_credentials_injects_env_vars(monkeypatch: pytest.MonkeyPatc
         load_alpaca_credentials()
 
     assert os.environ["ALPACA_API_KEY"] == "test-api-key"
-    assert os.environ["ALPACA_SECRET_KEY"] == "test-secret"
+    assert os.environ["ALPACA_SECRET_KEY"] == "test-secret-val"
 
 
 def test_load_alpaca_credentials_explicit_project_id(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,7 +154,9 @@ def test_load_alpaca_credentials_fetch_failure_raises(monkeypatch: pytest.Monkey
             load_alpaca_credentials()
 
 
-def test_load_alpaca_credentials_make_client_failure_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_alpaca_credentials_make_client_failure_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
 
     with patch(

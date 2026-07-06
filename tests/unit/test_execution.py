@@ -12,11 +12,9 @@ Alpaca SDK calls are stubbed via MagicMock.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Literal
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from alphoryn.execution.agent import ExecutionAgent
 from alphoryn.memory.bank import MemoryBank
@@ -148,7 +146,7 @@ def test_buy_decision_places_market_order(tmp_path) -> None:
 
 def test_buy_decision_writes_open_position(tmp_path) -> None:
     bank = MemoryBank(str(tmp_path / "memory.db"))
-    run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
     agent = _make_agent(bank)
     decision = _decision(_buy("SPY", lot=5), _hold("QQQ"))
 
@@ -179,7 +177,7 @@ def test_buy_blocked_by_insufficient_budget(tmp_path) -> None:
 
     mock_alpaca = MagicMock()
     mock_alpaca.get_account.return_value.buying_power = "100"  # way too low
-    mock_alpaca.get_latest_quote.return_value.ask_price = 450.0  # 1000 × 450 = $450k
+    mock_alpaca.get_latest_quote.return_value.ask_price = 450.0  # 1000 x 450 = $450k
 
     with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca):
         agent.execute(decision)
@@ -198,9 +196,10 @@ def test_existing_open_position_blocks_new_buy(tmp_path) -> None:
     bank = MemoryBank(str(tmp_path / "memory.db"))
     run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
 
+    import sqlalchemy.orm as orm
+
     from alphoryn.memory.schema import Position
     from alphoryn.memory.schema import Session as Sess
-    import sqlalchemy.orm as orm
 
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:
@@ -252,9 +251,10 @@ def test_open_position_on_etf1_does_not_block_etf2(tmp_path) -> None:
     bank = MemoryBank(str(tmp_path / "memory.db"))
     run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
 
+    import sqlalchemy.orm as orm
+
     from alphoryn.memory.schema import Position
     from alphoryn.memory.schema import Session as Sess
-    import sqlalchemy.orm as orm
 
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:

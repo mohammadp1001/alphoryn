@@ -12,8 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from alphoryn.config.loader import load_config
-from alphoryn.config.models import AlphorynConfig, _parse_duration_seconds
-
+from alphoryn.config.models import AlphorynConfig
 
 # ---------------------------------------------------------------------------
 # Required fields
@@ -35,12 +34,12 @@ def test_etf2_is_required() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_candle_timeframe_default_is_1H() -> None:
+def test_candle_timeframe_default_is_one_hour() -> None:
     cfg = AlphorynConfig(etf1="SPY", etf2="QQQ")
     assert cfg.candle_timeframe == "1H"
 
 
-def test_run_duration_default_is_24H() -> None:
+def test_run_duration_default_is_24_hours() -> None:
     cfg = AlphorynConfig(etf1="SPY", etf2="QQQ")
     assert cfg.run_duration == "24H"
 
@@ -55,7 +54,7 @@ def test_max_startup_latency_seconds_default_is_60() -> None:
     assert cfg.max_startup_latency_seconds == 60
 
 
-def test_currency_default_is_USD() -> None:
+def test_currency_default_is_usd() -> None:
     cfg = AlphorynConfig(etf1="SPY", etf2="QQQ")
     assert cfg.currency == "USD"
 

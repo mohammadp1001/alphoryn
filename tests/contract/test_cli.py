@@ -199,10 +199,10 @@ def test_status_shows_no_runs_when_db_empty(tmp_path: Path) -> None:
 
 
 def test_status_shows_current_run(tmp_path: Path) -> None:
-    from alphoryn.memory.bank import MemoryBank as MB
+    from alphoryn.memory.bank import MemoryBank
 
     db = tmp_path / "memory.db"
-    bank = MB(str(db))
+    bank = MemoryBank(str(db))
     bank.start_run('{"etf1":"SPY"}', 6)
 
     result = runner.invoke(app, ["status", "--db", str(db)])
@@ -240,10 +240,10 @@ def test_history_shows_no_runs_when_db_empty(tmp_path: Path) -> None:
 
 
 def test_history_shows_table_header(tmp_path: Path) -> None:
-    from alphoryn.memory.bank import MemoryBank as MB
+    from alphoryn.memory.bank import MemoryBank
 
     db = tmp_path / "memory.db"
-    bank = MB(str(db))
+    bank = MemoryBank(str(db))
     bank.start_run('{"etf1":"SPY"}', 6)
 
     result = runner.invoke(app, ["history", "--db", str(db)])
@@ -262,10 +262,10 @@ def test_history_exit_code_2_on_bad_db(tmp_path: Path) -> None:
 
 
 def test_history_filter_by_run(tmp_path: Path) -> None:
-    from alphoryn.memory.bank import MemoryBank as MB
+    from alphoryn.memory.bank import MemoryBank
 
     db = tmp_path / "memory.db"
-    bank = MB(str(db))
+    bank = MemoryBank(str(db))
     bank.start_run('{"etf1":"SPY"}', 6)
     bank.start_run('{"etf1":"SPY"}', 6)
 
