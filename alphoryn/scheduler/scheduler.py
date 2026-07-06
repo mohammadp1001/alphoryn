@@ -21,7 +21,7 @@ from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import MemoryEntry, Session
 
 if TYPE_CHECKING:
-    from alphoryn.agents.feedback_agent import FeedbackAgent, FeedbackInput
+    from alphoryn.agents.feedback_agent import FeedbackAgent
     from alphoryn.agents.main_agent import MainAgent
     from alphoryn.execution.agent import ExecutionAgent, SessionDecision
     from alphoryn.reports.generator import ReportGenerator
