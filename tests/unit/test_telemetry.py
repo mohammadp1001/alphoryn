@@ -42,40 +42,20 @@ def test_event_types_includes_expected_values() -> None:
 
 def _make_logger_no_cloud() -> TelemetryLogger:
     """Build a TelemetryLogger with Cloud Logging unavailable (stderr fallback)."""
-    with patch.dict(
-        "sys.modules",
-        {"google.cloud.logging": None, "google": None, "google.cloud": None},
-    ):
+    with patch("alphoryn.telemetry.logger._gcloud_logging") as mock_gcl:
+        mock_gcl.Client.side_effect = Exception("no cloud")
         return TelemetryLogger()
 
 
 def _make_logger_with_cloud() -> tuple[TelemetryLogger, MagicMock]:
-    """Build a TelemetryLogger backed by a mock Cloud Logging client.
-
-    After `import google.cloud.logging` (a statement), the local name `google`
-    is bound to sys.modules["google"]. All subsequent attribute accesses
-    (google.cloud.logging.Client) therefore traverse the MagicMock chain
-    attached to that entry, not sys.modules["google.cloud.logging"] directly.
-    So we wire the full attribute path on mock_google.
-    """
+    """Build a TelemetryLogger backed by a mock Cloud Logging client."""
     mock_cloud_logger = MagicMock()
     mock_client_instance = MagicMock()
     mock_client_instance.logger.return_value = mock_cloud_logger
     mock_gcl = MagicMock()
     mock_gcl.Client.return_value = mock_client_instance
-    mock_google_cloud = MagicMock()
-    mock_google_cloud.logging = mock_gcl
-    mock_google = MagicMock()
-    mock_google.cloud = mock_google_cloud
 
-    with patch.dict(
-        "sys.modules",
-        {
-            "google": mock_google,
-            "google.cloud": mock_google_cloud,
-            "google.cloud.logging": mock_gcl,
-        },
-    ):
+    with patch("alphoryn.telemetry.logger._gcloud_logging", mock_gcl):
         logger = TelemetryLogger(log_name="test-log")
 
     return logger, mock_cloud_logger

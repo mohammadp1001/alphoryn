@@ -12,10 +12,14 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from sqlalchemy.orm import Session as DBSession
 
 from alphoryn.config.loader import load_config
-from alphoryn.config.models import AlphorynConfig
+from alphoryn.config.models import AlphorynConfig, _parse_duration_seconds
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
+from alphoryn.memory.schema import Position, Run
+from alphoryn.memory.schema import Session as SessionModel
+from alphoryn.scheduler.scheduler import Scheduler
 from alphoryn.secrets.client import SecretsError, load_alpaca_credentials
 
 _VERSION = "0.0.1"
@@ -108,14 +112,12 @@ def run(
         f" — {len(open_positions)} open position{'s' if len(open_positions) != 1 else ''} loaded"
     )
 
-    # 6. Delegate to scheduler (imported lazily to keep startup testable)
+    # 6. Delegate to scheduler
     _start_scheduler(cfg, bank)
 
 
 def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
     """Emit a warning when session count is fractional (rounded down)."""
-    from alphoryn.config.models import _parse_duration_seconds
-
     _timeframe_seconds = {"30min": 1800, "1H": 3600, "4H": 14400}
     run_secs = _parse_duration_seconds(cfg.run_duration)
     candle_secs = _timeframe_seconds[cfg.candle_timeframe]
@@ -128,9 +130,7 @@ def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
 
 
 def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
-    """Import and run the scheduler. Separate function so tests can patch it."""
-    from alphoryn.scheduler.scheduler import Scheduler
-
+    """Run the scheduler. Separate function so tests can patch it."""
     scheduler = Scheduler(cfg, bank)
     scheduler.run()
 
@@ -153,10 +153,6 @@ def status(
     except MemoryBankError as exc:
         typer.echo(f"Memory bank error: {exc}", err=True)
         raise typer.Exit(2) from exc
-
-    from sqlalchemy.orm import Session as DBSession
-
-    from alphoryn.memory.schema import Position, Run
 
     with DBSession(bank._engine) as s:
         latest_run = s.query(Run).order_by(Run.id.desc()).first()
@@ -224,11 +220,6 @@ def history(
     except MemoryBankError as exc:
         typer.echo(f"Memory bank error: {exc}", err=True)
         raise typer.Exit(2) from exc
-
-    from sqlalchemy.orm import Session as DBSession
-
-    from alphoryn.memory.schema import Run
-    from alphoryn.memory.schema import Session as SessionModel
 
     with DBSession(bank._engine) as s:
         if run is not None:

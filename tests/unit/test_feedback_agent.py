@@ -15,6 +15,7 @@ from alphoryn.agents.feedback_agent import (
     FeedbackAgentError,
     FeedbackInput,
 )
+from alphoryn.agents.prompts import FEEDBACK_AGENT_SYSTEM_PROMPT
 
 _extract_thesis = FeedbackAgent._extract_thesis
 _build_prompt = FeedbackAgent._build_prompt
@@ -397,20 +398,14 @@ def test_evaluate_three_failures_evaluation_written_once() -> None:
 
 
 def test_feedback_agent_system_prompt_is_non_empty() -> None:
-    from alphoryn.agents.prompts import FEEDBACK_AGENT_SYSTEM_PROMPT
-
     assert len(FEEDBACK_AGENT_SYSTEM_PROMPT) > 100
 
 
 def test_feedback_agent_system_prompt_mentions_judgment_values() -> None:
-    from alphoryn.agents.prompts import FEEDBACK_AGENT_SYSTEM_PROMPT
-
     for val in ("CORRECT", "INCORRECT", "NEUTRAL"):
         assert val in FEEDBACK_AGENT_SYSTEM_PROMPT
 
 
 def test_feedback_agent_system_prompt_mentions_investment_thesis() -> None:
-    from alphoryn.agents.prompts import FEEDBACK_AGENT_SYSTEM_PROMPT
-
     prompt_lower = FEEDBACK_AGENT_SYSTEM_PROMPT.lower()
     assert "investment-thesis" in prompt_lower or "thesis" in prompt_lower

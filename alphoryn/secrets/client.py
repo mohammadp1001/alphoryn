@@ -1,6 +1,8 @@
 import logging
 import os
 
+from google.cloud import secretmanager
+
 _logger = logging.getLogger(__name__)
 
 _SECRET_ENV_MAP: dict[str, str] = {
@@ -50,7 +52,6 @@ def _make_client() -> object:
         SecretsError: If the client cannot be instantiated (e.g. auth failure).
     """
     try:
-        from google.cloud import secretmanager
         return secretmanager.SecretManagerServiceClient()
     except Exception as exc:
         _logger.exception("Failed to create Secret Manager client: %s", exc)

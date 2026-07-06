@@ -1,6 +1,7 @@
 """Unit tests for alphoryn/scheduler/scheduler.py (T016 + T029/T030 scope)."""
 
 import threading
+import time
 from datetime import UTC, datetime
 from io import StringIO
 from unittest.mock import MagicMock, patch
@@ -115,20 +116,8 @@ def test_get_market_clock_calls_alpaca_trading_client() -> None:
     mock_clock = MagicMock()
     mock_client = MagicMock()
     mock_client.get_clock.return_value = mock_clock
-    mock_tc_cls = MagicMock(return_value=mock_client)
-    mock_alpaca = MagicMock()
-    mock_alpaca.TradingClient = mock_tc_cls
-    mock_trading_mod = MagicMock()
-    mock_trading_mod.TradingClient = mock_tc_cls
 
-    with patch.dict(
-        "sys.modules",
-        {
-            "alpaca": MagicMock(),
-            "alpaca.trading": MagicMock(),
-            "alpaca.trading.client": mock_trading_mod,
-        },
-    ):
+    with patch("alphoryn.scheduler.scheduler.TradingClient", return_value=mock_client):
         result = sched.get_market_clock()
 
     assert result is mock_clock
@@ -488,8 +477,6 @@ def test_run_does_not_count_closed_market_session() -> None:
 def test_investigation_timeout_emits_budget_timeout() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
     # Make decide() block long enough for timeout
-    import time
-
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
 
     _run_with_no_wait(sched)
@@ -500,8 +487,6 @@ def test_investigation_timeout_emits_budget_timeout() -> None:
 
 def test_investigation_timeout_writes_skipped_session() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
-    import time
-
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
 
     _run_with_no_wait(sched)
@@ -513,8 +498,6 @@ def test_investigation_timeout_writes_skipped_session() -> None:
 
 def test_execute_timeout_emits_budget_timeout() -> None:
     sched = _full_scheduler(_execute_budget_secs=0)
-    import time
-
     sched._execution_agent.execute.side_effect = lambda *a: time.sleep(0.5)
 
     _run_with_no_wait(sched)
@@ -570,8 +553,6 @@ def test_run_investigation_returns_decision_on_success() -> None:
 
 
 def test_run_investigation_returns_none_on_timeout() -> None:
-    import time
-
     sched = _full_scheduler(_investigation_budget_secs=0)
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
     result = sched._run_investigation("sess-001", datetime.now(UTC))
@@ -676,8 +657,6 @@ def test_process_session_no_logger_does_not_raise() -> None:
 
 
 def test_investigation_timeout_no_logger_returns_none() -> None:
-    import time
-
     sched = _full_scheduler(_investigation_budget_secs=0)
     sched._logger = None
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
@@ -686,8 +665,6 @@ def test_investigation_timeout_no_logger_returns_none() -> None:
 
 
 def test_execute_timeout_no_logger_does_not_raise() -> None:
-    import time
-
     sched = _full_scheduler(_execute_budget_secs=0)
     sched._logger = None
     sched._execution_agent.execute.side_effect = lambda *a: time.sleep(0.5)
