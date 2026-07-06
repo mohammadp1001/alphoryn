@@ -14,13 +14,19 @@ from typing import Annotated
 import typer
 from sqlalchemy.orm import Session as DBSession
 
+from alphoryn.agents.feedback_agent import FeedbackAgent
+from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.loader import load_config
 from alphoryn.config.models import AlphorynConfig, _parse_duration_seconds
+from alphoryn.execution.agent import ExecutionAgent
+from alphoryn.market_data.client import MarketDataClient
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.memory.schema import Position, Run
 from alphoryn.memory.schema import Session as SessionModel
+from alphoryn.reports.generator import ReportGenerator
 from alphoryn.scheduler.scheduler import Scheduler
 from alphoryn.secrets.client import SecretsError, load_alpaca_credentials
+from alphoryn.telemetry.logger import TelemetryLogger
 
 _VERSION = "0.0.1"
 
@@ -131,7 +137,17 @@ def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
 
 def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
     """Run the scheduler. Separate function so tests can patch it."""
-    scheduler = Scheduler(cfg, bank)
+    logger = TelemetryLogger()
+    market_data = MarketDataClient()
+    scheduler = Scheduler(
+        cfg,
+        bank,
+        main_agent=MainAgent(market_data, logger),
+        execution_agent=ExecutionAgent(bank),
+        feedback_agent=FeedbackAgent(market_data, bank, logger),
+        report_generator=ReportGenerator(),
+        logger=logger,
+    )
     scheduler.run()
 
 
