@@ -91,7 +91,7 @@
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
 - [x] T021 [P] [US2] Unit tests for `alphoryn/market_data/client.py` in `tests/unit/test_market_data.py` (stub `alpaca-py` bars; verify all 15 `ETFSignals` fields computed correctly from fixture OHLCV data: RSI-14, ADX-14, EMA-20, EMA-50, SMA-20, Bollinger bands and %B, MACD line/signal/histogram, volume ratio, price vs EMA/SMA pct; `build_snapshot` returns frozen `SignalSnapshot`; `data_fetch` not exposed as ADK tool)
-- [ ] T022 [P] [US2] Unit tests for `alphoryn/execution/agent.py` in `tests/unit/test_execution.py` (stub `alpaca-py`; BUY decision → `BUDGET_CHECK` + `ORDER_PLACED` events + `Position` written; HOLD → `AGENT_DECISION` event only; budget exceeded → `ORDER_FAILED`; assert zero LLM model calls — verifies constitution Principle I)
+- [x] T022 [P] [US2] Unit tests for `alphoryn/execution/agent.py` in `tests/unit/test_execution.py` (stub `alpaca-py`; BUY decision → `BUDGET_CHECK` + `ORDER_PLACED` events + `Position` written; HOLD → `AGENT_DECISION` event only; budget exceeded → `ORDER_FAILED`; assert zero LLM model calls — verifies constitution Principle I)
 - [ ] T023 [P] [US2] Unit tests for `alphoryn/reports/generator.py` in `tests/unit/test_reports.py` (mean_reversion template renders `<section id="investment-thesis">`; momentum template renders trailing stop watermark field; path format `reports/run-{id}/session-{seq}.html`; per-strategy context object from `contracts/report-context.md`)
 
 ### Implementation for User Story 2
