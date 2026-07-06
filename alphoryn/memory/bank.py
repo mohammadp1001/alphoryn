@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session as DBSession
@@ -11,6 +12,8 @@ from .schema import (
     create_tables,
     get_engine,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 class MemoryBankError(Exception):
@@ -42,6 +45,7 @@ class MemoryBank:
             with DBSession(self._engine) as s:
                 s.query(Run).limit(1).all()
         except Exception as exc:
+            _logger.exception("Memory bank inaccessible at %r: %s", db_path, exc)
             raise MemoryBankError(f"Memory bank inaccessible at {db_path!r}: {exc}") from exc
 
     # ------------------------------------------------------------------

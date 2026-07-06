@@ -1,6 +1,9 @@
+import logging
 import os
 
 from google.cloud import secretmanager
+
+_logger = logging.getLogger(__name__)
 
 _SECRET_ENV_MAP: dict[str, str] = {
     "alpaca-api-key": "ALPACA_API_KEY",
@@ -29,6 +32,10 @@ def load_alpaca_credentials(project_id: str | None = None) -> None:
     """
     resolved = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT")
     if not resolved:
+        _logger.error(
+            "Cannot load Alpaca credentials: GCP project ID not set. "
+            "Pass project_id= or set GOOGLE_CLOUD_PROJECT."
+        )
         raise SecretsError(
             "GCP project ID not set. Pass project_id= or set GOOGLE_CLOUD_PROJECT."
         )
@@ -47,6 +54,7 @@ def _make_client() -> object:
     try:
         return secretmanager.SecretManagerServiceClient()
     except Exception as exc:
+        _logger.exception("Failed to create Secret Manager client: %s", exc)
         raise SecretsError(f"Cannot connect to GCP Secret Manager: {exc}") from exc
 
 
@@ -63,4 +71,5 @@ def _fetch_and_inject(
         response = client.access_secret_version(request={"name": name})  # type: ignore[union-attr]
         os.environ[env_var] = response.payload.data.decode("utf-8")
     except Exception as exc:
+        _logger.exception("Failed to fetch secret %r into %s: %s", secret_name, env_var, exc)
         raise SecretsError(f"Failed to fetch secret {secret_name!r}: {exc}") from exc
