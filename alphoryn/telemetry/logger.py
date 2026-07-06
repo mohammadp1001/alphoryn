@@ -1,9 +1,12 @@
 import json
+import logging
 import sys
 from datetime import UTC, datetime
 from typing import Any
 
 import google.cloud.logging as _gcloud_logging
+
+_logger = logging.getLogger(__name__)
 
 EVENT_TYPES = frozenset(
     {
@@ -39,8 +42,8 @@ class TelemetryLogger:
         try:
             client = _gcloud_logging.Client()
             self._cloud_logger = client.logger(log_name)
-        except Exception:  # noqa: S110
-            pass  # Cloud Logging unavailable — stderr fallback active
+        except Exception as exc:
+            _logger.warning("Cloud Logging unavailable, falling back to stderr: %s", exc)
 
     def emit(
         self,
@@ -75,7 +78,7 @@ class TelemetryLogger:
             try:
                 self._cloud_logger.log_struct(event)  # type: ignore[union-attr]
                 return
-            except Exception:  # noqa: S110
-                pass
+            except Exception as exc:
+                _logger.warning("Cloud Logging write failed, falling back to stderr: %s", exc)
         # Fallback: write to stderr (constitution Principle IV)
         print(json.dumps(event, default=str), file=sys.stderr)  # noqa: T201
