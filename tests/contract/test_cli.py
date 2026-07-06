@@ -271,3 +271,72 @@ def test_history_filter_by_run(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["history", "--db", str(db), "--run", "1"])
     assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# T043: quickstart validation — help commands and config.json.example
+# ---------------------------------------------------------------------------
+
+
+def test_root_help_exits_zero() -> None:
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+
+
+def test_root_help_lists_run_status_history() -> None:
+    result = runner.invoke(app, ["--help"])
+    plain = _plain(result.output)
+    assert "run" in plain
+    assert "status" in plain
+    assert "history" in plain
+
+
+def test_run_help_exits_zero() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+    assert result.exit_code == 0
+
+
+def test_run_help_lists_expected_options() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+    plain = _plain(result.output)
+    assert "--config" in plain
+    assert "--etf1" in plain
+    assert "--etf2" in plain
+    assert "--stop-loss" in plain
+
+
+def test_config_example_file_loads_without_error(tmp_path: Path) -> None:
+    """config.json.example must be valid JSON that passes AlphorynConfig validation."""
+    import json
+    from pathlib import Path
+
+    example = Path(__file__).parents[2] / "config.json.example"
+    assert example.exists(), "config.json.example is missing from repo root"
+    data = json.loads(example.read_text(encoding="utf-8"))
+    from alphoryn.config.loader import load_config
+
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps(data), encoding="utf-8")
+    cfg = load_config(str(cfg_file))
+    assert cfg.etf1 == "SPY"
+    assert cfg.etf2 == "QQQ"
+
+
+def test_memory_bank_default_path_is_home_alphoryn(tmp_path: Path) -> None:
+    """status --help reveals that the default --db is ~/.alphoryn/memory.db."""
+    result = runner.invoke(app, ["status", "--help"])
+    plain = _plain(result.output)
+    assert "~/.alphoryn/memory.db" in plain
+
+
+def test_memory_bank_initializes_at_default_path(tmp_path: Path, monkeypatch) -> None:
+    """MemoryBank can be initialised at the default ~/.alphoryn/memory.db path."""
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    db_path = str((fake_home / ".alphoryn" / "memory.db").expanduser())
+    from alphoryn.memory.bank import MemoryBank
+
+    MemoryBank(db_path)
+    assert (fake_home / ".alphoryn" / "memory.db").exists()
