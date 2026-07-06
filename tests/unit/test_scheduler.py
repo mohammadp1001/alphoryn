@@ -259,11 +259,12 @@ def test_wait_for_candle_close_no_warn_within_latency() -> None:
     assert "WARN" not in err_buf.getvalue()
 
 
-def test_wait_for_candle_close_sleeps_in_10s_increments() -> None:
+def test_wait_for_candle_close_sleeps_in_1s_increments() -> None:
     sched = _scheduler(max_startup_latency_seconds=3600)
     future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
 
     times = [
+        datetime(2024, 1, 15, 15, 59, 35, tzinfo=UTC),  # total_secs baseline
         datetime(2024, 1, 15, 15, 59, 35, tzinfo=UTC),  # 25s remaining
         datetime(2024, 1, 15, 15, 59, 45, tzinfo=UTC),  # 15s remaining
         datetime(2024, 1, 15, 15, 59, 55, tzinfo=UTC),  # 5s remaining
@@ -283,8 +284,8 @@ def test_wait_for_candle_close_sleeps_in_10s_increments() -> None:
         mock_dt.fromtimestamp = datetime.fromtimestamp
         sched.wait_for_candle_close(future, _sleep=sleep_args.append)
 
-    # All sleep durations must be ≤ 10
-    assert all(s <= 10.0 for s in sleep_args)
+    # All sleep durations must be ≤ 1
+    assert all(s <= 1.0 for s in sleep_args)
     assert len(sleep_args) >= 1
 
 
