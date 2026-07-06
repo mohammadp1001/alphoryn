@@ -1,8 +1,8 @@
 import os
 
 _SECRET_ENV_MAP: dict[str, str] = {
-    "alphoryn-alpaca-api-key": "ALPACA_API_KEY",
-    "alphoryn-alpaca-secret-key": "ALPACA_SECRET_KEY",
+    "alpaca-api-key": "ALPACA_API_KEY",
+    "alpaca-api-secret": "ALPACA_SECRET_KEY",
 }
 
 

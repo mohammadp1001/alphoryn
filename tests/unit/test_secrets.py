@@ -97,9 +97,9 @@ def _mock_client_factory(
     def side_effect(request):  # type: ignore[no-untyped-def]
         name: str = request["name"]
         mock_resp = MagicMock()
-        if "alphoryn-alpaca-api-key" in name:
+        if "alpaca-api-key" in name:
             mock_resp.payload.data = api_key_value.encode()
-        elif "alphoryn-alpaca-secret-key" in name:
+        elif "alpaca-api-secret" in name:
             mock_resp.payload.data = secret_key_value.encode()
         else:
             raise RuntimeError(f"unexpected secret: {name}")
