@@ -193,13 +193,16 @@ class Scheduler:
 
         close_str = target.strftime("%Y-%m-%d %H:%M UTC")
         bar_width = 30
+        enc = getattr(sys.stdout, "encoding", None) or ""
+        _fill = "█" if "utf" in enc.lower() else "#"
+        _empty = "░" if "utf" in enc.lower() else "-"
 
         while True:
             now = datetime.now(UTC)
             remaining = max(0.0, (target - now).total_seconds())
             elapsed = total_secs - remaining
             filled = int(bar_width * elapsed / total_secs) if total_secs > 0 else bar_width
-            bar = "█" * filled + "░" * (bar_width - filled)
+            bar = _fill * filled + _empty * (bar_width - filled)
             mins, secs_part = divmod(int(remaining), 60)
             sys.stdout.write(
                 f"\rWaiting for next candle close at {close_str}"
