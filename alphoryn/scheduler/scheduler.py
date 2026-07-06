@@ -13,20 +13,19 @@ import sys
 import threading
 import time
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import typer
+from alpaca.trading.client import TradingClient
 
+from alphoryn.agents.feedback_agent import FeedbackAgent, FeedbackInput
+from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.models import AlphorynConfig
+from alphoryn.execution.agent import ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import MemoryEntry, Session
-
-if TYPE_CHECKING:
-    from alphoryn.agents.feedback_agent import FeedbackAgent
-    from alphoryn.agents.main_agent import MainAgent
-    from alphoryn.execution.agent import ExecutionAgent, SessionDecision
-    from alphoryn.reports.generator import ReportGenerator
-    from alphoryn.telemetry.logger import TelemetryLogger
+from alphoryn.reports.generator import ReportGenerator
+from alphoryn.telemetry.logger import TelemetryLogger
 
 _TIMEFRAME_SECONDS: dict[str, int] = {"30min": 1800, "1H": 3600, "4H": 14400}
 _INVESTIGATION_BUDGET_SECS = 52 * 60
@@ -93,8 +92,6 @@ class Scheduler:
         Raises:
             RuntimeError: if credentials are missing or the API call fails.
         """
-        from alpaca.trading.client import TradingClient
-
         client = TradingClient(
             api_key=os.environ.get("ALPACA_API_KEY", ""),
             secret_key=os.environ.get("ALPACA_SECRET_KEY", ""),
@@ -291,8 +288,6 @@ class Scheduler:
         """
         if self._feedback_agent is None:
             return
-        from alphoryn.agents.feedback_agent import FeedbackInput
-
         positions = self._bank.get_positions_due_for_feedback(session_ordinal)
         for pos in positions:
             entry_session = self._bank.get_session(pos.session_id)

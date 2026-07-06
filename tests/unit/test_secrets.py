@@ -17,30 +17,17 @@ from alphoryn.secrets.client import (
 
 def test_make_client_returns_secret_manager_client() -> None:
     mock_client = MagicMock()
-    mock_sm = MagicMock()
-    mock_sm.SecretManagerServiceClient.return_value = mock_client
-    mock_google_cloud = MagicMock()
-    mock_google_cloud.secretmanager = mock_sm
-
-    with patch.dict(
-        "sys.modules",
-        {
-            "google": MagicMock(),
-            "google.cloud": mock_google_cloud,
-            "google.cloud.secretmanager": mock_sm,
-        },
-    ):
+    with patch("alphoryn.secrets.client.secretmanager") as mock_sm:
+        mock_sm.SecretManagerServiceClient.return_value = mock_client
         result = _make_client()
-
     assert result is mock_client
     mock_sm.SecretManagerServiceClient.assert_called_once()
 
 
-def test_make_client_import_failure_raises_secrets_error() -> None:
-    # Setting a key to None in sys.modules causes ImportError on import
-    with patch.dict(
-        "sys.modules",
-        {"google": None, "google.cloud": None, "google.cloud.secretmanager": None},
+def test_make_client_instantiation_failure_raises_secrets_error() -> None:
+    with patch(
+        "alphoryn.secrets.client.secretmanager.SecretManagerServiceClient",
+        side_effect=Exception("auth failure"),
     ):
         with pytest.raises(SecretsError, match="Cannot connect to GCP Secret Manager"):
             _make_client()

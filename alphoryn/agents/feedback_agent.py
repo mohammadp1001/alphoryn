@@ -12,19 +12,17 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.genai import types as genai_types
 
 from alphoryn.agents.prompts import FEEDBACK_AGENT_SYSTEM_PROMPT
+from alphoryn.market_data.client import MarketDataClient
+from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import FeedbackEvaluation
-
-if TYPE_CHECKING:
-    from alphoryn.market_data.client import MarketDataClient
-    from alphoryn.memory.bank import MemoryBank
-    from alphoryn.telemetry.logger import TelemetryLogger
+from alphoryn.telemetry.logger import TelemetryLogger
 
 _FEEDBACK_AGENT_MODEL = "gemini-2.0-flash"
 _MAX_ATTEMPTS = 3
@@ -61,9 +59,9 @@ class FeedbackAgent:
 
     def __init__(
         self,
-        market_data_client: "MarketDataClient",
-        bank: "MemoryBank",
-        logger: "TelemetryLogger",
+        market_data_client: MarketDataClient,
+        bank: MemoryBank,
+        logger: TelemetryLogger,
     ) -> None:
         self._market_data = market_data_client
         self._bank = bank

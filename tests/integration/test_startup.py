@@ -10,10 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import sqlalchemy.orm as orm
 from typer.testing import CliRunner
 
 from alphoryn.cli.main import app
 from alphoryn.memory.bank import MemoryBank
+from alphoryn.memory.schema import Position
+from alphoryn.memory.schema import Session as Sess
 from alphoryn.secrets.client import SecretsError
 
 runner = CliRunner()
@@ -95,11 +98,6 @@ def test_startup_reads_preexisting_open_position_from_real_db(tmp_path: Path) ->
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
-
-    import sqlalchemy.orm as orm
-
-    from alphoryn.memory.schema import Position
-    from alphoryn.memory.schema import Session as Sess
 
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:

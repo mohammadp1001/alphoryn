@@ -15,6 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy.orm import Session as DBSession
+
 from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.models import AlphorynConfig
 from alphoryn.execution.agent import ETFDecision, SessionDecision
@@ -159,8 +161,6 @@ def test_process_session_writes_session_record(tmp_path: Path) -> None:
             candle_close_at=_CANDLE_CLOSE_AT,
         )
 
-    from sqlalchemy.orm import Session as DBSession
-
     with DBSession(bank._engine) as s:
         sess = s.query(Session).filter(Session.id == "run-1/session-0001").one()
     assert sess.status == "COMPLETED"
@@ -183,8 +183,6 @@ def test_process_session_writes_memory_entries(tmp_path: Path) -> None:
             session_ordinal=1,
             candle_close_at=_CANDLE_CLOSE_AT,
         )
-
-    from sqlalchemy.orm import Session as DBSession
 
     with DBSession(bank._engine) as s:
         entries = s.query(MemoryEntry).all()
@@ -265,8 +263,6 @@ def test_process_session_writes_report_path_to_db(tmp_path: Path) -> None:
             session_ordinal=1,
             candle_close_at=_CANDLE_CLOSE_AT,
         )
-
-    from sqlalchemy.orm import Session as DBSession
 
     with DBSession(bank._engine) as s:
         sess = s.query(Session).filter(Session.id == "run-1/session-0001").one()
@@ -375,8 +371,6 @@ def test_investigation_timeout_writes_skipped_timeout_to_db(tmp_path: Path) -> N
         candle_close_at=_CANDLE_CLOSE_AT,
     )
 
-    from sqlalchemy.orm import Session as DBSession
-
     with DBSession(bank._engine) as s:
         sess = s.query(Session).filter(Session.id == "run-1/session-0001").one()
     assert sess.status == "SKIPPED_TIMEOUT"
@@ -418,8 +412,6 @@ def test_investigation_timeout_no_memory_entries_written(tmp_path: Path) -> None
         session_ordinal=1,
         candle_close_at=_CANDLE_CLOSE_AT,
     )
-
-    from sqlalchemy.orm import Session as DBSession
 
     with DBSession(bank._engine) as s:
         count = s.query(MemoryEntry).count()

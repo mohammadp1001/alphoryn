@@ -1,5 +1,7 @@
 import os
 
+from google.cloud import secretmanager
+
 _SECRET_ENV_MAP: dict[str, str] = {
     "alpaca-api-key": "ALPACA_API_KEY",
     "alpaca-api-secret": "ALPACA_SECRET_KEY",
@@ -43,7 +45,6 @@ def _make_client() -> object:
         SecretsError: If the client cannot be instantiated (e.g. auth failure).
     """
     try:
-        from google.cloud import secretmanager
         return secretmanager.SecretManagerServiceClient()
     except Exception as exc:
         raise SecretsError(f"Cannot connect to GCP Secret Manager: {exc}") from exc
