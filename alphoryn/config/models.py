@@ -7,6 +7,8 @@ from pydantic import BaseModel, field_validator
 _logger = logging.getLogger(__name__)
 
 _TIMEFRAME_SECONDS: dict[str, int] = {
+    "10min": 600,
+    "15min": 900,
     "30min": 1800,
     "1H": 3600,
     "4H": 14400,
@@ -33,7 +35,8 @@ class AlphorynConfig(BaseModel):
 
     etf1: str
     etf2: str
-    candle_timeframe: Literal["30min", "1H", "4H"] = "1H"
+    candle_timeframe: Literal["10min", "15min", "30min", "1H", "4H"] = "1H"
+    extended_hours: bool = False
     run_duration: str = "24H"
     exchange: str | None = None
     session_money_budget: float | None = None

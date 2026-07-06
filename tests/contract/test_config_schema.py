@@ -91,17 +91,17 @@ def test_session_money_budget_positive_accepted() -> None:
 
 
 # ---------------------------------------------------------------------------
-# candle_timeframe restricted to 30min | 1H | 4H
+# candle_timeframe restricted to 10min | 15min | 30min | 1H | 4H
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("tf", ["30min", "1H", "4H"])
+@pytest.mark.parametrize("tf", ["10min", "15min", "30min", "1H", "4H"])
 def test_allowed_candle_timeframes(tf: str) -> None:
     cfg = AlphorynConfig(etf1="SPY", etf2="QQQ", candle_timeframe=tf)
     assert cfg.candle_timeframe == tf
 
 
-@pytest.mark.parametrize("bad_tf", ["15min", "2H", "D", "1h", "30MIN", "1hour"])
+@pytest.mark.parametrize("bad_tf", ["2H", "D", "1h", "30MIN", "1hour", "5min"])
 def test_disallowed_candle_timeframes_raise(bad_tf: str) -> None:
     with pytest.raises(ValidationError):
         AlphorynConfig(etf1="SPY", etf2="QQQ", candle_timeframe=bad_tf)

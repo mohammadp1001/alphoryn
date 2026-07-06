@@ -1,16 +1,22 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.1 → 1.0.2
-Modified principles: N/A
+Version change: 1.0.3 → 1.1.0
+Modified principles:
+  - Principle III: Session budget generalized from 1H-specific minutes to
+    timeframe-relative fractions (80% investigate / 20% decide+execute).
+Added sections: None
+Removed sections: None
 Changed sections:
-  - Development Standards: Python version updated from 3.11+ to 3.13+
+  - Development Standards: Added 10min and 15min candle timeframes (testing only);
+    added extended_hours config flag for integration test use.
 Templates requiring updates:
   ✅ .specify/templates/plan-template.md — no change needed
   ✅ .specify/templates/spec-template.md — no change needed
   ✅ .specify/templates/tasks-template.md — no change needed
-Deferred TODOs:
-  - None
+Follow-up TODOs:
+  - alphoryn/config/models.py: Add "10min" and "15min" to _TIMEFRAME_SECONDS and
+    AlphorynConfig.candle_timeframe Literal; add extended_hours: bool = False field.
 -->
 
 # Alphoryn Constitution
@@ -39,13 +45,16 @@ discovered by tests are free, errors discovered at runtime are not.
 
 ### III. Session Budget is Enforced, Not Advisory
 
-Every session step MUST complete within its defined time budget (52 min investigate /
-7 min decide+execute). An overrun MUST force a **Hold** decision and emit a structured
-warning log. The system MUST never silently skip a budget check or proceed past a
-timeout hoping to finish in time.
+Every session step MUST complete within its defined time budget. The budget is expressed
+as a fraction of the candle timeframe: **≤ 80% for investigation** and **≤ 20% for
+decide + execute**. For a 1H candle this is 48 min / 12 min; for a 15min candle it is
+12 min / 3 min; for a 10min candle it is 8 min / 2 min. An overrun MUST force
+a **Hold** decision and emit a structured warning log. The system MUST never silently skip
+a budget check or proceed past a timeout hoping to finish in time.
 
 **Rationale**: The candle timeframe is a hard wall. Decisions that bleed into the next
-candle corrupt the data assumptions the strategy was built on.
+candle corrupt the data assumptions the strategy was built on. Shorter candles used in
+integration testing have the same proportional constraint.
 
 ### IV. Fail Loud, Hold Safe
 
@@ -74,10 +83,10 @@ reproducible when reviewed via the feedback agent or HTML reports.
 ## Performance Requirements
 
 - Candle-close-to-first-action latency MUST be under 60 seconds (data fetch + snapshot).
-- Investigation MUST complete within 52 minutes; any sub-step exceeding its share
-  triggers a Hold, not a retry.
+- Investigation MUST complete within 80% of the candle timeframe; any sub-step
+  exceeding its share triggers a Hold, not a retry.
 - The stop-loss monitoring loop MUST poll at an interval short enough to react within
-  one 1-minute candle (i.e., poll interval ≤ 30 seconds).
+  one candle period (poll interval ≤ min(30 seconds, candle_seconds / 4)).
 - Paper trading API calls MUST be retried at most once on transient failure; persistent
   failure falls through to the Fail Loud principle above.
 
@@ -88,7 +97,14 @@ reproducible when reviewed via the feedback agent or HTML reports.
 - **Testing**: pytest, 100% coverage, no `pragma: no cover`
 - **Agent SDK**: Google ADK — use Gemini models for main and feedback agents
 - **Config**: All user-tunable parameters (candle timeframe, run duration, money budget,
-  exchange, ETFs) MUST be sourced from a single config file; no hardcoded values in logic
+  exchange, ETFs, extended hours) MUST be sourced from a single config file; no hardcoded
+  values in logic
+- **Candle timeframes**: Valid values are `10min`, `15min`, `30min`, `1H`, and `4H`.
+  `10min` and `15min` are intended for integration testing and development only —
+  production runs SHOULD use `30min` or longer. Extended hours (`extended_hours: true`)
+  is likewise a testing affordance that allows the scheduler to execute outside regular
+  market hours using Alpaca's extended-hours paper API; it MUST NOT be enabled for
+  production configurations.
 - **Logging**: Structured (JSON-serialisable) log entries at every failure boundary and
   session lifecycle event; human-readable console output is secondary
 
@@ -107,4 +123,4 @@ All PRs MUST pass the CI gates defined in Principle II before merge. The Constit
 Check section in `plan-template.md` MUST be completed before Phase 0 research begins
 on any feature.
 
-**Version**: 1.0.3 | **Ratified**: 2026-07-03 | **Last Amended**: 2026-07-05
+**Version**: 1.1.0 | **Ratified**: 2026-07-03 | **Last Amended**: 2026-07-06

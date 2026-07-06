@@ -73,11 +73,11 @@ def test_config_defaults() -> None:
 
 def test_config_invalid_candle_timeframe_raises() -> None:
     with pytest.raises(ValidationError):
-        _minimal(candle_timeframe="15min")
+        _minimal(candle_timeframe="5min")
 
 
 def test_config_valid_candle_timeframes() -> None:
-    for tf in ("30min", "1H", "4H"):
+    for tf in ("10min", "15min", "30min", "1H", "4H"):
         cfg = _minimal(candle_timeframe=tf)
         assert cfg.candle_timeframe == tf
 
