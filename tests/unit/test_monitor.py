@@ -410,7 +410,7 @@ def test_unknown_exit_target_type_falls_through_to_window_check() -> None:
 def test_run_exits_when_stop_event_is_set() -> None:
     stop_event = threading.Event()
     stop_event.set()  # stop immediately
-    monitor, bank, market_data, _ = _make_monitor(
+    monitor, bank, _market_data, _ = _make_monitor(
         stop_event=stop_event, poll_interval=0.01
     )
     bank.load_open_positions.return_value = []
@@ -423,7 +423,7 @@ def test_run_exits_when_stop_event_is_set() -> None:
 
 def test_run_calls_check_positions_before_stopping() -> None:
     stop_event = threading.Event()
-    monitor, bank, market_data, _ = _make_monitor(
+    monitor, bank, _market_data, _ = _make_monitor(
         stop_event=stop_event, poll_interval=0.01
     )
     bank.load_open_positions.return_value = []

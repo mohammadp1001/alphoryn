@@ -283,7 +283,7 @@ def test_evaluate_calls_get_latest_price() -> None:
 
 
 def test_evaluate_no_final_response_triggers_retry() -> None:
-    agent, _, bank, logger = _make_agent()
+    agent, _, bank, _logger = _make_agent()
 
     call_count = [0]
 

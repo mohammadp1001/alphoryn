@@ -6,6 +6,7 @@ SessionDecision JSON. Constitution Principles I (no extra LLM calls) and V
 """
 
 import json
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,6 +18,8 @@ from alphoryn.agents.prompts import MAIN_AGENT_SYSTEM_PROMPT
 from alphoryn.execution.agent import ETFDecision, SessionDecision
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.telemetry.logger import TelemetryLogger
+
+_logger = logging.getLogger(__name__)
 
 
 class MainAgentError(Exception):
@@ -92,11 +95,15 @@ class MainAgent:
                 raw_json = event.content.parts[0].text
 
         if raw_json is None:
+            _logger.error("main_agent produced no final response for session %s", session_id)
             raise MainAgentError("main_agent produced no final response")
 
         try:
             data = json.loads(raw_json)
         except json.JSONDecodeError as exc:
+            _logger.exception(
+                "main_agent response for session %s is not valid JSON: %s", session_id, exc
+            )
             raise MainAgentError(
                 f"main_agent response is not valid JSON: {exc}"
             ) from exc
@@ -143,4 +150,5 @@ def _parse_decision(data: dict[str, Any]) -> SessionDecision:
             etf2=ETFDecision(**data["etf2"]),
         )
     except (KeyError, TypeError) as exc:
+        _logger.exception("Invalid SessionDecision structure from main_agent response: %s", exc)
         raise MainAgentError(f"Invalid SessionDecision structure: {exc}") from exc

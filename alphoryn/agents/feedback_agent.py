@@ -9,6 +9,7 @@ the ETF for new BUYs), and emits warning telemetry.
 """
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     from alphoryn.market_data.client import MarketDataClient
     from alphoryn.memory.bank import MemoryBank
     from alphoryn.telemetry.logger import TelemetryLogger
+
+_logger = logging.getLogger(__name__)
 
 _FEEDBACK_AGENT_MODEL = "gemini-2.0-flash"
 _MAX_ATTEMPTS = 3
@@ -171,6 +174,7 @@ class FeedbackAgent:
                 raw_json = event.content.parts[0].text
 
         if raw_json is None:
+            _logger.error("feedback_agent produced no final response (attempt %d)", attempt)
             raise FeedbackAgentError("feedback_agent produced no final response")
         return raw_json
 
@@ -201,12 +205,18 @@ class FeedbackAgent:
         try:
             data = json.loads(raw_json)
         except json.JSONDecodeError as exc:
+            _logger.exception("feedback_agent returned invalid JSON: %s", exc)
             raise FeedbackAgentError(f"Invalid JSON from feedback_agent: {exc}") from exc
         required = {"outcome_judgment", "thesis_summary", "reasoning"}
         missing = required - data.keys()
         if missing:
+            _logger.error("feedback_agent response missing required fields: %s", missing)
             raise FeedbackAgentError(f"Missing fields in feedback response: {missing}")
         if data["outcome_judgment"] not in ("CORRECT", "INCORRECT", "NEUTRAL"):
+            _logger.error(
+                "feedback_agent returned invalid outcome_judgment: %r",
+                data["outcome_judgment"],
+            )
             raise FeedbackAgentError(
                 f"Invalid outcome_judgment: {data['outcome_judgment']!r}"
             )
