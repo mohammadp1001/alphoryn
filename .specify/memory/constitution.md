@@ -1,22 +1,31 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.3 → 1.1.0
+Version change: 1.1.0 → 1.2.0
 Modified principles:
-  - Principle III: Session budget generalized from 1H-specific minutes to
-    timeframe-relative fractions (80% investigate / 20% decide+execute).
+  - Principle III: Session budget percentages corrected from 80/20 to ~87/13
+    to match actual implementation (52 min investigate / 7 min decide+execute
+    for a 1H candle). Example values for 10min and 4H candles added.
 Added sections: None
 Removed sections: None
 Changed sections:
-  - Development Standards: Added 10min and 15min candle timeframes (testing only);
-    added extended_hours config flag for integration test use.
+  - Development Standards: "ETFs" → "tickers" (PR #99 terminology refactor).
+  - Development Standards: Removed "15min" candle timeframe (not implemented in V0.0.1).
+  - Development Standards: Added Secret Management standard (Google Secret Manager,
+    ADC for GCP auth — never store API credentials in config files or repo).
+  - Development Standards: Expanded Logging standard to document both telemetry
+    streams (Cloud Logging structured events + OTel/Cloud Trace via ADK exporters).
 Templates requiring updates:
-  ✅ .specify/templates/plan-template.md — no change needed
-  ✅ .specify/templates/spec-template.md — no change needed
-  ✅ .specify/templates/tasks-template.md — no change needed
+  ✅ .specify/templates/plan-template.md — no change needed (generic)
+  ✅ .specify/templates/spec-template.md — no change needed (generic)
+  ✅ .specify/templates/tasks-template.md — no change needed (generic)
 Follow-up TODOs:
-  - alphoryn/config/models.py: Add "10min" and "15min" to _TIMEFRAME_SECONDS and
-    AlphorynConfig.candle_timeframe Literal; add extended_hours: bool = False field.
+  - alphoryn/scheduler/scheduler.py: Session budget is hardcoded at 52 min / 7 min.
+    Consider making it proportional to candle_timeframe (87% / 12%) so shorter
+    candles used in testing also get proportional budgets automatically.
+  - alphoryn/telemetry/otel.py: opentelemetry-exporter-gcp-* package is missing;
+    OTel traces are not reaching Cloud Trace. File a GitHub issue to add the
+    dependency and verify the export pipeline.
 -->
 
 # Alphoryn Constitution
@@ -46,9 +55,9 @@ discovered by tests are free, errors discovered at runtime are not.
 ### III. Session Budget is Enforced, Not Advisory
 
 Every session step MUST complete within its defined time budget. The budget is expressed
-as a fraction of the candle timeframe: **≤ 80% for investigation** and **≤ 20% for
-decide + execute**. For a 1H candle this is 48 min / 12 min; for a 15min candle it is
-12 min / 3 min; for a 10min candle it is 8 min / 2 min. An overrun MUST force
+as a fraction of the candle timeframe: **≤ 87% for investigation** and **≤ 13% for
+decide + execute**. For a 1H candle this is 52 min / 7 min; for a 4H candle it is
+208 min / 28 min; for a 10min candle it is 8 min / 1 min. An overrun MUST force
 a **Hold** decision and emit a structured warning log. The system MUST never silently skip
 a budget check or proceed past a timeout hoping to finish in time.
 
@@ -83,7 +92,7 @@ reproducible when reviewed via the feedback agent or HTML reports.
 ## Performance Requirements
 
 - Candle-close-to-first-action latency MUST be under 60 seconds (data fetch + snapshot).
-- Investigation MUST complete within 80% of the candle timeframe; any sub-step
+- Investigation MUST complete within 87% of the candle timeframe; any sub-step
   exceeding its share triggers a Hold, not a retry.
 - The stop-loss monitoring loop MUST poll at an interval short enough to react within
   one candle period (poll interval ≤ min(30 seconds, candle_seconds / 4)).
@@ -97,16 +106,25 @@ reproducible when reviewed via the feedback agent or HTML reports.
 - **Testing**: pytest, 100% coverage, no `pragma: no cover`
 - **Agent SDK**: Google ADK — use Gemini models for main and feedback agents
 - **Config**: All user-tunable parameters (candle timeframe, run duration, money budget,
-  exchange, ETFs, extended hours) MUST be sourced from a single config file; no hardcoded
+  tickers, extended hours) MUST be sourced from a single config file; no hardcoded
   values in logic
-- **Candle timeframes**: Valid values are `10min`, `15min`, `30min`, `1H`, and `4H`.
-  `10min` and `15min` are intended for integration testing and development only —
+- **Secret Management**: API credentials (Alpaca API key and secret) MUST be stored in
+  Google Secret Manager and retrieved at runtime via Application Default Credentials (ADC).
+  Credentials MUST NOT appear in config files, environment files, or the git repository.
+  GCP project: `alphoryn`. Secret names: `alpaca-api-key`, `alpaca-api-secret`.
+- **Candle timeframes**: Valid values are `10min`, `30min`, `1H`, and `4H`.
+  `10min` is intended for integration testing and development only —
   production runs SHOULD use `30min` or longer. Extended hours (`extended_hours: true`)
   is likewise a testing affordance that allows the scheduler to execute outside regular
   market hours using Alpaca's extended-hours paper API; it MUST NOT be enabled for
   production configurations.
-- **Logging**: Structured (JSON-serialisable) log entries at every failure boundary and
-  session lifecycle event; human-readable console output is secondary
+- **Logging**: Two independent telemetry streams MUST be active at runtime:
+  (1) Structured JSON events via `TelemetryLogger` → GCP Cloud Logging (log name
+  `alphoryn`); covers all 14 event types at every failure boundary and session lifecycle
+  event. Fallback to stderr if Cloud Logging is unavailable — never block execution.
+  (2) OTel traces via Google ADK's GCP exporters → Cloud Trace; covers LLM agent
+  invocations (spans, token counts, latency). OTel setup failure MUST be non-fatal.
+  Human-readable console output is secondary to both structured streams.
 
 ## Governance
 
@@ -123,4 +141,4 @@ All PRs MUST pass the CI gates defined in Principle II before merge. The Constit
 Check section in `plan-template.md` MUST be completed before Phase 0 research begins
 on any feature.
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-03 | **Last Amended**: 2026-07-06
+**Version**: 1.2.0 | **Ratified**: 2026-07-03 | **Last Amended**: 2026-07-07

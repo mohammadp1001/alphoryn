@@ -7,6 +7,9 @@
   "integration_settings": {
     "claude": {
       "script": "ps",
+      "parsed_options": {
+        "skills": true
+      },
       "invoke_separator": "-"
     }
   },
