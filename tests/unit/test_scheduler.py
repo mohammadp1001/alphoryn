@@ -842,3 +842,47 @@ def test_process_session_calls_run_feedback_before_investigation() -> None:
         )
 
     assert call_order == ["feedback", "investigation"]
+
+
+# ---------------------------------------------------------------------------
+# Null strategy guard — issue #88
+# ---------------------------------------------------------------------------
+
+
+def test_process_session_null_strategy_skips_memory_write() -> None:
+    """ETFDecision with strategy=None must not attempt a DB write (NOT NULL guard)."""
+    sched = _full_scheduler()
+    null_strategy_decision = SessionDecision(
+        session_id="run-1/session-0001",
+        etf1=ETFDecision(
+            etf="SPY",
+            action="HOLD",
+            strategy=None,  # type: ignore[arg-type]
+            lot_size=None,
+            exit_target=None,
+            reasoning="No regime qualified.",
+        ),
+        etf2=ETFDecision(
+            etf="QQQ",
+            action="HOLD",
+            strategy="MOMENTUM",
+            lot_size=None,
+            exit_target=None,
+            reasoning="Regime present but no entry signal.",
+        ),
+    )
+
+    with patch.object(sched, "_run_investigation", return_value=null_strategy_decision):
+        sched._process_session(
+            run_id=1,
+            session_id="run-1/session-0001",
+            session_ordinal=1,
+            candle_close_at=datetime.now(UTC),
+        )
+
+    # Only QQQ (strategy="MOMENTUM") should be written; SPY (strategy=None) skipped
+    calls = sched._bank.write_memory_entry.call_args_list
+    assert len(calls) == 1
+    written_entry = calls[0].args[0]
+    assert written_entry.etf == "QQQ"
+    assert written_entry.strategy == "MOMENTUM"

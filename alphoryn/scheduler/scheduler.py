@@ -399,6 +399,8 @@ class Scheduler:
 
         if decision is not None:
             for etf_decision in (decision.etf1, decision.etf2):
+                if etf_decision.strategy is None:
+                    continue  # no regime identified — nothing to persist in memory bank
                 entry = MemoryEntry(
                     etf=etf_decision.etf,
                     strategy=etf_decision.strategy,
