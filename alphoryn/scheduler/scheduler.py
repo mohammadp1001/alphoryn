@@ -1,7 +1,7 @@
 """Scheduler: candle boundary alignment, market hours check, and session loop.
 
 T016 implements startup candle boundary alignment + market hours check.
-T029 adds session budget timers (52-min investigation, 7-min execute) and heartbeat.
+T029 adds session budget timers (87%/13% of candle timeframe) and heartbeat.
 T030 adds the full per-session loop (main_agent → execution_agent → report → bank writes).
 """
 
@@ -34,8 +34,8 @@ _TIMEFRAME_SECONDS: dict[str, int] = {
     "1H": 3600,
     "4H": 14400,
 }
-_INVESTIGATION_BUDGET_FRACTION = 0.80
-_EXECUTE_BUDGET_FRACTION = 0.20
+_INVESTIGATION_BUDGET_FRACTION = 0.87
+_EXECUTE_BUDGET_FRACTION = 0.13
 _HEARTBEAT_INTERVAL_SECS = 5 * 60
 
 
@@ -44,7 +44,7 @@ class Scheduler:
 
     At startup: aligns to the next candle close, prints a countdown to stdout.
     Full session loop (T030): main_agent → execution_agent → HTML report → bank writes.
-    Budget enforcement (T029): 80% of candle for investigation, 20% for execute; heartbeat.
+    Budget enforcement (T029): 87% of candle for investigation, 13% for execute; heartbeat.
     """
 
     def __init__(
