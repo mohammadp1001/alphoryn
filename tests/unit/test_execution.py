@@ -138,9 +138,11 @@ def test_buy_decision_places_market_order(tmp_path) -> None:
 
     mock_alpaca = MagicMock()
     mock_alpaca.get_account.return_value.buying_power = "10000"
-    mock_alpaca.get_latest_quote.return_value.ask_price = 450.0
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}
 
-    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca):
+    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca), \
+         patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data):
         agent.execute(decision)
 
     mock_alpaca.submit_order.assert_called_once()
@@ -156,9 +158,11 @@ def test_buy_decision_writes_open_position(tmp_path) -> None:
 
     mock_alpaca = MagicMock()
     mock_alpaca.get_account.return_value.buying_power = "10000"
-    mock_alpaca.get_latest_quote.return_value.ask_price = 450.0
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}
 
-    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca):
+    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca), \
+         patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data):
         agent.execute(decision)
 
     positions = bank.load_open_positions()
@@ -181,9 +185,11 @@ def test_buy_blocked_by_insufficient_budget(tmp_path) -> None:
 
     mock_alpaca = MagicMock()
     mock_alpaca.get_account.return_value.buying_power = "100"  # way too low
-    mock_alpaca.get_latest_quote.return_value.ask_price = 450.0  # 1000 x 450 = $450k
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}  # 1000 x 450 = $450k
 
-    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca):
+    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca), \
+         patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data):
         agent.execute(decision)
 
     mock_alpaca.submit_order.assert_not_called()
@@ -234,9 +240,11 @@ def test_existing_open_position_blocks_new_buy(tmp_path) -> None:
 
     mock_alpaca = MagicMock()
     mock_alpaca.get_account.return_value.buying_power = "100000"
-    mock_alpaca.get_latest_quote.return_value.ask_price = 450.0
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}
 
-    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca):
+    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca), \
+         patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data):
         agent.execute(decision)
 
     # No new order placed — blocked by existing OPEN position
@@ -285,9 +293,11 @@ def test_open_position_on_etf1_does_not_block_etf2(tmp_path) -> None:
 
     mock_alpaca = MagicMock()
     mock_alpaca.get_account.return_value.buying_power = "100000"
-    mock_alpaca.get_latest_quote.return_value.ask_price = 380.0
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"QQQ": MagicMock(ask_price=380.0)}
 
-    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca):
+    with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca), \
+         patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data):
         agent.execute(decision)
 
     # QQQ order was placed

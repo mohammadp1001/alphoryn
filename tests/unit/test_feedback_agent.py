@@ -197,7 +197,7 @@ def test_init_creates_llm_agent_with_model() -> None:
         FeedbackAgent(market_data, bank, logger)
     mock_llm_cls.assert_called_once()
     kwargs = mock_llm_cls.call_args.kwargs
-    assert kwargs["model"] == "gemini-2.0-flash"
+    assert kwargs["model"] == "gemini-2.5-pro"
     assert kwargs["name"] == "alphoryn_feedback_agent"
 
 

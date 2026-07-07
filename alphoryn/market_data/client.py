@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from alpaca.data.enums import DataFeed
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
@@ -148,8 +149,10 @@ class MarketDataClient:
         self._paper = paper
         self.model = None  # Principle I: no LLM model
 
-    def build_snapshot(self, etf1: str, etf2: str, candle_close_at: datetime) -> SignalSnapshot:
+    def build_snapshot(self, etf1: str, etf2: str, candle_close_at: datetime | str) -> SignalSnapshot:
         """ADK tool: fetch bars and return a frozen SignalSnapshot for both ETFs."""
+        if isinstance(candle_close_at, str):
+            candle_close_at = datetime.fromisoformat(candle_close_at)
         etf1_signals = self._data_fetch(etf1, candle_close_at)
         etf2_signals = self._data_fetch(etf2, candle_close_at)
         return SignalSnapshot(
@@ -169,6 +172,7 @@ class MarketDataClient:
             timeframe=TimeFrame.Hour,
             start=start,
             end=candle_close_at,
+            feed=DataFeed.IEX,
         )
         bars = client.get_stock_bars(req)[etf]
 

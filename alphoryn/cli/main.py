@@ -7,6 +7,7 @@ Commands:
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -63,6 +64,9 @@ def run(
     ] = None,
 ) -> None:
     """Start a paper trading session."""
+    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "1")
+    os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
+
     # 1. Load and validate config (exit 1 on failure)
     overrides: dict = {}
     if etf1 is not None:

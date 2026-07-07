@@ -11,6 +11,7 @@ from alphoryn.agents.main_agent import (
     MainAgentError,
     _build_prompt,
     _parse_decision,
+    _strip_fences,
 )
 
 # ---------------------------------------------------------------------------
@@ -94,7 +95,7 @@ def test_init_creates_llm_agent_with_model_and_tools() -> None:
     mock_llm_cls.assert_called_once()
     kwargs = mock_llm_cls.call_args.kwargs
     assert kwargs["name"] == "alphoryn_main_agent"
-    assert kwargs["model"] == "gemini-2.0-flash"
+    assert kwargs["model"] == "gemini-2.5-pro"
     assert mock_client.build_snapshot in kwargs["tools"]
 
 
@@ -369,3 +370,88 @@ def test_parse_decision_non_dict_etf_raises_main_agent_error() -> None:
     }
     with pytest.raises(MainAgentError, match="Invalid SessionDecision"):
         _parse_decision(bad_data)
+
+
+# ---------------------------------------------------------------------------
+# _strip_fences
+# ---------------------------------------------------------------------------
+
+
+def test_strip_fences_plain_json_unchanged() -> None:
+    raw = '{"a": 1}'
+    assert _strip_fences(raw) == raw
+
+
+def test_strip_fences_removes_json_code_fence() -> None:
+    raw = '```json\n{"a": 1}\n```'
+    assert _strip_fences(raw) == '{"a": 1}'
+
+
+def test_strip_fences_removes_plain_code_fence() -> None:
+    raw = '```\n{"a": 1}\n```'
+    assert _strip_fences(raw) == '{"a": 1}'
+
+
+def test_strip_fences_fence_without_closing_tick() -> None:
+    raw = '```json\n{"a": 1}'
+    assert _strip_fences(raw) == '{"a": 1}'
+
+
+# ---------------------------------------------------------------------------
+# decide — empty text part skipped (Gemini 2.5 Pro thinking tokens)
+# ---------------------------------------------------------------------------
+
+
+def test_decide_empty_first_part_uses_second_part() -> None:
+    """Empty parts[0].text (thinking token) must be skipped; JSON in parts[1] is used."""
+    agent, _ = _make_agent()
+    empty_part = MagicMock(text="")
+    json_part = MagicMock(text=json.dumps(_DECISION_DICT))
+    event = MagicMock()
+    event.get_function_calls.return_value = []
+    event.get_function_responses.return_value = []
+    event.is_final_response.return_value = True
+    event.content.parts = [empty_part, json_part]
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([event])
+
+        decision = agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    assert decision.session_id == "sess-001"
+
+
+def test_decide_all_empty_parts_raises_main_agent_error() -> None:
+    """All empty text parts → treated as no final response."""
+    agent, _ = _make_agent()
+    event = MagicMock()
+    event.get_function_calls.return_value = []
+    event.get_function_responses.return_value = []
+    event.is_final_response.return_value = True
+    event.content.parts = [MagicMock(text=""), MagicMock(text="")]
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([event])
+
+        with pytest.raises(MainAgentError, match="no final response"):
+            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+
+def test_decide_markdown_fenced_json_is_parsed_correctly() -> None:
+    """LLM wraps JSON in ```json fence; must be stripped before parsing."""
+    agent, _ = _make_agent()
+    fenced = f"```json\n{json.dumps(_DECISION_DICT)}\n```"
+    final_event = _make_event(is_final=True, text=fenced)
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+
+        decision = agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+
+    assert decision.session_id == "sess-001"

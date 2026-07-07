@@ -181,6 +181,14 @@ def test_is_market_open_fallback_true_on_api_error() -> None:
         assert sched.is_market_open() is True
 
 
+def test_is_market_open_true_when_extended_hours_set() -> None:
+    sched = _scheduler(extended_hours=True)
+    # get_market_clock must never be called when extended_hours=True
+    with patch.object(sched, "get_market_clock", side_effect=AssertionError("must not call")) as m:
+        assert sched.is_market_open() is True
+    m.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # wait_for_candle_close
 # ---------------------------------------------------------------------------

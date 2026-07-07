@@ -156,8 +156,14 @@ class Scheduler:
     def is_market_open(self) -> bool:
         """Return True if the US equity market is currently open.
 
+        When cfg.extended_hours is True the market-open guard is bypassed so
+        the scheduler can run during pre/post-market hours and for integration
+        testing (constitution Development Standards).
+
         Falls back to True (optimistic) if the Alpaca API is unavailable.
         """
+        if self._cfg.extended_hours:
+            return True
         try:
             clock = self.get_market_clock()
             return bool(getattr(clock, "is_open", True))
@@ -328,30 +334,53 @@ class Scheduler:
         candle_close_at: datetime,
     ) -> None:
         """Execute one complete feedback → investigation → decide → execute → report cycle."""
+        candle_str = candle_close_at.strftime("%H:%M UTC")
+        typer.echo(f"\n[{session_id}] SESSION START  candle={candle_str}")
         if self._logger is not None:
             self._logger.emit("SESSION_START", "scheduler", {}, session_id=session_id)
 
         self._run_feedback(session_id, session_ordinal)
 
         t0 = datetime.now(UTC)
+        typer.echo(f"[{session_id}] Investigating market snapshot …")
         decision = self._run_investigation(session_id, candle_close_at)
 
+        if decision is None:
+            typer.echo(f"[{session_id}] SKIPPED  investigation budget exceeded")
+        else:
+            typer.echo(
+                f"[{session_id}] DECISION"
+                f"  {decision.etf1.etf}: {decision.etf1.action} ({decision.etf1.strategy})"
+                f"  |  {decision.etf2.etf}: {decision.etf2.action} ({decision.etf2.strategy})"
+            )
+
         if decision is not None and self._execution_agent is not None:
+            typer.echo(f"[{session_id}] Executing …")
             self._run_execute(decision)
+            typer.echo(f"[{session_id}] Execution done")
 
         report_path: str | None = None
         if self._report_generator is not None and decision is not None:
             context: dict[str, Any] = {
                 "session_id": session_id,
+                "candle_close_at": candle_close_at.strftime("%Y-%m-%d %H:%M UTC"),
                 "strategy": decision.etf1.strategy,
+                "etf": decision.etf1.etf,
                 "etf1": decision.etf1.etf,
                 "etf2": decision.etf2.etf,
+                "decision": decision.etf1.action,
                 "etf1_action": decision.etf1.action,
                 "etf2_action": decision.etf2.action,
+                "reasoning": decision.etf1.reasoning,
+                "signals": None,
+                "execution_result": None,
+                "memory_summary": None,
+                "position": None,
             }
             report_path = self._report_generator.write(
                 f"run-{run_id}", session_id, context
             )
+            typer.echo(f"[{session_id}] Report → {report_path}")
 
         session_status = "COMPLETED" if decision is not None else "SKIPPED_TIMEOUT"
         session_record = Session(
@@ -379,12 +408,18 @@ class Scheduler:
                     created_at=datetime.now(UTC),
                 )
                 self._bank.write_memory_entry(entry)
+            typer.echo(
+                f"[{session_id}] Memory written"
+                f"  {decision.etf1.etf}={decision.etf1.action}"
+                f"  {decision.etf2.etf}={decision.etf2.action}"
+            )
 
         if self._logger is not None:
             latency_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
             self._logger.emit(
                 "SESSION_END", "scheduler", {}, session_id=session_id, latency_ms=latency_ms
             )
+        typer.echo(f"[{session_id}] SESSION END  status={session_status}")
 
     # ------------------------------------------------------------------
     # Entry point
@@ -418,6 +453,9 @@ class Scheduler:
             candle_close_at = datetime.now(UTC)
 
             if not self.is_market_open():
+                typer.echo(
+                    f"[session-{session_ordinal:04d}] MARKET_CLOSED — waiting for next candle"
+                )
                 if self._logger is not None:
                     self._logger.emit(
                         "MARKET_CLOSED",

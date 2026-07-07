@@ -172,6 +172,16 @@ def test_build_snapshot_calls_data_fetch_for_both_etfs() -> None:
     assert calls[1][0][0] == "QQQ"
 
 
+def test_build_snapshot_accepts_iso_string_candle_close_at() -> None:
+    """LLM passes candle_close_at as an ISO string; must be parsed to datetime."""
+    client = _client()
+    now = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
+    spy_sig = _spy_signals()
+    client._data_fetch = MagicMock(return_value=spy_sig)
+    snap = client.build_snapshot("SPY", "QQQ", "2024-01-15T15:00:00+00:00")
+    assert snap.captured_at == now
+
+
 def test_data_fetch_is_private_not_exposed_as_adk_tool() -> None:
     """_data_fetch must be a private method (underscore prefix)."""
     client = _client()

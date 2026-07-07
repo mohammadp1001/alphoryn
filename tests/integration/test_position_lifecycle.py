@@ -198,15 +198,16 @@ def test_buy_on_different_etf_not_blocked(tmp_path: Path) -> None:
     )
     agent = ExecutionAgent(bank)
 
-    with patch("alphoryn.execution.agent.TradingClient") as mock_tc_cls:
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"QQQ": MagicMock(ask_price=400.0)}
+
+    with patch("alphoryn.execution.agent.TradingClient") as mock_tc_cls, \
+         patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data):
         mock_tc = MagicMock()
         mock_tc_cls.return_value = mock_tc
         mock_account = MagicMock()
         mock_account.buying_power = "50000"
         mock_tc.get_account.return_value = mock_account
-        mock_quote = MagicMock()
-        mock_quote.ask_price = "400"
-        mock_tc.get_latest_quote.return_value = mock_quote
         agent.execute(decision)
 
     mock_tc.submit_order.assert_called_once()  # QQQ BUY executed
