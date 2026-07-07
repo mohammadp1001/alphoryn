@@ -363,11 +363,19 @@ class Scheduler:
         if self._report_generator is not None and decision is not None:
             context: dict[str, Any] = {
                 "session_id": session_id,
+                "candle_close_at": candle_close_at.strftime("%Y-%m-%d %H:%M UTC"),
                 "strategy": decision.etf1.strategy,
+                "etf": decision.etf1.etf,
                 "etf1": decision.etf1.etf,
                 "etf2": decision.etf2.etf,
+                "decision": decision.etf1.action,
                 "etf1_action": decision.etf1.action,
                 "etf2_action": decision.etf2.action,
+                "reasoning": decision.etf1.reasoning,
+                "signals": None,
+                "execution_result": None,
+                "memory_summary": None,
+                "position": None,
             }
             report_path = self._report_generator.write(
                 f"run-{run_id}", session_id, context

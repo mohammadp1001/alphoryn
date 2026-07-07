@@ -33,7 +33,7 @@ class MainAgent:
     synchronously once per candle close and must return a JSON SessionDecision.
     """
 
-    _MODEL = "gemini-2.0-flash"
+    _MODEL = "gemini-2.5-pro"
 
     def __init__(
         self,
@@ -65,7 +65,7 @@ class MainAgent:
         prompt = _build_prompt(session_id, etf1, etf2, candle_close_at, memory_entries)
 
         runner = InMemoryRunner(agent=self._agent, app_name="alphoryn")
-        runner._get_or_create_session(user_id="system", session_id=session_id)
+        runner.auto_create_session = True
 
         raw_json: str | None = None
         for event in runner.run(
@@ -92,7 +92,11 @@ class MainAgent:
                         session_id=session_id,
                     )
             if event.is_final_response() and event.content and event.content.parts:
-                raw_json = event.content.parts[0].text
+                for part in event.content.parts:
+                    text = getattr(part, "text", None)
+                    if text and text.strip():
+                        raw_json = _strip_fences(text.strip())
+                        break
 
         if raw_json is None:
             _logger.error("main_agent produced no final response for session %s", session_id)
@@ -121,6 +125,16 @@ class MainAgent:
             latency_ms=latency_ms,
         )
         return decision
+
+
+def _strip_fences(text: str) -> str:
+    """Strip markdown code fences from LLM output (e.g. ```json ... ```)."""
+    if text.startswith("```"):
+        lines = text.splitlines()
+        # drop first line (```json or ```) and trailing ``` line
+        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
+        return "\n".join(inner).strip()
+    return text
 
 
 def _build_prompt(

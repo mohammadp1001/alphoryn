@@ -27,7 +27,7 @@ from alphoryn.telemetry.logger import TelemetryLogger
 
 _logger = logging.getLogger(__name__)
 
-_FEEDBACK_AGENT_MODEL = "gemini-2.0-flash"
+_FEEDBACK_AGENT_MODEL = "gemini-2.5-pro"
 _MAX_ATTEMPTS = 3
 
 
@@ -150,7 +150,7 @@ class FeedbackAgent:
         prompt = self._build_prompt(feedback_input, thesis, current_price)
         session_id = f"feedback-{feedback_input.position_id}-attempt-{attempt}"
         runner = InMemoryRunner(agent=self._agent, app_name="alphoryn_feedback")
-        runner._get_or_create_session(user_id="system", session_id=session_id)
+        runner.auto_create_session = True
 
         self._logger.emit(
             "TOOL_CALL",

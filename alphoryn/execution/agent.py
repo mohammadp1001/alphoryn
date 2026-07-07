@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+from alpaca.data.enums import DataFeed
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockLatestQuoteRequest
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
@@ -78,8 +81,17 @@ class ExecutionAgent:
         # Budget check via Alpaca account API
         account = client.get_account()
         buying_power = float(account.buying_power)
-        quote = client.get_latest_quote(etf_decision.etf)
-        ask_price = float(quote.ask_price)
+        data_client = StockHistoricalDataClient(
+            api_key=os.environ.get("ALPACA_API_KEY", ""),
+            secret_key=os.environ.get("ALPACA_SECRET_KEY", ""),
+        )
+        quotes = data_client.get_stock_latest_quote(
+            StockLatestQuoteRequest(
+                symbol_or_symbols=etf_decision.etf,
+                feed=DataFeed.IEX,
+            )
+        )
+        ask_price = float(quotes[etf_decision.etf].ask_price)
         lot = etf_decision.lot_size or 1
         required = ask_price * lot
         if buying_power < required:
