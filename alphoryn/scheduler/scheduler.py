@@ -364,13 +364,19 @@ class Scheduler:
                 "session_id": session_id,
                 "candle_close_at": candle_close_at.strftime("%Y-%m-%d %H:%M UTC"),
                 "tickers": [d.ticker for d in decision.decisions],
-                "decisions": {d.ticker: {"action": d.action, "strategy": d.strategy} for d in decision.decisions},
+                "ticker_details": [
+                    {
+                        "ticker": d.ticker,
+                        "action": d.action,
+                        "strategy": d.strategy,
+                        "reasoning": d.reasoning,
+                        "memory_summary": None,
+                    }
+                    for d in decision.decisions
+                ],
                 "strategy": first.strategy if first else None,
-                "decision": first.action if first else None,
-                "reasoning": first.reasoning if first else None,
                 "signals": None,
                 "execution_result": None,
-                "memory_summary": None,
                 "position": None,
             }
             report_path = self._report_generator.write(
