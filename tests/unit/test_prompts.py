@@ -1,31 +1,25 @@
-"""Unit tests for alphoryn/agents/prompts.py (T025 scope).
+"""Unit tests for alphoryn/agents/prompts.py.
 
-Verifies that the main agent system prompt contains all required elements:
-- Snapshot isolation enforcement clause
-- Regime recognition rules for both strategies
-- Memory bank context format instructions
-- SessionDecision output schema
-- Correct structural constants
+Verifies the minimal main agent system prompt contains the required structural
+elements: snapshot isolation clause, skill-based workflow, and output schema.
+Strategy rules are no longer in the prompt — they live in skill files.
 """
 
 from alphoryn.agents.prompts import (
     FEEDBACK_AGENT_SYSTEM_PROMPT,
     MAIN_AGENT_SYSTEM_PROMPT,
-    MEAN_REVERSION_REGIME_RULES,
-    MEMORY_CONTEXT_FORMAT,
-    MOMENTUM_REGIME_RULES,
     OUTPUT_SCHEMA,
     SNAPSHOT_ISOLATION_CLAUSE,
 )
 
 # ---------------------------------------------------------------------------
-# Module-level constants — existence and type
+# Module-level constants
 # ---------------------------------------------------------------------------
 
 
 def test_main_agent_system_prompt_is_string() -> None:
     assert isinstance(MAIN_AGENT_SYSTEM_PROMPT, str)
-    assert len(MAIN_AGENT_SYSTEM_PROMPT) > 100
+    assert len(MAIN_AGENT_SYSTEM_PROMPT) > 50
 
 
 def test_feedback_agent_system_prompt_is_string() -> None:
@@ -37,13 +31,17 @@ def test_snapshot_isolation_clause_is_string() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Snapshot isolation enforcement (constitution Principle V)
+# Snapshot isolation (constitution Principle V)
 # ---------------------------------------------------------------------------
 
 
-def test_snapshot_isolation_clause_forbids_second_call() -> None:
+def test_snapshot_isolation_clause_references_build_snapshot() -> None:
     assert "build_snapshot" in SNAPSHOT_ISOLATION_CLAUSE
-    assert "Do not call any further market data tools" in SNAPSHOT_ISOLATION_CLAUSE
+
+
+def test_snapshot_isolation_clause_forbids_second_call() -> None:
+    clause = SNAPSHOT_ISOLATION_CLAUSE.lower()
+    assert "not" in clause and ("again" in clause or "once" in clause)
 
 
 def test_main_prompt_contains_snapshot_isolation() -> None:
@@ -51,85 +49,32 @@ def test_main_prompt_contains_snapshot_isolation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Mean reversion regime rules
+# Skill references — strategy rules live in skill files, not in the prompt
 # ---------------------------------------------------------------------------
 
 
-def test_mean_reversion_rules_reference_adx() -> None:
-    assert "adx_14" in MEAN_REVERSION_REGIME_RULES
+def test_main_prompt_references_identify_regime_skill() -> None:
+    assert "identify_regime" in MAIN_AGENT_SYSTEM_PROMPT
 
 
-def test_mean_reversion_rules_reference_rsi() -> None:
-    assert "rsi_14" in MEAN_REVERSION_REGIME_RULES
+def test_main_prompt_references_mean_reversion_entry_skill() -> None:
+    assert "mean_reversion_entry" in MAIN_AGENT_SYSTEM_PROMPT
 
 
-def test_mean_reversion_rules_reference_bollinger() -> None:
-    assert "bollinger_pct_b" in MEAN_REVERSION_REGIME_RULES
+def test_main_prompt_references_momentum_entry_skill() -> None:
+    assert "momentum_entry" in MAIN_AGENT_SYSTEM_PROMPT
 
 
-def test_mean_reversion_rules_reference_sma() -> None:
-    assert "sma_20" in MEAN_REVERSION_REGIME_RULES
+def test_main_prompt_references_size_position_skill() -> None:
+    assert "size_position" in MAIN_AGENT_SYSTEM_PROMPT
 
 
-def test_mean_reversion_rules_reference_price_level_exit() -> None:
-    assert "price_level" in MEAN_REVERSION_REGIME_RULES
+def test_main_prompt_references_read_memory_skill() -> None:
+    assert "read_memory" in MAIN_AGENT_SYSTEM_PROMPT
 
 
-def test_main_prompt_contains_mean_reversion_rules() -> None:
-    assert MEAN_REVERSION_REGIME_RULES in MAIN_AGENT_SYSTEM_PROMPT
-
-
-# ---------------------------------------------------------------------------
-# Momentum regime rules
-# ---------------------------------------------------------------------------
-
-
-def test_momentum_rules_reference_adx() -> None:
-    assert "adx_14" in MOMENTUM_REGIME_RULES
-
-
-def test_momentum_rules_reference_macd() -> None:
-    assert "macd_histogram" in MOMENTUM_REGIME_RULES
-
-
-def test_momentum_rules_reference_ema_structure() -> None:
-    assert "ema_20" in MOMENTUM_REGIME_RULES
-    assert "ema_50" in MOMENTUM_REGIME_RULES
-
-
-def test_momentum_rules_reference_trailing_stop_exit() -> None:
-    assert "trailing_stop" in MOMENTUM_REGIME_RULES
-
-
-def test_momentum_rules_reference_pullback_entry() -> None:
-    assert "PULLBACK" in MOMENTUM_REGIME_RULES
-
-
-def test_momentum_rules_reference_breakout_entry() -> None:
-    assert "BREAKOUT" in MOMENTUM_REGIME_RULES
-
-
-def test_main_prompt_contains_momentum_rules() -> None:
-    assert MOMENTUM_REGIME_RULES in MAIN_AGENT_SYSTEM_PROMPT
-
-
-# ---------------------------------------------------------------------------
-# Memory bank context format
-# ---------------------------------------------------------------------------
-
-
-def test_memory_context_references_outcome_judgment() -> None:
-    assert "outcome_judgment" in MEMORY_CONTEXT_FORMAT
-
-
-def test_memory_context_references_correct_incorrect_neutral() -> None:
-    assert "CORRECT" in MEMORY_CONTEXT_FORMAT
-    assert "INCORRECT" in MEMORY_CONTEXT_FORMAT
-    assert "NEUTRAL" in MEMORY_CONTEXT_FORMAT
-
-
-def test_main_prompt_contains_memory_context() -> None:
-    assert MEMORY_CONTEXT_FORMAT in MAIN_AGENT_SYSTEM_PROMPT
+def test_main_prompt_references_build_snapshot_tool() -> None:
+    assert "build_snapshot" in MAIN_AGENT_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -161,3 +106,15 @@ def test_output_schema_references_both_strategies() -> None:
 
 def test_main_prompt_contains_output_schema() -> None:
     assert OUTPUT_SCHEMA in MAIN_AGENT_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# No strategy rules in the prompt (they belong in skill files)
+# ---------------------------------------------------------------------------
+
+
+def test_main_prompt_does_not_contain_regime_thresholds() -> None:
+    assert "adx_14 > 25" not in MAIN_AGENT_SYSTEM_PROMPT
+    assert "adx_14 < 25" not in MAIN_AGENT_SYSTEM_PROMPT
+    assert "bollinger_pct_b < 0.25" not in MAIN_AGENT_SYSTEM_PROMPT
+    assert "rsi_14 < 40" not in MAIN_AGENT_SYSTEM_PROMPT
