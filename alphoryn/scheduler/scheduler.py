@@ -376,7 +376,7 @@ class Scheduler:
             report_path = self._report_generator.write(
                 f"run-{run_id}", session_id, context
             )
-            typer.echo(f"[{session_id}] Report → {report_path}")
+            typer.echo(f"[{session_id}] Report -> {report_path}")
 
         ticker_decisions_json: str | None = None
         if decision is not None:
