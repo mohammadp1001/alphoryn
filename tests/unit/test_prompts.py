@@ -84,8 +84,8 @@ def test_main_prompt_references_build_snapshot_tool() -> None:
 
 def test_output_schema_references_session_decision_fields() -> None:
     assert "session_id" in OUTPUT_SCHEMA
-    assert "etf1" in OUTPUT_SCHEMA
-    assert "etf2" in OUTPUT_SCHEMA
+    assert "decisions" in OUTPUT_SCHEMA
+    assert "ticker" in OUTPUT_SCHEMA
     assert "action" in OUTPUT_SCHEMA
     assert "strategy" in OUTPUT_SCHEMA
     assert "lot_size" in OUTPUT_SCHEMA

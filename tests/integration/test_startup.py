@@ -28,7 +28,7 @@ runner = CliRunner()
 
 
 def _write_config(cfg_path: Path, db_path: Path, **fields) -> Path:
-    defaults = {"etf1": "SPY", "etf2": "QQQ", "memory_db_path": str(db_path)}
+    defaults = {"tickers": ["SPY", "QQQ"], "memory_db_path": str(db_path)}
     defaults.update(fields)
     cfg_path.write_text(json.dumps(defaults), encoding="utf-8")
     return cfg_path
@@ -55,7 +55,7 @@ def test_valid_config_startup_produces_banner(tmp_path: Path) -> None:
     result = _patched_run(cfg)
     assert result.exit_code == 0
     assert "Alphoryn v0.0.1 — Paper Trading" in result.output
-    assert "ETFs: SPY / QQQ" in result.output
+    assert "Tickers: SPY, QQQ" in result.output
 
 
 def test_session_count_matches_config(tmp_path: Path) -> None:
@@ -97,7 +97,7 @@ def test_startup_reads_preexisting_open_position_from_real_db(tmp_path: Path) ->
     """Pre-populated OPEN position is reported at startup."""
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
 
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:
@@ -114,7 +114,7 @@ def test_startup_reads_preexisting_open_position_from_real_db(tmp_path: Path) ->
         s.add(
             Position(
                 session_id=sess_id,
-                etf="SPY",
+                ticker="SPY",
                 strategy="MOMENTUM",
                 direction="BUY",
                 entry_price=450.0,

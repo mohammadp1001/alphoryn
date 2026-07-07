@@ -1,7 +1,7 @@
 """Unit tests for alphoryn/market_data/client.py (T021 scope).
 
-Tests are written BEFORE the implementation (TDD). They verify:
-- All 15 ETFSignals fields are computed correctly from fixture OHLCV data
+Tests verify:
+- All 15 AssetSignals fields are computed correctly from fixture OHLCV data
 - build_snapshot returns a frozen SignalSnapshot
 - _data_fetch is not exposed as an ADK tool (private/underscore convention)
 - get_latest_price returns a float from the latest bar
@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from alphoryn.market_data.client import (
-    ETFSignals,
+    AssetSignals,
     MarketDataClient,
     SignalSnapshot,
     _compute_adx,
@@ -58,9 +58,9 @@ def _client() -> MarketDataClient:
     return MarketDataClient(api_key="test-key", secret_key="test-secret", paper=True)
 
 
-def _stub_data_fetch(client: MarketDataClient, etf_signals: ETFSignals):
-    """Monkeypatch _data_fetch to return a given ETFSignals object."""
-    client._data_fetch = MagicMock(return_value=etf_signals)
+def _stub_data_fetch(client: MarketDataClient, asset_signals: AssetSignals):
+    """Monkeypatch _data_fetch to return a given AssetSignals object."""
+    client._data_fetch = MagicMock(return_value=asset_signals)
 
 
 def _spy_signals(
@@ -79,8 +79,8 @@ def _spy_signals(
     current_price: float = 110.0,
     price_vs_ema_20_pct: float = 1.85,
     price_vs_sma_20_pct: float = 2.80,
-) -> ETFSignals:
-    return ETFSignals(
+) -> AssetSignals:
+    return AssetSignals(
         rsi_14=rsi_14,
         adx_14=adx_14,
         ema_20=ema_20,
@@ -100,19 +100,19 @@ def _spy_signals(
 
 
 # ---------------------------------------------------------------------------
-# ETFSignals structure
+# AssetSignals structure
 # ---------------------------------------------------------------------------
 
 
-def test_etf_signals_is_frozen_dataclass() -> None:
+def test_asset_signals_is_frozen_dataclass() -> None:
     sig = _spy_signals()
     assert dataclasses.is_dataclass(sig)
     with pytest.raises((AttributeError, dataclasses.FrozenInstanceError)):
         sig.rsi_14 = 99.0  # type: ignore[misc]
 
 
-def test_etf_signals_has_all_15_fields() -> None:
-    field_names = {f.name for f in dataclasses.fields(ETFSignals)}
+def test_asset_signals_has_all_15_fields() -> None:
+    field_names = {f.name for f in dataclasses.fields(AssetSignals)}
     required = {
         "rsi_14", "adx_14", "ema_20", "ema_50", "sma_20",
         "bollinger_upper", "bollinger_lower", "bollinger_pct_b",
@@ -131,7 +131,7 @@ def test_etf_signals_has_all_15_fields() -> None:
 def test_signal_snapshot_is_frozen_dataclass() -> None:
     now = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
     sig = _spy_signals()
-    snap = SignalSnapshot(captured_at=now, etf1_signals=sig, etf2_signals=sig)
+    snap = SignalSnapshot(captured_at=now, signals={"SPY": sig, "QQQ": sig})
     assert dataclasses.is_dataclass(snap)
     with pytest.raises((AttributeError, dataclasses.FrozenInstanceError)):
         snap.captured_at = datetime.now(UTC)  # type: ignore[misc]
@@ -139,7 +139,7 @@ def test_signal_snapshot_is_frozen_dataclass() -> None:
 
 def test_signal_snapshot_fields() -> None:
     field_names = {f.name for f in dataclasses.fields(SignalSnapshot)}
-    assert field_names == {"captured_at", "etf1_signals", "etf2_signals"}
+    assert field_names == {"captured_at", "signals"}
 
 
 # ---------------------------------------------------------------------------
@@ -153,19 +153,19 @@ def test_build_snapshot_returns_signal_snapshot() -> None:
     spy_sig = _spy_signals()
     qqq_sig = _spy_signals(current_price=450.0, ema_20=445.0)
     client._data_fetch = MagicMock(side_effect=[spy_sig, qqq_sig])
-    snap = client.build_snapshot("SPY", "QQQ", now)
+    snap = client.build_snapshot(["SPY", "QQQ"], now)
     assert isinstance(snap, SignalSnapshot)
     assert snap.captured_at == now
-    assert snap.etf1_signals is spy_sig
-    assert snap.etf2_signals is qqq_sig
+    assert snap.signals["SPY"] is spy_sig
+    assert snap.signals["QQQ"] is qqq_sig
 
 
-def test_build_snapshot_calls_data_fetch_for_both_etfs() -> None:
+def test_build_snapshot_calls_data_fetch_for_all_tickers() -> None:
     client = _client()
     now = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
     spy_sig = _spy_signals()
     client._data_fetch = MagicMock(return_value=spy_sig)
-    client.build_snapshot("SPY", "QQQ", now)
+    client.build_snapshot(["SPY", "QQQ"], now)
     assert client._data_fetch.call_count == 2
     calls = client._data_fetch.call_args_list
     assert calls[0][0][0] == "SPY"
@@ -178,7 +178,7 @@ def test_build_snapshot_accepts_iso_string_candle_close_at() -> None:
     now = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
     spy_sig = _spy_signals()
     client._data_fetch = MagicMock(return_value=spy_sig)
-    snap = client.build_snapshot("SPY", "QQQ", "2024-01-15T15:00:00+00:00")
+    snap = client.build_snapshot(["SPY", "QQQ"], "2024-01-15T15:00:00+00:00")
     assert snap.captured_at == now
 
 
@@ -196,19 +196,19 @@ def test_data_fetch_is_private_not_exposed_as_adk_tool() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _patched_data_fetch(bars: list, etf: str = "SPY") -> ETFSignals:
+def _patched_data_fetch(bars: list, ticker: str = "SPY") -> AssetSignals:
     """Call _data_fetch with stubbed Alpaca StockHistoricalDataClient."""
     client = _client()
     mock_response = MagicMock()
     mock_response.__getitem__ = MagicMock(return_value=bars)
     with patch("alphoryn.market_data.client.StockHistoricalDataClient") as mock_cls:
         mock_cls.return_value.get_stock_bars.return_value = mock_response
-        return client._data_fetch(etf, datetime(2024, 1, 15, 15, 0, tzinfo=UTC))
+        return client._data_fetch(ticker, datetime(2024, 1, 15, 15, 0, tzinfo=UTC))
 
 
-def test_data_fetch_returns_etf_signals_instance() -> None:
+def test_data_fetch_returns_asset_signals_instance() -> None:
     result = _patched_data_fetch(_trending_bars())
-    assert isinstance(result, ETFSignals)
+    assert isinstance(result, AssetSignals)
 
 
 def test_current_price_is_last_close() -> None:
@@ -285,11 +285,6 @@ def test_bollinger_pct_b_formula() -> None:
     if band_width > 0:
         expected_pct_b = (result.current_price - result.bollinger_lower) / band_width
         assert result.bollinger_pct_b == pytest.approx(expected_pct_b, rel=1e-9)
-
-
-# ---------------------------------------------------------------------------
-# get_latest_price
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------

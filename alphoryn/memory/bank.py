@@ -164,15 +164,15 @@ class MemoryBank:
             s.commit()
 
     def update_memory_entry_judgment(
-        self, session_id: str, etf: str, strategy: str, outcome_judgment: str
+        self, session_id: str, ticker: str, strategy: str, outcome_judgment: str
     ) -> None:
-        """Set outcome_judgment on the MemoryEntry for a given session/ETF/strategy."""
+        """Set outcome_judgment on the MemoryEntry for a given session/ticker/strategy."""
         with DBSession(self._engine) as s:
             entry = (
                 s.query(MemoryEntry)
                 .filter(
                     MemoryEntry.session_id == session_id,
-                    MemoryEntry.etf == etf,
+                    MemoryEntry.ticker == ticker,
                     MemoryEntry.strategy == strategy,
                 )
                 .one()
@@ -207,12 +207,12 @@ class MemoryBank:
         with DBSession(self._engine) as s:
             return s.query(Session).filter(Session.id == session_id).one_or_none()
 
-    def get_recent_memory_entries(self, etf: str, limit: int = 5) -> list[MemoryEntry]:
-        """Return the most recent MemoryEntry records for a given ETF."""
+    def get_recent_memory_entries(self, ticker: str, limit: int = 5) -> list[MemoryEntry]:
+        """Return the most recent MemoryEntry records for a given ticker."""
         with DBSession(self._engine) as s:
             return (
                 s.query(MemoryEntry)
-                .filter(MemoryEntry.etf == etf)
+                .filter(MemoryEntry.ticker == ticker)
                 .order_by(MemoryEntry.created_at.desc())
                 .limit(limit)
                 .all()

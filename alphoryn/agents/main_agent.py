@@ -18,7 +18,7 @@ from google.adk.tools.skill_toolset import SkillToolset
 from google.genai import types as genai_types
 
 from alphoryn.agents.prompts import MAIN_AGENT_SYSTEM_PROMPT
-from alphoryn.execution.agent import ETFDecision, SessionDecision
+from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.telemetry.logger import TelemetryLogger
 
@@ -64,8 +64,7 @@ class MainAgent:
     def decide(
         self,
         session_id: str,
-        etf1: str,
-        etf2: str,
+        tickers: list[str],
         candle_close_at: datetime,
         memory_entries: list[dict[str, Any]] | None = None,
     ) -> SessionDecision:
@@ -75,7 +74,7 @@ class MainAgent:
         Raises MainAgentError if no valid JSON decision is produced.
         """
         t0 = datetime.now(UTC)
-        prompt = _build_prompt(session_id, etf1, etf2, candle_close_at, memory_entries)
+        prompt = _build_prompt(session_id, tickers, candle_close_at, memory_entries)
 
         runner = InMemoryRunner(agent=self._agent, app_name="alphoryn")
         runner.auto_create_session = True
@@ -130,10 +129,7 @@ class MainAgent:
         self._logger.emit(
             "AGENT_DECISION",
             "main_agent",
-            {
-                "etf1_action": decision.etf1.action,
-                "etf2_action": decision.etf2.action,
-            },
+            {"decisions": {d.ticker: d.action for d in decision.decisions}},
             session_id=session_id,
             latency_ms=latency_ms,
         )
@@ -152,15 +148,13 @@ def _strip_fences(text: str) -> str:
 
 def _build_prompt(
     session_id: str,
-    etf1: str,
-    etf2: str,
+    tickers: list[str],
     candle_close_at: datetime,
     memory_entries: list[dict[str, Any]] | None,
 ) -> str:
     lines = [
         f"session_id: {session_id}",
-        f"etf1: {etf1}",
-        f"etf2: {etf2}",
+        f"tickers: {', '.join(tickers)}",
         f"candle_close_at: {candle_close_at.isoformat()}",
     ]
     if memory_entries:
@@ -171,10 +165,10 @@ def _build_prompt(
 def _parse_decision(data: dict[str, Any]) -> SessionDecision:
     """Parse the raw JSON dict from the LLM into a SessionDecision."""
     try:
+        decisions = [AssetDecision(**d) for d in data["decisions"]]
         return SessionDecision(
             session_id=data["session_id"],
-            etf1=ETFDecision(**data["etf1"]),
-            etf2=ETFDecision(**data["etf2"]),
+            decisions=decisions,
         )
     except (KeyError, TypeError) as exc:
         _logger.exception("Invalid SessionDecision structure from main_agent response: %s", exc)

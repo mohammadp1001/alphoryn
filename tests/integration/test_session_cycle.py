@@ -3,7 +3,7 @@
 Wires together real MemoryBank (SQLite) + real MainAgent (with stubbed
 InMemoryRunner / Gemini) + real Scheduler._process_session. Validates:
   - Session record written to DB with status COMPLETED
-  - MemoryEntry records written for both ETFs
+  - MemoryEntry records written for both tickers
   - html_report_path is populated when report generator is provided
   - build_snapshot tool called exactly once (Principle V: snapshot isolation)
   - Investigation timeout → SKIPPED_TIMEOUT + BUDGET_TIMEOUT telemetry
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.models import AlphorynConfig
-from alphoryn.execution.agent import ETFDecision, SessionDecision
+from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import MemoryEntry, Session
 from alphoryn.reports.generator import ReportGenerator
@@ -34,42 +34,46 @@ _CANDLE_CLOSE_AT = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
 
 _DECISION_DICT = {
     "session_id": "run-1/session-0001",
-    "etf1": {
-        "etf": "SPY",
-        "action": "BUY",
-        "strategy": "MEAN_REVERSION",
-        "lot_size": 5,
-        "exit_target": {"type": "price_level", "value": 460.0},
-        "reasoning": "ADX low.",
-    },
-    "etf2": {
-        "etf": "QQQ",
-        "action": "HOLD",
-        "strategy": "MOMENTUM",
-        "lot_size": None,
-        "exit_target": None,
-        "reasoning": "No regime.",
-    },
+    "decisions": [
+        {
+            "ticker": "SPY",
+            "action": "BUY",
+            "strategy": "MEAN_REVERSION",
+            "lot_size": 5,
+            "exit_target": {"type": "price_level", "value": 460.0},
+            "reasoning": "ADX low.",
+        },
+        {
+            "ticker": "QQQ",
+            "action": "HOLD",
+            "strategy": "MOMENTUM",
+            "lot_size": None,
+            "exit_target": None,
+            "reasoning": "No regime.",
+        },
+    ],
 }
 
 _FIXTURE_DECISION = SessionDecision(
     session_id="run-1/session-0001",
-    etf1=ETFDecision(
-        etf="SPY",
-        action="BUY",
-        strategy="MEAN_REVERSION",
-        lot_size=5,
-        exit_target={"type": "price_level", "value": 460.0},
-        reasoning="ADX low.",
-    ),
-    etf2=ETFDecision(
-        etf="QQQ",
-        action="HOLD",
-        strategy="MOMENTUM",
-        lot_size=None,
-        exit_target=None,
-        reasoning="No regime.",
-    ),
+    decisions=[
+        AssetDecision(
+            ticker="SPY",
+            action="BUY",
+            strategy="MEAN_REVERSION",
+            lot_size=5,
+            exit_target={"type": "price_level", "value": 460.0},
+            reasoning="ADX low.",
+        ),
+        AssetDecision(
+            ticker="QQQ",
+            action="HOLD",
+            strategy="MOMENTUM",
+            lot_size=None,
+            exit_target=None,
+            reasoning="No regime.",
+        ),
+    ],
 )
 
 
@@ -119,8 +123,7 @@ def _make_scheduler(
     investigation_budget: int | None = None,
 ) -> Scheduler:
     cfg = AlphorynConfig(
-        etf1="SPY",
-        etf2="QQQ",
+        tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
         run_duration="1H",
         max_startup_latency_seconds=3600,
@@ -164,8 +167,9 @@ def test_process_session_writes_session_record(tmp_path: Path) -> None:
     with DBSession(bank._engine) as s:
         sess = s.query(Session).filter(Session.id == "run-1/session-0001").one()
     assert sess.status == "COMPLETED"
-    assert sess.etf1_decision == "BUY"
-    assert sess.etf2_decision == "HOLD"
+    td = json.loads(sess.ticker_decisions)
+    assert td["SPY"]["decision"] == "BUY"
+    assert td["QQQ"]["decision"] == "HOLD"
 
 
 def test_process_session_writes_memory_entries(tmp_path: Path) -> None:
@@ -186,8 +190,8 @@ def test_process_session_writes_memory_entries(tmp_path: Path) -> None:
 
     with DBSession(bank._engine) as s:
         entries = s.query(MemoryEntry).all()
-    etfs = {e.etf for e in entries}
-    assert etfs == {"SPY", "QQQ"}
+    tickers = {e.ticker for e in entries}
+    assert tickers == {"SPY", "QQQ"}
 
 
 def test_process_session_emits_session_start_and_end(tmp_path: Path) -> None:
@@ -213,6 +217,7 @@ def test_process_session_emits_session_start_and_end(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # html_report_path populated when ReportGenerator is provided
 # ---------------------------------------------------------------------------
+
 
 _FIXTURE_SIGNALS = {
     "rsi_14": 45.2,

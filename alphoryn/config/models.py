@@ -33,8 +33,7 @@ class AlphorynConfig(BaseModel):
     Passed to all components; no global config state.
     """
 
-    etf1: str
-    etf2: str
+    tickers: list[str]
     candle_timeframe: Literal["10min", "15min", "30min", "1H", "4H"] = "1H"
     extended_hours: bool = False
     run_duration: str = "24H"
@@ -44,6 +43,13 @@ class AlphorynConfig(BaseModel):
     max_startup_latency_seconds: int = 60
     currency: str = "USD"
     memory_db_path: str = "~/.alphoryn/memory.db"
+
+    @field_validator("tickers")
+    @classmethod
+    def validate_tickers(cls, v: list[str]) -> list[str]:
+        if len(v) < 2:
+            raise ValueError("tickers must contain at least 2 symbols")
+        return v
 
     @field_validator("stop_loss_pct")
     @classmethod

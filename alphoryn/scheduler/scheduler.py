@@ -256,8 +256,7 @@ class Scheduler:
                 future = executor.submit(
                     self._main_agent.decide,  # type: ignore[union-attr]
                     session_id,
-                    self._cfg.etf1,
-                    self._cfg.etf2,
+                    self._cfg.tickers,
                     candle_close_at,
                 )
                 try:
@@ -317,7 +316,7 @@ class Scheduler:
             feedback_input = FeedbackInput(
                 position_id=pos.id,
                 session_id=pos.session_id,
-                etf=pos.etf,
+                ticker=pos.ticker,
                 strategy=pos.strategy,
                 html_report_path=html_report_path or "",
                 entry_price=pos.entry_price,
@@ -348,11 +347,10 @@ class Scheduler:
         if decision is None:
             typer.echo(f"[{session_id}] SKIPPED  investigation budget exceeded")
         else:
-            typer.echo(
-                f"[{session_id}] DECISION"
-                f"  {decision.etf1.etf}: {decision.etf1.action} ({decision.etf1.strategy})"
-                f"  |  {decision.etf2.etf}: {decision.etf2.action} ({decision.etf2.strategy})"
+            decision_str = "  |  ".join(
+                f"{d.ticker}: {d.action} ({d.strategy})" for d in decision.decisions
             )
+            typer.echo(f"[{session_id}] DECISION  {decision_str}")
 
         if decision is not None and self._execution_agent is not None:
             typer.echo(f"[{session_id}] Executing …")
@@ -361,17 +359,15 @@ class Scheduler:
 
         report_path: str | None = None
         if self._report_generator is not None and decision is not None:
+            first = decision.decisions[0] if decision.decisions else None
             context: dict[str, Any] = {
                 "session_id": session_id,
                 "candle_close_at": candle_close_at.strftime("%Y-%m-%d %H:%M UTC"),
-                "strategy": decision.etf1.strategy,
-                "etf": decision.etf1.etf,
-                "etf1": decision.etf1.etf,
-                "etf2": decision.etf2.etf,
-                "decision": decision.etf1.action,
-                "etf1_action": decision.etf1.action,
-                "etf2_action": decision.etf2.action,
-                "reasoning": decision.etf1.reasoning,
+                "tickers": [d.ticker for d in decision.decisions],
+                "decisions": {d.ticker: {"action": d.action, "strategy": d.strategy} for d in decision.decisions},
+                "strategy": first.strategy if first else None,
+                "decision": first.action if first else None,
+                "reasoning": first.reasoning if first else None,
                 "signals": None,
                 "execution_result": None,
                 "memory_summary": None,
@@ -382,6 +378,12 @@ class Scheduler:
             )
             typer.echo(f"[{session_id}] Report → {report_path}")
 
+        ticker_decisions_json: str | None = None
+        if decision is not None:
+            ticker_decisions_json = json.dumps(
+                {d.ticker: {"strategy": d.strategy, "decision": d.action} for d in decision.decisions}
+            )
+
         session_status = "COMPLETED" if decision is not None else "SKIPPED_TIMEOUT"
         session_record = Session(
             id=session_id,
@@ -390,31 +392,25 @@ class Scheduler:
             created_at=datetime.now(UTC),
             status=session_status,
             html_report_path=report_path,
-            etf1_strategy=decision.etf1.strategy if decision else None,
-            etf2_strategy=decision.etf2.strategy if decision else None,
-            etf1_decision=decision.etf1.action if decision else "HOLD",
-            etf2_decision=decision.etf2.action if decision else "HOLD",
+            ticker_decisions=ticker_decisions_json,
         )
         self._bank.write_session(session_record)
 
         if decision is not None:
-            for etf_decision in (decision.etf1, decision.etf2):
-                if etf_decision.strategy is None:
+            for asset_decision in decision.decisions:
+                if asset_decision.strategy is None:
                     continue  # no regime identified — nothing to persist in memory bank
                 entry = MemoryEntry(
-                    etf=etf_decision.etf,
-                    strategy=etf_decision.strategy,
+                    ticker=asset_decision.ticker,
+                    strategy=asset_decision.strategy,
                     session_id=session_id,
-                    decision=etf_decision.action,
+                    decision=asset_decision.action,
                     regime_context=json.dumps({"session_ordinal": session_ordinal}),
                     created_at=datetime.now(UTC),
                 )
                 self._bank.write_memory_entry(entry)
-            typer.echo(
-                f"[{session_id}] Memory written"
-                f"  {decision.etf1.etf}={decision.etf1.action}"
-                f"  {decision.etf2.etf}={decision.etf2.action}"
-            )
+            memory_str = "  ".join(f"{d.ticker}={d.action}" for d in decision.decisions)
+            typer.echo(f"[{session_id}] Memory written  {memory_str}")
 
         if self._logger is not None:
             latency_ms = int((datetime.now(UTC) - t0).total_seconds() * 1000)
@@ -442,9 +438,7 @@ class Scheduler:
             return  # startup-only mode (T016 backward compatibility)
 
         run_id = self._bank.start_run(
-            config_snapshot=json.dumps(
-                {"etf1": self._cfg.etf1, "etf2": self._cfg.etf2}
-            ),
+            config_snapshot=json.dumps({"tickers": self._cfg.tickers}),
             session_count_planned=self._cfg.session_count,
         )
 

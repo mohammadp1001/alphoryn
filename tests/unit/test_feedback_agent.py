@@ -28,7 +28,7 @@ _parse_result = FeedbackAgent._parse_result
 _INPUT = FeedbackInput(
     position_id=42,
     session_id="run-1/session-0001",
-    etf="SPY",
+    ticker="SPY",
     strategy="MEAN_REVERSION",
     html_report_path="/reports/run-1/run-1-session-0001.html",
     entry_price=450.0,
@@ -124,7 +124,7 @@ def test_extract_thesis_is_static_method() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_prompt_includes_etf() -> None:
+def test_build_prompt_includes_ticker() -> None:
     prompt = _build_prompt(_INPUT, "thesis text", 460.0)
     assert "SPY" in prompt
 
@@ -225,7 +225,7 @@ def test_evaluate_updates_memory_entry_judgment() -> None:
     bank.update_memory_entry_judgment.assert_called_once()
     kwargs = bank.update_memory_entry_judgment.call_args.kwargs
     assert kwargs["outcome_judgment"] == "CORRECT"
-    assert kwargs["etf"] == "SPY"
+    assert kwargs["ticker"] == "SPY"
 
 
 def test_evaluate_emits_agent_decision_telemetry() -> None:
