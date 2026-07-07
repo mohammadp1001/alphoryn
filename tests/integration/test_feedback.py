@@ -5,8 +5,8 @@ InMemoryRunner / Gemini). Validates the full learning loop:
   - Closed position + matching evaluation window → FeedbackEvaluation written
   - Position.status set to EVALUATED after successful evaluation
   - MemoryEntry.outcome_judgment populated after evaluation
-  - ETF unblocked (position no longer OPEN) after evaluation
-  - 3 consecutive LLM failures → EVALUATION_FAILED, ETF still unblocked
+  - Ticker unblocked (position no longer OPEN) after evaluation
+  - 3 consecutive LLM failures → EVALUATION_FAILED, ticker still unblocked
   - MemoryEntry.outcome_judgment NOT set on failure path
 """
 
@@ -64,7 +64,7 @@ def _seed_db(bank: MemoryBank, html_report_path: str = "") -> tuple[int, int]:
     with DBSession(bank._engine) as s:
         run = Run(
             started_at=_NOW,
-            config_snapshot='{"etf1":"SPY","etf2":"QQQ"}',
+            config_snapshot='{"tickers":["SPY","QQQ"]}',
             session_count_planned=6,
         )
         s.add(run)
@@ -83,7 +83,7 @@ def _seed_db(bank: MemoryBank, html_report_path: str = "") -> tuple[int, int]:
         s.flush()
 
         mem_entry = MemoryEntry(
-            etf="SPY",
+            ticker="SPY",
             strategy="MEAN_REVERSION",
             session_id=_ENTRY_SESSION_ID,
             decision="BUY",
@@ -95,7 +95,7 @@ def _seed_db(bank: MemoryBank, html_report_path: str = "") -> tuple[int, int]:
 
         pos = Position(
             session_id=_ENTRY_SESSION_ID,
-            etf="SPY",
+            ticker="SPY",
             strategy="MEAN_REVERSION",
             direction="BUY",
             entry_price=450.0,
@@ -143,7 +143,7 @@ def _make_feedback_input(position_id: int, html_report_path: str = "") -> Feedba
     return FeedbackInput(
         position_id=position_id,
         session_id=_ENTRY_SESSION_ID,
-        etf="SPY",
+        ticker="SPY",
         strategy="MEAN_REVERSION",
         html_report_path=html_report_path,
         entry_price=450.0,
@@ -225,15 +225,15 @@ def test_evaluate_populates_memory_entry_judgment() -> None:
             s.query(MemoryEntry)
             .filter(
                 MemoryEntry.session_id == _ENTRY_SESSION_ID,
-                MemoryEntry.etf == "SPY",
+                MemoryEntry.ticker == "SPY",
             )
             .one()
         )
     assert entry.outcome_judgment == "CORRECT"
 
 
-def test_evaluate_etf_unblocked_after_evaluation() -> None:
-    """After EVALUATED, position is no longer OPEN → ETF accepts new BUY."""
+def test_evaluate_ticker_unblocked_after_evaluation() -> None:
+    """After EVALUATED, position is no longer OPEN → ticker accepts new BUY."""
     bank = _in_memory_bank()
     _, pos_id = _seed_db(bank)
     agent, _, _ = _make_feedback_agent(bank)
@@ -251,7 +251,7 @@ def test_evaluate_etf_unblocked_after_evaluation() -> None:
         agent.evaluate(fi, _EVAL_SESSION_ID)
 
     open_positions = bank.load_open_positions()
-    assert all(p.etf != "SPY" for p in open_positions)
+    assert all(p.ticker != "SPY" for p in open_positions)
 
 
 def test_evaluate_extracts_thesis_from_real_html(tmp_path: Path) -> None:
@@ -330,8 +330,8 @@ def test_three_failures_writes_evaluation_failed_record() -> None:
     assert evals[0].attempt_count == 3
 
 
-def test_three_failures_etf_unblocked() -> None:
-    """After EVALUATION_FAILED, position is not OPEN → ETF accepts new BUY."""
+def test_three_failures_ticker_unblocked() -> None:
+    """After EVALUATION_FAILED, position is not OPEN → ticker accepts new BUY."""
     bank = _in_memory_bank()
     _, pos_id = _seed_db(bank)
     agent, _, _ = _make_feedback_agent(bank)
@@ -347,7 +347,7 @@ def test_three_failures_etf_unblocked() -> None:
         agent.evaluate(fi, _EVAL_SESSION_ID)
 
     open_positions = bank.load_open_positions()
-    assert all(p.etf != "SPY" for p in open_positions)
+    assert all(p.ticker != "SPY" for p in open_positions)
 
 
 def test_three_failures_memory_entry_judgment_not_set() -> None:
@@ -370,7 +370,7 @@ def test_three_failures_memory_entry_judgment_not_set() -> None:
             s.query(MemoryEntry)
             .filter(
                 MemoryEntry.session_id == _ENTRY_SESSION_ID,
-                MemoryEntry.etf == "SPY",
+                MemoryEntry.ticker == "SPY",
             )
             .one()
         )

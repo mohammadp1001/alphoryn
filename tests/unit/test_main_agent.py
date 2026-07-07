@@ -22,22 +22,24 @@ _CANDLE_CLOSE_AT = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
 
 _DECISION_DICT = {
     "session_id": "sess-001",
-    "etf1": {
-        "etf": "SPY",
-        "action": "BUY",
-        "strategy": "MEAN_REVERSION",
-        "lot_size": 5,
-        "exit_target": {"type": "price_level", "value": 450.0},
-        "reasoning": "ADX low, price below SMA.",
-    },
-    "etf2": {
-        "etf": "QQQ",
-        "action": "HOLD",
-        "strategy": "MOMENTUM",
-        "lot_size": None,
-        "exit_target": None,
-        "reasoning": "No regime qualified.",
-    },
+    "decisions": [
+        {
+            "ticker": "SPY",
+            "action": "BUY",
+            "strategy": "MEAN_REVERSION",
+            "lot_size": 5,
+            "exit_target": {"type": "price_level", "value": 450.0},
+            "reasoning": "ADX low, price below SMA.",
+        },
+        {
+            "ticker": "QQQ",
+            "action": "HOLD",
+            "strategy": "MOMENTUM",
+            "lot_size": None,
+            "exit_target": None,
+            "reasoning": "No regime qualified.",
+        },
+    ],
 }
 
 
@@ -62,7 +64,7 @@ def _make_event(
 def _make_fc(name: str = "build_snapshot") -> MagicMock:
     fc = MagicMock()
     fc.name = name
-    fc.args = {"etf1": "SPY", "etf2": "QQQ", "candle_close_at": "2024-01-15T15:00:00+00:00"}
+    fc.args = {"tickers": ["SPY", "QQQ"], "candle_close_at": "2024-01-15T15:00:00+00:00"}
     return fc
 
 
@@ -133,11 +135,11 @@ def test_decide_returns_session_decision_from_final_event() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([final_event])
 
-        decision = agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        decision = agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     assert decision.session_id == "sess-001"
-    assert decision.etf1.action == "BUY"
-    assert decision.etf2.action == "HOLD"
+    assert decision.decisions[0].action == "BUY"
+    assert decision.decisions[1].action == "HOLD"
 
 
 def test_decide_emits_agent_decision_telemetry() -> None:
@@ -149,7 +151,7 @@ def test_decide_emits_agent_decision_telemetry() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([final_event])
 
-        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     emitted_types = [c.args[0] for c in logger.emit.call_args_list]
     assert "AGENT_DECISION" in emitted_types
@@ -164,7 +166,7 @@ def test_decide_passes_session_id_to_telemetry() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([final_event])
 
-        agent.decide("sess-xyz", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        agent.decide("sess-xyz", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     for c in logger.emit.call_args_list:
         assert c.kwargs.get("session_id") == "sess-xyz"
@@ -186,7 +188,7 @@ def test_decide_tool_call_event_emits_tool_call_telemetry() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([tool_call_event, final_event])
 
-        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     emitted_types = [c.args[0] for c in logger.emit.call_args_list]
     assert "TOOL_CALL" in emitted_types
@@ -204,7 +206,7 @@ def test_decide_multiple_tool_calls_emit_multiple_tool_call_events() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([tool_call_event, final_event])
 
-        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     tool_call_events = [
         c for c in logger.emit.call_args_list if c.args[0] == "TOOL_CALL"
@@ -228,7 +230,7 @@ def test_decide_build_snapshot_response_emits_signal_snapshot_built() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([response_event, final_event])
 
-        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     emitted_types = [c.args[0] for c in logger.emit.call_args_list]
     assert "SIGNAL_SNAPSHOT_BUILT" in emitted_types
@@ -245,7 +247,7 @@ def test_decide_non_build_snapshot_response_does_not_emit_snapshot_built() -> No
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([response_event, final_event])
 
-        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     emitted_types = [c.args[0] for c in logger.emit.call_args_list]
     assert "SIGNAL_SNAPSHOT_BUILT" not in emitted_types
@@ -266,7 +268,7 @@ def test_decide_no_final_response_raises_main_agent_error() -> None:
         mock_runner.run.return_value = iter([non_final_event])
 
         with pytest.raises(MainAgentError, match="no final response"):
-            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+            agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
 
 def test_decide_final_event_with_no_content_raises_main_agent_error() -> None:
@@ -279,7 +281,7 @@ def test_decide_final_event_with_no_content_raises_main_agent_error() -> None:
         mock_runner.run.return_value = iter([event])
 
         with pytest.raises(MainAgentError, match="no final response"):
-            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+            agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
 
 def test_decide_invalid_json_raises_main_agent_error() -> None:
@@ -292,12 +294,12 @@ def test_decide_invalid_json_raises_main_agent_error() -> None:
         mock_runner.run.return_value = iter([final_event])
 
         with pytest.raises(MainAgentError, match="not valid JSON"):
-            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+            agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
 
 def test_decide_invalid_decision_structure_raises_main_agent_error() -> None:
     agent, _ = _make_agent()
-    bad_data = {"session_id": "sess-001", "etf1": "wrong", "etf2": "wrong"}
+    bad_data = {"session_id": "sess-001", "decisions": "wrong"}
     final_event = _make_event(is_final=True, text=json.dumps(bad_data))
 
     with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
@@ -306,7 +308,7 @@ def test_decide_invalid_decision_structure_raises_main_agent_error() -> None:
         mock_runner.run.return_value = iter([final_event])
 
         with pytest.raises(MainAgentError, match="Invalid SessionDecision"):
-            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+            agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
 
 # ---------------------------------------------------------------------------
@@ -317,14 +319,14 @@ def test_decide_invalid_decision_structure_raises_main_agent_error() -> None:
 def test_decide_with_memory_entries_includes_them_in_runner_call() -> None:
     agent, _ = _make_agent()
     final_event = _make_event(is_final=True, text=json.dumps(_DECISION_DICT))
-    entries = [{"etf": "SPY", "outcome_judgment": "CORRECT"}]
+    entries = [{"ticker": "SPY", "outcome_judgment": "CORRECT"}]
 
     with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
         mock_runner = MagicMock()
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([final_event])
 
-        agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT, memory_entries=entries)
+        agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT, memory_entries=entries)
 
     # Verify run was called with Content containing memory_entries in the text
     run_call = mock_runner.run.call_args
@@ -339,28 +341,27 @@ def test_decide_with_memory_entries_includes_them_in_runner_call() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_prompt_contains_session_and_etf_fields() -> None:
-    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, None)
+def test_build_prompt_contains_session_and_tickers_fields() -> None:
+    prompt = _build_prompt("sess-1", ["SPY", "QQQ"], _CANDLE_CLOSE_AT, None)
     assert "session_id: sess-1" in prompt
-    assert "etf1: SPY" in prompt
-    assert "etf2: QQQ" in prompt
+    assert "tickers: SPY, QQQ" in prompt
     assert "candle_close_at:" in prompt
 
 
 def test_build_prompt_without_memory_entries_excludes_memory_key() -> None:
-    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, None)
+    prompt = _build_prompt("sess-1", ["SPY", "QQQ"], _CANDLE_CLOSE_AT, None)
     assert "memory_entries" not in prompt
 
 
 def test_build_prompt_with_memory_entries_includes_json() -> None:
-    entries = [{"etf": "SPY", "outcome_judgment": "INCORRECT"}]
-    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, entries)
+    entries = [{"ticker": "SPY", "outcome_judgment": "INCORRECT"}]
+    prompt = _build_prompt("sess-1", ["SPY", "QQQ"], _CANDLE_CLOSE_AT, entries)
     assert "memory_entries" in prompt
     assert "INCORRECT" in prompt
 
 
 def test_build_prompt_with_empty_memory_entries_excludes_key() -> None:
-    prompt = _build_prompt("sess-1", "SPY", "QQQ", _CANDLE_CLOSE_AT, [])
+    prompt = _build_prompt("sess-1", ["SPY", "QQQ"], _CANDLE_CLOSE_AT, [])
     assert "memory_entries" not in prompt
 
 
@@ -372,21 +373,20 @@ def test_build_prompt_with_empty_memory_entries_excludes_key() -> None:
 def test_parse_decision_returns_session_decision() -> None:
     decision = _parse_decision(_DECISION_DICT)
     assert decision.session_id == "sess-001"
-    assert decision.etf1.etf == "SPY"
-    assert decision.etf2.etf == "QQQ"
+    assert decision.decisions[0].ticker == "SPY"
+    assert decision.decisions[1].ticker == "QQQ"
 
 
 def test_parse_decision_missing_key_raises_main_agent_error() -> None:
-    bad_data = {"session_id": "sess-001", "etf2": _DECISION_DICT["etf2"]}
+    bad_data = {"session_id": "sess-001"}
     with pytest.raises(MainAgentError, match="Invalid SessionDecision"):
         _parse_decision(bad_data)
 
 
-def test_parse_decision_non_dict_etf_raises_main_agent_error() -> None:
+def test_parse_decision_non_list_decisions_raises_main_agent_error() -> None:
     bad_data = {
         "session_id": "sess-001",
-        "etf1": "not-a-dict",
-        "etf2": _DECISION_DICT["etf2"],
+        "decisions": "not-a-list",
     }
     with pytest.raises(MainAgentError, match="Invalid SessionDecision"):
         _parse_decision(bad_data)
@@ -438,7 +438,7 @@ def test_decide_empty_first_part_uses_second_part() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([event])
 
-        decision = agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        decision = agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     assert decision.session_id == "sess-001"
 
@@ -458,7 +458,7 @@ def test_decide_all_empty_parts_raises_main_agent_error() -> None:
         mock_runner.run.return_value = iter([event])
 
         with pytest.raises(MainAgentError, match="no final response"):
-            agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+            agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
 
 def test_decide_markdown_fenced_json_is_parsed_correctly() -> None:
@@ -472,6 +472,6 @@ def test_decide_markdown_fenced_json_is_parsed_correctly() -> None:
         mock_runner_cls.return_value = mock_runner
         mock_runner.run.return_value = iter([final_event])
 
-        decision = agent.decide("sess-001", "SPY", "QQQ", _CANDLE_CLOSE_AT)
+        decision = agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     assert decision.session_id == "sess-001"

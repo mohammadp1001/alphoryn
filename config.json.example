@@ -1,6 +1,5 @@
 {
-  "etf1": "SPY",
-  "etf2": "QQQ",
+  "tickers": ["SPY", "QQQ"],
   "candle_timeframe": "1H",
   "run_duration": "24H",
   "currency": "USD",

@@ -5,7 +5,7 @@ to the actual trade outcome and writes a FeedbackEvaluation record to the memory
 
 Retry policy: up to 3 attempts. On 3rd consecutive failure: writes a partial
 FeedbackEvaluation, marks Position.status = EVALUATION_FAILED (which unblocks
-the ETF for new BUYs), and emits warning telemetry.
+the ticker for new BUYs), and emits warning telemetry.
 """
 
 import json
@@ -41,7 +41,7 @@ class FeedbackInput:
 
     position_id: int
     session_id: str
-    etf: str
+    ticker: str
     strategy: Literal["MEAN_REVERSION", "MOMENTUM"]
     html_report_path: str
     entry_price: float
@@ -83,10 +83,10 @@ class FeedbackAgent:
         """Evaluate a closed position and write a FeedbackEvaluation to the bank.
 
         Retries up to 3 times on LLM failure. On 3rd failure, writes
-        EVALUATION_FAILED status and unblocks the ETF.
+        EVALUATION_FAILED status and unblocks the ticker.
         """
         thesis = self._extract_thesis(feedback_input.html_report_path)
-        current_price = self._market_data.get_latest_price(feedback_input.etf)
+        current_price = self._market_data.get_latest_price(feedback_input.ticker)
 
         last_exc: Exception | None = None
         for attempt in range(1, _MAX_ATTEMPTS + 1):
@@ -114,7 +114,7 @@ class FeedbackAgent:
             "feedback_agent",
             {
                 "position_id": feedback_input.position_id,
-                "etf": feedback_input.etf,
+                "ticker": feedback_input.ticker,
                 "error": str(last_exc),
             },
             session_id=current_session_id,
@@ -185,7 +185,7 @@ class FeedbackAgent:
         pnl = _pnl_pct(feedback_input.entry_price, feedback_input.exit_price)
         return (
             f"POSITION FEEDBACK EVALUATION\n\n"
-            f"ETF: {feedback_input.etf}\n"
+            f"Ticker: {feedback_input.ticker}\n"
             f"Strategy: {feedback_input.strategy}\n\n"
             f"INVESTMENT THESIS (extracted from entry session report):\n{thesis}\n\n"
             f"TRADE OUTCOME:\n"
@@ -242,7 +242,7 @@ class FeedbackAgent:
         self._bank.write_feedback_evaluation(evaluation, "EVALUATED")
         self._bank.update_memory_entry_judgment(
             session_id=feedback_input.session_id,
-            etf=feedback_input.etf,
+            ticker=feedback_input.ticker,
             strategy=feedback_input.strategy,
             outcome_judgment=result["outcome_judgment"],
         )
@@ -251,7 +251,7 @@ class FeedbackAgent:
             "feedback_agent",
             {
                 "position_id": feedback_input.position_id,
-                "etf": feedback_input.etf,
+                "ticker": feedback_input.ticker,
                 "outcome_judgment": result["outcome_judgment"],
                 "attempt": attempt,
             },

@@ -9,20 +9,22 @@ OUTPUT_SCHEMA = """
 OUTPUT SCHEMA — respond with a single JSON object, no other text:
 {
   "session_id": "<session_id from context>",
-  "etf1": {
-    "etf": "<etf1 ticker>",
-    "action": "BUY" | "SELL" | "HOLD",
-    "strategy": "MEAN_REVERSION" | "MOMENTUM" | null,
-    "lot_size": <integer> | null,
-    "exit_target": {"type": "price_level", "value": <float>}
-                 | {"type": "trailing_stop", "trail_pct": 0.015}
-                 | null,
-    "reasoning": "<concise thesis — max 3 sentences>"
-  },
-  "etf2": { <same structure as etf1> }
+  "decisions": [
+    {
+      "ticker": "<ticker symbol>",
+      "action": "BUY" | "SELL" | "HOLD",
+      "strategy": "MEAN_REVERSION" | "MOMENTUM" | null,
+      "lot_size": <integer> | null,
+      "exit_target": {"type": "price_level", "value": <float>}
+                   | {"type": "trailing_stop", "trail_pct": 0.015}
+                   | null,
+      "reasoning": "<concise thesis — max 3 sentences>"
+    }
+  ]
 }
 
 Rules:
+- One entry in "decisions" per ticker provided in the prompt.
 - strategy is null only when NO_REGIME; otherwise always set.
 - lot_size is null for HOLD and SELL.
 - exit_target is null for HOLD.
@@ -33,18 +35,18 @@ Rules:
 """.strip()
 
 MAIN_AGENT_SYSTEM_PROMPT = f"""You are Alphoryn's main trading agent. Analyse market signals \
-for two ETFs and return a SessionDecision JSON for each candle close.
+for the provided tickers and return a SessionDecision JSON for each candle close.
 
 {SNAPSHOT_ISOLATION_CLAUSE}
 
 ## WORKFLOW
 
-1. Call build_snapshot(etf1, etf2, candle_close_at) to receive the signal snapshot.
-2. For each ETF independently:
-   a. Use read_memory to get recent performance context for the ETF.
+1. Call build_snapshot(tickers, candle_close_at) to receive the signal snapshot.
+2. For each ticker independently:
+   a. Use read_memory to get recent performance context for the ticker.
    b. Use identify_regime to classify the market state (MEAN_REVERSION, MOMENTUM, or NO_REGIME).
-   c. If MEAN_REVERSION → use mean_reversion_entry (pass ETF signals + memory context).
-   d. If MOMENTUM → use momentum_entry (pass ETF signals + memory context).
+   c. If MEAN_REVERSION → use mean_reversion_entry (pass ticker signals + memory context).
+   d. If MOMENTUM → use momentum_entry (pass ticker signals + memory context).
    e. If STRONG or MODERATE entry signal → use size_position to compute lot_size.
    f. NO_REGIME or NO_ENTRY → action = HOLD, strategy = null if NO_REGIME.
 3. Output a single JSON SessionDecision (see OUTPUT SCHEMA below).

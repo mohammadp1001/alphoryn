@@ -63,7 +63,8 @@ class TelemetryLogger:
             component:  Emitting component (e.g. ``"main_agent"``, ``"monitor"``).
             payload:    Event-specific fields.
             session_id: Parent session ID (``run-N/session-X``); None for run-level.
-            etf:        ETF ticker where applicable.
+            etf:        Ticker symbol where applicable (kept as ``etf`` for log schema
+                        stability — renaming would break existing log queries).
             latency_ms: Duration in milliseconds where applicable.
         """
         event: dict[str, Any] = {

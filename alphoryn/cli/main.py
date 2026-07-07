@@ -45,8 +45,10 @@ def run(
     config: Annotated[
         str, typer.Option(help="Path to JSON config file.")
     ] = "config.json",
-    etf1: Annotated[str | None, typer.Option(help="ETF 1 ticker. Overrides config.")] = None,
-    etf2: Annotated[str | None, typer.Option(help="ETF 2 ticker. Overrides config.")] = None,
+    tickers: Annotated[
+        str | None,
+        typer.Option(help="Comma-separated ticker symbols, e.g. SPY,QQQ. Overrides config."),
+    ] = None,
     exchange: Annotated[
         str | None, typer.Option(help="Exchange (informational). Overrides config.")
     ] = None,
@@ -71,10 +73,8 @@ def run(
 
     # 1. Load and validate config (exit 1 on failure)
     overrides: dict = {}
-    if etf1 is not None:
-        overrides["etf1"] = etf1
-    if etf2 is not None:
-        overrides["etf2"] = etf2
+    if tickers is not None:
+        overrides["tickers"] = [t.strip() for t in tickers.split(",") if t.strip()]
     if exchange is not None:
         overrides["exchange"] = exchange
     if timeframe is not None:
@@ -114,7 +114,7 @@ def run(
     # 5. Print startup banner
     typer.echo(f"Alphoryn v{_VERSION} — Paper Trading")
     typer.echo(
-        f"ETFs: {cfg.etf1} / {cfg.etf2}"
+        f"Tickers: {', '.join(cfg.tickers)}"
         f" | Timeframe: {cfg.candle_timeframe}"
         f" | Duration: {cfg.run_duration}"
     )
@@ -197,24 +197,23 @@ def status(
     )
     typer.echo(f"Sessions: {completed} completed, {remaining} remaining")
     typer.echo("")
+
     try:
         cfg_snap = json.loads(latest_run.config_snapshot or "{}")
-        etf1_ticker = cfg_snap.get("etf1", "ETF1")
-        etf2_ticker = cfg_snap.get("etf2", "ETF2")
+        run_tickers: list[str] = cfg_snap.get("tickers", [])
     except (json.JSONDecodeError, AttributeError):
-        etf1_ticker = "ETF1"
-        etf2_ticker = "ETF2"
+        run_tickers = []
 
-    pos_by_etf = {pos.etf: pos for pos in open_positions}
+    pos_by_ticker = {pos.ticker: pos for pos in open_positions}
 
     typer.echo("Open positions:")
-    for label, ticker in [("ETF1", etf1_ticker), ("ETF2", etf2_ticker)]:
-        pos = pos_by_etf.get(ticker)
+    for ticker in run_tickers:
+        pos = pos_by_ticker.get(ticker)
         if pos is None:
-            typer.echo(f"  {label} {ticker}  (no open position)")
+            typer.echo(f"  {ticker}  (no open position)")
         else:
             typer.echo(
-                f"  {label} {ticker}  {pos.strategy}  {pos.direction}"
+                f"  {ticker}  {pos.strategy}  {pos.direction}"
                 f" @ {pos.entry_price:.2f}"
                 f"  Stop: {pos.stop_loss_price:.2f}"
                 f"  Status: {pos.status}"
@@ -260,18 +259,34 @@ def history(
             .all()
         )
 
-    header = f"{'Session':<25} {'Candle Close':<22} {'ETF1':<22} {'ETF2'}"
+    # Determine column layout from tickers in config snapshot
+    try:
+        cfg_snap = json.loads(target_run.config_snapshot or "{}")
+        col_tickers: list[str] = cfg_snap.get("tickers", [])
+    except (json.JSONDecodeError, AttributeError):
+        col_tickers = []
+
+    ticker_header = "  ".join(f"{t:<22}" for t in col_tickers) if col_tickers else "Decisions"
+    header = f"{'Session':<25} {'Candle Close':<22} {ticker_header}"
     typer.echo(header)
     typer.echo("-" * len(header))
     for sess in sessions:
-        etf1_col = _format_decision(
-            sess.etf1_strategy, sess.etf1_decision, sess.etf1_execution_result
-        )
-        etf2_col = _format_decision(
-            sess.etf2_strategy, sess.etf2_decision, sess.etf2_execution_result
-        )
         close_str = sess.candle_close_at.strftime("%Y-%m-%d %H:%M")
-        typer.echo(f"{sess.id:<25} {close_str:<22} {etf1_col:<22} {etf2_col}")
+        try:
+            td = json.loads(sess.ticker_decisions or "{}")
+        except (json.JSONDecodeError, TypeError):
+            td = {}
+        if col_tickers:
+            cols = "  ".join(
+                f"{_format_decision(td.get(t, {}).get('strategy'), td.get(t, {}).get('decision'), None):<22}"
+                for t in col_tickers
+            )
+        else:
+            cols = "  ".join(
+                f"{_format_decision(v.get('strategy'), v.get('decision'), None):<22}"
+                for v in td.values()
+            )
+        typer.echo(f"{sess.id:<25} {close_str:<22} {cols}")
 
 
 def _format_decision(strategy: str | None, decision: str | None, result: str | None) -> str:
