@@ -32,6 +32,47 @@ def _scheduler(**cfg_kwargs) -> Scheduler:
 
 
 # ---------------------------------------------------------------------------
+# Default budget derivation — proportional to candle timeframe (87% / 13%)
+# ---------------------------------------------------------------------------
+
+
+def test_default_budget_10min() -> None:
+    sched = _scheduler(candle_timeframe="10min")
+    assert sched._investigation_budget == int(600 * 0.87)
+    assert sched._execute_budget == int(600 * 0.13)
+
+
+def test_default_budget_30min() -> None:
+    sched = _scheduler(candle_timeframe="30min")
+    assert sched._investigation_budget == int(1800 * 0.87)
+    assert sched._execute_budget == int(1800 * 0.13)
+
+
+def test_default_budget_1h() -> None:
+    sched = _scheduler(candle_timeframe="1H")
+    assert sched._investigation_budget == int(3600 * 0.87)  # 3132 s = 52 min
+    assert sched._execute_budget == int(3600 * 0.13)        # 468 s = 7 min 48 s
+
+
+def test_default_budget_4h() -> None:
+    sched = _scheduler(candle_timeframe="4H")
+    assert sched._investigation_budget == int(14400 * 0.87)  # 12528 s = 208 min 48 s
+    assert sched._execute_budget == int(14400 * 0.13)        # 1872 s = 31 min 12 s
+
+
+def test_injected_budget_overrides_default() -> None:
+    bank = MagicMock()
+    sched = Scheduler(
+        _cfg(candle_timeframe="1H"),
+        bank,
+        _investigation_budget_secs=99,
+        _execute_budget_secs=11,
+    )
+    assert sched._investigation_budget == 99
+    assert sched._execute_budget == 11
+
+
+# ---------------------------------------------------------------------------
 # compute_next_candle_close — 1H
 # ---------------------------------------------------------------------------
 
