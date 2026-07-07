@@ -294,5 +294,5 @@ def _format_decision(strategy: str | None, decision: str | None, result: str | N
         return "—"
     strategy_abbr = "MR" if strategy == "MEAN_REVERSION" else "MOM"
     if result == "EXECUTED":
-        return f"{strategy_abbr} → {decision} (exec)"
-    return f"{strategy_abbr} → {decision}"
+        return f"{strategy_abbr} -> {decision} (exec)"
+    return f"{strategy_abbr} -> {decision}"

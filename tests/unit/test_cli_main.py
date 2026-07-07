@@ -123,7 +123,7 @@ def test_run_calls_setup_otel(tmp_path: Path) -> None:
 
 
 def test_warn_fractional_sessions_emits_warning_when_fractional() -> None:
-    """10H / 4H = 2.5 → remainder != 0 → warning emitted."""
+    """10H / 4H = 2.5 -> remainder != 0 -> warning emitted."""
     cfg = AlphorynConfig(
         tickers=["SPY", "QQQ"], candle_timeframe="4H", run_duration="10H"
     )
@@ -134,7 +134,7 @@ def test_warn_fractional_sessions_emits_warning_when_fractional() -> None:
 
 
 def test_warn_fractional_sessions_silent_when_exact() -> None:
-    """24H / 4H = 6 exactly → no warning."""
+    """24H / 4H = 6 exactly -> no warning."""
     cfg = AlphorynConfig(
         tickers=["SPY", "QQQ"], candle_timeframe="4H", run_duration="24H"
     )
@@ -180,23 +180,23 @@ def test_format_decision_no_decision_returns_dash() -> None:
 
 
 def test_format_decision_mean_reversion_executed() -> None:
-    assert _format_decision("MEAN_REVERSION", "BUY", "EXECUTED") == "MR → BUY (exec)"
+    assert _format_decision("MEAN_REVERSION", "BUY", "EXECUTED") == "MR -> BUY (exec)"
 
 
 def test_format_decision_momentum_hold_no_result() -> None:
-    assert _format_decision("MOMENTUM", "HOLD", None) == "MOM → HOLD"
+    assert _format_decision("MOMENTUM", "HOLD", None) == "MOM -> HOLD"
 
 
 def test_format_decision_momentum_sell_executed() -> None:
-    assert _format_decision("MOMENTUM", "SELL", "EXECUTED") == "MOM → SELL (exec)"
+    assert _format_decision("MOMENTUM", "SELL", "EXECUTED") == "MOM -> SELL (exec)"
 
 
 def test_format_decision_momentum_buy_skipped() -> None:
-    assert _format_decision("MOMENTUM", "BUY", "SKIPPED_BUDGET") == "MOM → BUY"
+    assert _format_decision("MOMENTUM", "BUY", "SKIPPED_BUDGET") == "MOM -> BUY"
 
 
 def test_format_decision_mean_reversion_hold() -> None:
-    assert _format_decision("MEAN_REVERSION", "HOLD", None) == "MR → HOLD"
+    assert _format_decision("MEAN_REVERSION", "HOLD", None) == "MR -> HOLD"
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +248,7 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
 def test_status_falls_back_to_empty_list_on_bad_config_snapshot(
     tmp_path: Path,
 ) -> None:
-    """config_snapshot with invalid JSON → run_tickers=[] → no ticker rows shown."""
+    """config_snapshot with invalid JSON -> run_tickers=[] -> no ticker rows shown."""
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     bank.start_run("not-valid-json", 6)
@@ -264,7 +264,7 @@ def test_status_falls_back_to_empty_list_on_bad_config_snapshot(
 
 
 def test_history_bad_config_snapshot_falls_back_to_decisions_column(tmp_path: Path) -> None:
-    """Bad JSON in config_snapshot → col_tickers=[] → uses 'Decisions' header."""
+    """Bad JSON in config_snapshot -> col_tickers=[] -> uses 'Decisions' header."""
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     run_id = bank.start_run("not-valid-json", 6)
@@ -288,7 +288,7 @@ def test_history_bad_config_snapshot_falls_back_to_decisions_column(tmp_path: Pa
 
 
 def test_history_bad_ticker_decisions_json_falls_back_to_empty(tmp_path: Path) -> None:
-    """Bad JSON in ticker_decisions → td={} → no decision columns rendered."""
+    """Bad JSON in ticker_decisions -> td={} -> no decision columns rendered."""
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
     run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
@@ -335,5 +335,5 @@ def test_history_shows_session_rows(tmp_path: Path) -> None:
     result = runner.invoke(app, ["history", "--db", str(db)])
     assert result.exit_code == 0
     assert sess_id in result.output
-    assert "MR → BUY" in result.output
-    assert "MOM → HOLD" in result.output
+    assert "MR -> BUY" in result.output
+    assert "MOM -> HOLD" in result.output
