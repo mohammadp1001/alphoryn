@@ -44,6 +44,7 @@ def _patched_run(config_file: Path, extra_args: list[str] | None = None):
         patch("alphoryn.cli.main.load_alpaca_credentials"),
         patch("alphoryn.cli.main.MemoryBank") as mock_bank_cls,
         patch("alphoryn.cli.main._start_scheduler"),
+        patch("alphoryn.cli.main.setup_otel"),
     ):
         mock_bank = MagicMock()
         mock_bank.load_open_positions.return_value = []
@@ -94,6 +95,26 @@ def test_run_stop_loss_override(tmp_path: Path) -> None:
     cfg_file = _cfg_file(tmp_path)
     result = _patched_run(cfg_file, ["--stop-loss", "0.05"])
     assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# setup_otel integration in run()
+# ---------------------------------------------------------------------------
+
+
+def test_run_calls_setup_otel(tmp_path: Path) -> None:
+    cfg_file = _cfg_file(tmp_path)
+    with (
+        patch("alphoryn.cli.main.load_alpaca_credentials"),
+        patch("alphoryn.cli.main.MemoryBank") as mock_bank_cls,
+        patch("alphoryn.cli.main._start_scheduler"),
+        patch("alphoryn.cli.main.setup_otel") as mock_setup_otel,
+    ):
+        mock_bank = MagicMock()
+        mock_bank.load_open_positions.return_value = []
+        mock_bank_cls.return_value = mock_bank
+        runner.invoke(app, ["run", "--config", str(cfg_file)])
+    mock_setup_otel.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
