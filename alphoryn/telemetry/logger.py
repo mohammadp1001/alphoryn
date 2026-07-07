@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import google.cloud.logging as _gcloud_logging
-from google.cloud.logging.handlers.transports import SyncTransport
 
 _logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class TelemetryLogger:
         self._cloud_logger: object | None = None
         try:
             client = _gcloud_logging.Client()
-            self._cloud_logger = client.logger(log_name, transport=SyncTransport)
+            self._cloud_logger = client.logger(log_name)
         except Exception as exc:
             _logger.warning("Cloud Logging unavailable, falling back to stderr: %s", exc)
 
