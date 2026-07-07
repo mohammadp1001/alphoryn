@@ -1,11 +1,11 @@
 """Unit tests for alphoryn/reports/generator.py (T023 scope).
 
-Tests are written BEFORE the implementation (TDD). They verify:
-- Mean reversion template renders <section id="investment-thesis">
-- Momentum template renders trailing stop watermark field
+Tests verify:
+- session.html.j2 template renders <section id="investment-thesis">
+- Momentum position renders trailing stop watermark field
 - Output path format: reports/run-{run_id}/session-{seq}.html
-- Context object matches contracts/report-context.md
-- Both templates guarantee <section id="investment-thesis"> exists
+- Context object contains tickers list and ticker_details list
+- Position and signals sections are conditional
 """
 
 from pathlib import Path
@@ -13,16 +13,23 @@ from pathlib import Path
 from alphoryn.reports.generator import ReportGenerator
 
 # ---------------------------------------------------------------------------
-# Fixture context objects (per contracts/report-context.md)
+# Fixture context objects
 # ---------------------------------------------------------------------------
 
 _MEAN_REVERSION_CONTEXT = {
     "session_id": "run-1/session-abc",
     "candle_close_at": "2026-07-05 14:00 UTC",
-    "etf": "SPY",
+    "tickers": ["SPY"],
+    "ticker_details": [
+        {
+            "ticker": "SPY",
+            "action": "BUY",
+            "strategy": "MEAN_REVERSION",
+            "reasoning": "RSI below 30, price below lower Bollinger Band — reversion likely.",
+            "memory_summary": None,
+        }
+    ],
     "strategy": "MEAN_REVERSION",
-    "decision": "BUY",
-    "reasoning": "RSI below 30, price below lower Bollinger Band — reversion likely.",
     "signals": {
         "rsi_14": 28.5,
         "adx_14": 18.0,
@@ -48,16 +55,22 @@ _MEAN_REVERSION_CONTEXT = {
         "exit_target": {"type": "price_level", "value": 542.0},
         "trailing_stop_high_watermark": None,
     },
-    "memory_summary": None,
 }
 
 _MOMENTUM_CONTEXT = {
     "session_id": "run-1/session-def",
     "candle_close_at": "2026-07-05 15:00 UTC",
-    "etf": "QQQ",
+    "tickers": ["QQQ"],
+    "ticker_details": [
+        {
+            "ticker": "QQQ",
+            "action": "BUY",
+            "strategy": "MOMENTUM",
+            "reasoning": "Strong ADX, price above EMA-20, volume surge — momentum confirmed.",
+            "memory_summary": "Prior MOMENTUM BUY on QQQ returned +2.3% in 5 sessions.",
+        }
+    ],
     "strategy": "MOMENTUM",
-    "decision": "BUY",
-    "reasoning": "Strong ADX, price above EMA-20, volume surge — momentum confirmed.",
     "signals": {
         "rsi_14": 62.0,
         "adx_14": 30.0,
@@ -83,12 +96,42 @@ _MOMENTUM_CONTEXT = {
         "exit_target": {"type": "trailing_stop", "trail_pct": 0.015},
         "trailing_stop_high_watermark": 452.0,
     },
-    "memory_summary": "Prior MOMENTUM BUY on QQQ returned +2.3% in 5 sessions.",
 }
 
 _HOLD_CONTEXT = {
     **_MEAN_REVERSION_CONTEXT,
-    "decision": "HOLD",
+    "ticker_details": [
+        {
+            **_MEAN_REVERSION_CONTEXT["ticker_details"][0],
+            "action": "HOLD",
+        }
+    ],
+    "execution_result": None,
+    "position": None,
+}
+
+_MULTI_TICKER_CONTEXT = {
+    "session_id": "run-1/session-multi",
+    "candle_close_at": "2026-07-05 16:00 UTC",
+    "tickers": ["SPY", "QQQ"],
+    "ticker_details": [
+        {
+            "ticker": "SPY",
+            "action": "HOLD",
+            "strategy": "MEAN_REVERSION",
+            "reasoning": "Entry conditions not met.",
+            "memory_summary": None,
+        },
+        {
+            "ticker": "QQQ",
+            "action": "BUY",
+            "strategy": "MOMENTUM",
+            "reasoning": "Strong trend confirmed.",
+            "memory_summary": None,
+        },
+    ],
+    "strategy": "MEAN_REVERSION",
+    "signals": None,
     "execution_result": None,
     "position": None,
 }
@@ -146,7 +189,7 @@ def test_momentum_renders_investment_thesis_section(tmp_path: Path) -> None:
 def test_momentum_contains_trailing_stop_watermark(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
     html = gen.render("run-1", "session-def", _MOMENTUM_CONTEXT)
-    assert "trailing_stop_high_watermark" in html or "watermark" in html.lower()
+    assert "watermark" in html.lower()
 
 
 def test_momentum_contains_strategy_name(tmp_path: Path) -> None:
@@ -164,6 +207,31 @@ def test_hold_decision_still_has_investment_thesis_section(tmp_path: Path) -> No
     gen = _generator(tmp_path)
     html = gen.render("run-1", "session-abc", _HOLD_CONTEXT)
     assert '<section id="investment-thesis">' in html
+
+
+# ---------------------------------------------------------------------------
+# Multi-ticker context
+# ---------------------------------------------------------------------------
+
+
+def test_multi_ticker_shows_all_tickers_in_title(tmp_path: Path) -> None:
+    gen = _generator(tmp_path)
+    html = gen.render("run-1", "session-multi", _MULTI_TICKER_CONTEXT)
+    assert "SPY" in html
+    assert "QQQ" in html
+
+
+def test_multi_ticker_shows_decisions_section(tmp_path: Path) -> None:
+    gen = _generator(tmp_path)
+    html = gen.render("run-1", "session-multi", _MULTI_TICKER_CONTEXT)
+    assert '<section id="decisions">' in html
+
+
+def test_multi_ticker_shows_both_reasonings(tmp_path: Path) -> None:
+    gen = _generator(tmp_path)
+    html = gen.render("run-1", "session-multi", _MULTI_TICKER_CONTEXT)
+    assert "Entry conditions not met" in html
+    assert "Strong trend confirmed" in html
 
 
 # ---------------------------------------------------------------------------
@@ -198,14 +266,18 @@ def test_write_report_creates_parent_directories(tmp_path: Path) -> None:
 
 
 def test_render_with_memory_summary(tmp_path: Path) -> None:
-    ctx = {**_MEAN_REVERSION_CONTEXT, "memory_summary": "Prior BUY CORRECT."}
+    ctx = {
+        **_MEAN_REVERSION_CONTEXT,
+        "ticker_details": [
+            {**_MEAN_REVERSION_CONTEXT["ticker_details"][0], "memory_summary": "Prior BUY CORRECT."}
+        ],
+    }
     gen = _generator(tmp_path)
     html = gen.render("run-1", "session-abc", ctx)
     assert "Prior BUY CORRECT" in html
 
 
 def test_render_with_no_position(tmp_path: Path) -> None:
-    """HOLD decision renders without a position block."""
     gen = _generator(tmp_path)
     html = gen.render("run-1", "session-hold", _HOLD_CONTEXT)
-    assert html  # just verify it renders without error
+    assert html
