@@ -86,3 +86,20 @@ def test_setup_otel_logs_warning_on_failure(monkeypatch, caplog) -> None:
     with p1, p2, caplog.at_level(logging.WARNING, logger="alphoryn.telemetry.otel"):
         setup_otel()
     assert any("OpenTelemetry setup failed" in r.message for r in caplog.records)
+
+
+def test_setup_otel_does_not_raise_on_import_error(monkeypatch) -> None:
+    monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+    mock_get = MagicMock(side_effect=ImportError("opentelemetry-exporter-gcp-trace not installed"))
+    p1, p2 = _patched_otel(mock_get=mock_get)
+    with p1, p2:
+        setup_otel()  # must not raise even if exporter packages are missing
+
+
+def test_setup_otel_logs_warning_on_import_error(monkeypatch, caplog) -> None:
+    monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+    mock_get = MagicMock(side_effect=ImportError("opentelemetry-exporter-gcp-trace not installed"))
+    p1, p2 = _patched_otel(mock_get=mock_get)
+    with p1, p2, caplog.at_level(logging.WARNING, logger="alphoryn.telemetry.otel"):
+        setup_otel()
+    assert any("OpenTelemetry setup failed" in r.message for r in caplog.records)
