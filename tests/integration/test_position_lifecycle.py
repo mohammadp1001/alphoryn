@@ -2,7 +2,7 @@
 
 Uses a real SQLite MemoryBank with Alpaca API calls stubbed. Validates:
   - Stop-loss exit closes position and marks status CLOSED_STOP_LOSS
-  - Blocked BUY when OPEN position exists on same ETF (FR-014)
+  - Blocked BUY when OPEN position exists on same ticker (FR-014)
   - Trailing stop watermark updated on new price high
   - Window expiry exit closes position with CLOSED_WINDOW_EXPIRY
 """
@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 from sqlalchemy.orm import Session as DBSession
 
-from alphoryn.execution.agent import ETFDecision, ExecutionAgent, SessionDecision
+from alphoryn.execution.agent import AssetDecision, ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import Position, Session
 from alphoryn.monitor.monitor import PositionMonitor
@@ -51,7 +51,7 @@ def _open_position(
     bank: MemoryBank,
     session_id: str,
     *,
-    etf: str = "SPY",
+    ticker: str = "SPY",
     strategy: str = "MEAN_REVERSION",
     stop_loss_price: float = 430.0,
     exit_target: dict | None = None,
@@ -62,7 +62,7 @@ def _open_position(
         exit_target = {"type": "price_level", "value": 470.0}
     pos = Position(
         session_id=session_id,
-        etf=etf,
+        ticker=ticker,
         strategy=strategy,
         direction="BUY",
         entry_price=450.0,
@@ -144,26 +144,28 @@ def test_stop_loss_sets_status_closed_stop_loss(tmp_path: Path) -> None:
 def test_buy_blocked_by_open_position(tmp_path: Path) -> None:
     bank = _init_bank(tmp_path / "memory.db")
     _, session_id = _write_run_and_session(bank)
-    _open_position(bank, session_id, etf="SPY")
+    _open_position(bank, session_id, ticker="SPY")
 
     decision = SessionDecision(
         session_id=session_id,
-        etf1=ETFDecision(
-            etf="SPY",
-            action="BUY",
-            strategy="MEAN_REVERSION",
-            lot_size=5,
-            exit_target={"type": "price_level", "value": 470.0},
-            reasoning="ADX low.",
-        ),
-        etf2=ETFDecision(
-            etf="QQQ",
-            action="HOLD",
-            strategy="MOMENTUM",
-            lot_size=None,
-            exit_target=None,
-            reasoning="No regime.",
-        ),
+        decisions=[
+            AssetDecision(
+                ticker="SPY",
+                action="BUY",
+                strategy="MEAN_REVERSION",
+                lot_size=5,
+                exit_target={"type": "price_level", "value": 470.0},
+                reasoning="ADX low.",
+            ),
+            AssetDecision(
+                ticker="QQQ",
+                action="HOLD",
+                strategy="MOMENTUM",
+                lot_size=None,
+                exit_target=None,
+                reasoning="No regime.",
+            ),
+        ],
     )
     agent = ExecutionAgent(bank)
 
@@ -172,29 +174,31 @@ def test_buy_blocked_by_open_position(tmp_path: Path) -> None:
         mock_tc_cls.assert_not_called()  # SPY BUY was blocked
 
 
-def test_buy_on_different_etf_not_blocked(tmp_path: Path) -> None:
+def test_buy_on_different_ticker_not_blocked(tmp_path: Path) -> None:
     bank = _init_bank(tmp_path / "memory.db")
     _, session_id = _write_run_and_session(bank)
-    _open_position(bank, session_id, etf="SPY")  # SPY blocked
+    _open_position(bank, session_id, ticker="SPY")  # SPY blocked
 
     decision = SessionDecision(
         session_id=session_id,
-        etf1=ETFDecision(
-            etf="SPY",
-            action="HOLD",
-            strategy="MEAN_REVERSION",
-            lot_size=None,
-            exit_target=None,
-            reasoning="Position blocked.",
-        ),
-        etf2=ETFDecision(
-            etf="QQQ",
-            action="BUY",
-            strategy="MOMENTUM",
-            lot_size=3,
-            exit_target={"type": "trailing_stop", "trail_pct": 0.015},
-            reasoning="ADX strong.",
-        ),
+        decisions=[
+            AssetDecision(
+                ticker="SPY",
+                action="HOLD",
+                strategy="MEAN_REVERSION",
+                lot_size=None,
+                exit_target=None,
+                reasoning="Position blocked.",
+            ),
+            AssetDecision(
+                ticker="QQQ",
+                action="BUY",
+                strategy="MOMENTUM",
+                lot_size=3,
+                exit_target={"type": "trailing_stop", "trail_pct": 0.015},
+                reasoning="ADX strong.",
+            ),
+        ],
     )
     agent = ExecutionAgent(bank)
 

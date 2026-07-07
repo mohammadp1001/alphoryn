@@ -33,7 +33,7 @@ runner = CliRunner()
 
 
 def _cfg_file(tmp_path: Path, **extra) -> Path:
-    payload = {"etf1": "SPY", "etf2": "QQQ", **extra}
+    payload = {"tickers": ["SPY", "QQQ"], **extra}
     f = tmp_path / "config.json"
     f.write_text(json.dumps(payload), encoding="utf-8")
     return f
@@ -123,9 +123,9 @@ def test_run_calls_setup_otel(tmp_path: Path) -> None:
 
 
 def test_warn_fractional_sessions_emits_warning_when_fractional() -> None:
-    """10H / 4H = 2.5 → remainder != 0 → warning emitted."""
+    """10H / 4H = 2.5 -> remainder != 0 -> warning emitted."""
     cfg = AlphorynConfig(
-        etf1="SPY", etf2="QQQ", candle_timeframe="4H", run_duration="10H"
+        tickers=["SPY", "QQQ"], candle_timeframe="4H", run_duration="10H"
     )
     with patch("sys.stderr", StringIO()) as buf:
         _warn_fractional_sessions(cfg)
@@ -134,9 +134,9 @@ def test_warn_fractional_sessions_emits_warning_when_fractional() -> None:
 
 
 def test_warn_fractional_sessions_silent_when_exact() -> None:
-    """24H / 4H = 6 exactly → no warning."""
+    """24H / 4H = 6 exactly -> no warning."""
     cfg = AlphorynConfig(
-        etf1="SPY", etf2="QQQ", candle_timeframe="4H", run_duration="24H"
+        tickers=["SPY", "QQQ"], candle_timeframe="4H", run_duration="24H"
     )
     with patch("sys.stderr", StringIO()) as buf:
         _warn_fractional_sessions(cfg)
@@ -156,7 +156,7 @@ def test_fractional_session_warning_appears_in_run_output(tmp_path: Path) -> Non
 
 
 def test_start_scheduler_creates_and_runs_scheduler() -> None:
-    cfg = AlphorynConfig(etf1="SPY", etf2="QQQ")
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"])
     bank = MagicMock()
     mock_scheduler = MagicMock()
 
@@ -180,23 +180,23 @@ def test_format_decision_no_decision_returns_dash() -> None:
 
 
 def test_format_decision_mean_reversion_executed() -> None:
-    assert _format_decision("MEAN_REVERSION", "BUY", "EXECUTED") == "MR → BUY (exec)"
+    assert _format_decision("MEAN_REVERSION", "BUY", "EXECUTED") == "MR -> BUY (exec)"
 
 
 def test_format_decision_momentum_hold_no_result() -> None:
-    assert _format_decision("MOMENTUM", "HOLD", None) == "MOM → HOLD"
+    assert _format_decision("MOMENTUM", "HOLD", None) == "MOM -> HOLD"
 
 
 def test_format_decision_momentum_sell_executed() -> None:
-    assert _format_decision("MOMENTUM", "SELL", "EXECUTED") == "MOM → SELL (exec)"
+    assert _format_decision("MOMENTUM", "SELL", "EXECUTED") == "MOM -> SELL (exec)"
 
 
 def test_format_decision_momentum_buy_skipped() -> None:
-    assert _format_decision("MOMENTUM", "BUY", "SKIPPED_BUDGET") == "MOM → BUY"
+    assert _format_decision("MOMENTUM", "BUY", "SKIPPED_BUDGET") == "MOM -> BUY"
 
 
 def test_format_decision_mean_reversion_hold() -> None:
-    assert _format_decision("MEAN_REVERSION", "HOLD", None) == "MR → HOLD"
+    assert _format_decision("MEAN_REVERSION", "HOLD", None) == "MR -> HOLD"
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +207,7 @@ def test_format_decision_mean_reversion_hold() -> None:
 def test_status_shows_open_positions(tmp_path: Path) -> None:
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
 
     sess_id = f"run-{run_id}/session-0001"
     with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:
@@ -222,7 +222,7 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
         s.commit()
         pos = Position(
             session_id=sess_id,
-            etf="SPY",
+            ticker="SPY",
             strategy="MOMENTUM",
             direction="BUY",
             entry_price=450.0,
@@ -238,26 +238,24 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["status", "--db", str(db)])
     assert result.exit_code == 0
-    assert "ETF1 SPY" in result.output
+    assert "SPY" in result.output
     assert "MOMENTUM" in result.output
     assert "BUY" in result.output
     assert "450.00" in result.output
-    assert "ETF2 QQQ  (no open position)" in result.output
+    assert "QQQ  (no open position)" in result.output
 
 
-def test_status_falls_back_to_generic_labels_on_bad_config_snapshot(
+def test_status_falls_back_to_empty_list_on_bad_config_snapshot(
     tmp_path: Path,
 ) -> None:
-    """config_snapshot with invalid JSON → falls back to ETF1/ETF2 labels."""
+    """config_snapshot with invalid JSON -> run_tickers=[] -> no ticker rows shown."""
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    # store non-JSON garbage as config_snapshot
     bank.start_run("not-valid-json", 6)
 
     result = runner.invoke(app, ["status", "--db", str(db)])
     assert result.exit_code == 0
-    assert "ETF1 ETF1" in result.output
-    assert "ETF2 ETF2" in result.output
+    assert "Open positions:" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -265,10 +263,11 @@ def test_status_falls_back_to_generic_labels_on_bad_config_snapshot(
 # ---------------------------------------------------------------------------
 
 
-def test_history_shows_session_rows(tmp_path: Path) -> None:
+def test_history_bad_config_snapshot_falls_back_to_decisions_column(tmp_path: Path) -> None:
+    """Bad JSON in config_snapshot -> col_tickers=[] -> uses 'Decisions' header."""
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    run_id = bank.start_run('{"etf1":"SPY"}', 6)
+    run_id = bank.start_run("not-valid-json", 6)
 
     sess_id = f"run-{run_id}/session-0001"
     with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:
@@ -278,12 +277,31 @@ def test_history_shows_session_rows(tmp_path: Path) -> None:
             candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
             created_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
             status="COMPLETED",
-            etf1_strategy="MEAN_REVERSION",
-            etf1_decision="BUY",
-            etf1_execution_result="EXECUTED",
-            etf2_strategy="MOMENTUM",
-            etf2_decision="HOLD",
-            etf2_execution_result=None,
+            ticker_decisions=json.dumps({"SPY": {"strategy": "MOMENTUM", "decision": "BUY"}}),
+        )
+        s.add(sess)
+        s.commit()
+
+    result = runner.invoke(app, ["history", "--db", str(db)])
+    assert result.exit_code == 0
+    assert "Decisions" in result.output
+
+
+def test_history_bad_ticker_decisions_json_falls_back_to_empty(tmp_path: Path) -> None:
+    """Bad JSON in ticker_decisions -> td={} -> no decision columns rendered."""
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+
+    sess_id = f"run-{run_id}/session-0001"
+    with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:
+        sess = Sess(
+            id=sess_id,
+            run_id=run_id,
+            candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+            created_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+            status="COMPLETED",
+            ticker_decisions="not-valid-json",
         )
         s.add(sess)
         s.commit()
@@ -291,7 +309,31 @@ def test_history_shows_session_rows(tmp_path: Path) -> None:
     result = runner.invoke(app, ["history", "--db", str(db)])
     assert result.exit_code == 0
     assert sess_id in result.output
-    assert "MR → BUY (exec)" in result.output
-    assert "MOM → HOLD" in result.output
 
 
+def test_history_shows_session_rows(tmp_path: Path) -> None:
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+
+    sess_id = f"run-{run_id}/session-0001"
+    with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:
+        sess = Sess(
+            id=sess_id,
+            run_id=run_id,
+            candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+            created_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+            status="COMPLETED",
+            ticker_decisions=json.dumps({
+                "SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY"},
+                "QQQ": {"strategy": "MOMENTUM", "decision": "HOLD"},
+            }),
+        )
+        s.add(sess)
+        s.commit()
+
+    result = runner.invoke(app, ["history", "--db", str(db)])
+    assert result.exit_code == 0
+    assert sess_id in result.output
+    assert "MR -> BUY" in result.output
+    assert "MOM -> HOLD" in result.output

@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import google.cloud.logging as _gcloud_logging
-from google.cloud.logging.handlers.transports import SyncTransport
 
 _logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class TelemetryLogger:
         self._cloud_logger: object | None = None
         try:
             client = _gcloud_logging.Client()
-            self._cloud_logger = client.logger(log_name, transport=SyncTransport)
+            self._cloud_logger = client.logger(log_name)
         except Exception as exc:
             _logger.warning("Cloud Logging unavailable, falling back to stderr: %s", exc)
 
@@ -63,7 +62,8 @@ class TelemetryLogger:
             component:  Emitting component (e.g. ``"main_agent"``, ``"monitor"``).
             payload:    Event-specific fields.
             session_id: Parent session ID (``run-N/session-X``); None for run-level.
-            etf:        ETF ticker where applicable.
+            etf:        Ticker symbol where applicable (kept as ``etf`` for log schema
+                        stability — renaming would break existing log queries).
             latency_ms: Duration in milliseconds where applicable.
         """
         event: dict[str, Any] = {

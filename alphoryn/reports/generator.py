@@ -10,12 +10,6 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 _TEMPLATE_DIR = Path(__file__).parent.parent.parent / "templates" / "reports"
-_TEMPLATE_MAP = {
-    "MEAN_REVERSION": "mean_reversion.html.j2",
-    "MOMENTUM": "momentum.html.j2",
-}
-
-
 class ReportGenerator:
     """Renders and writes session HTML reports."""
 
@@ -28,9 +22,7 @@ class ReportGenerator:
 
     def render(self, run_id: str, session_seq: str, context: dict) -> str:
         """Render and return the HTML string for a session report."""
-        strategy = context.get("strategy", "MOMENTUM")
-        template_name = _TEMPLATE_MAP.get(strategy, "momentum.html.j2")
-        template = self._env.get_template(template_name)
+        template = self._env.get_template("session.html.j2")
         return template.render(**context)
 
     def write(self, run_id: str, session_seq: str, context: dict) -> str:

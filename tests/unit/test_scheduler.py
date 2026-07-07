@@ -7,7 +7,7 @@ from io import StringIO
 from unittest.mock import MagicMock, patch
 
 from alphoryn.config.models import AlphorynConfig
-from alphoryn.execution.agent import ETFDecision, SessionDecision
+from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.scheduler.scheduler import Scheduler
 
 # ---------------------------------------------------------------------------
@@ -17,8 +17,7 @@ from alphoryn.scheduler.scheduler import Scheduler
 
 def _cfg(**kwargs) -> AlphorynConfig:
     defaults = {
-        "etf1": "SPY",
-        "etf2": "QQQ",
+        "tickers": ["SPY", "QQQ"],
         "candle_timeframe": "1H",
         "run_duration": "24H",
         "max_startup_latency_seconds": 60,
@@ -310,22 +309,24 @@ def test_run_waits_until_next_candle_close() -> None:
 
 _FIXTURE_DECISION = SessionDecision(
     session_id="run-1/session-0001",
-    etf1=ETFDecision(
-        etf="SPY",
-        action="BUY",
-        strategy="MEAN_REVERSION",
-        lot_size=5,
-        exit_target={"type": "price_level", "value": 460.0},
-        reasoning="ADX low.",
-    ),
-    etf2=ETFDecision(
-        etf="QQQ",
-        action="HOLD",
-        strategy="MOMENTUM",
-        lot_size=None,
-        exit_target=None,
-        reasoning="No regime.",
-    ),
+    decisions=[
+        AssetDecision(
+            ticker="SPY",
+            action="BUY",
+            strategy="MEAN_REVERSION",
+            lot_size=5,
+            exit_target={"type": "price_level", "value": 460.0},
+            reasoning="ADX low.",
+        ),
+        AssetDecision(
+            ticker="QQQ",
+            action="HOLD",
+            strategy="MOMENTUM",
+            lot_size=None,
+            exit_target=None,
+            reasoning="No regime.",
+        ),
+    ],
 )
 
 
@@ -334,8 +335,7 @@ def _full_scheduler(**extra) -> Scheduler:
     bank = MagicMock()
     bank.start_run.return_value = 1
     cfg = AlphorynConfig(
-        etf1="SPY",
-        etf2="QQQ",
+        tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
         run_duration="1H",  # session_count = 1
         max_startup_latency_seconds=3600,
@@ -408,7 +408,7 @@ def test_run_writes_session_to_bank() -> None:
     sched._bank.write_session.assert_called_once()
 
 
-def test_run_writes_memory_entries_for_both_etfs() -> None:
+def test_run_writes_memory_entries_for_both_tickers() -> None:
     sched = _full_scheduler()
     _run_with_no_wait(sched)
     assert sched._bank.write_memory_entry.call_count == 2
@@ -712,8 +712,7 @@ def _full_scheduler_with_feedback(**extra) -> Scheduler:
     bank.start_run.return_value = 1
     bank.get_positions_due_for_feedback.return_value = []
     cfg = AlphorynConfig(
-        etf1="SPY",
-        etf2="QQQ",
+        tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
         run_duration="1H",
         max_startup_latency_seconds=3600,
@@ -737,7 +736,7 @@ def _make_mock_position() -> MagicMock:
     pos = MagicMock()
     pos.id = 99
     pos.session_id = "run-1/session-0001"
-    pos.etf = "SPY"
+    pos.ticker = "SPY"
     pos.strategy = "MEAN_REVERSION"
     pos.entry_price = 450.0
     pos.exit_price = 458.0
@@ -765,7 +764,7 @@ def test_run_feedback_invokes_feedback_agent_per_position() -> None:
     pos1 = _make_mock_position()
     pos2 = _make_mock_position()
     pos2.id = 100
-    pos2.etf = "QQQ"
+    pos2.ticker = "QQQ"
     sched._bank.get_positions_due_for_feedback.return_value = [pos1, pos2]
     sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
 
@@ -850,26 +849,28 @@ def test_process_session_calls_run_feedback_before_investigation() -> None:
 
 
 def test_process_session_null_strategy_skips_memory_write() -> None:
-    """ETFDecision with strategy=None must not attempt a DB write (NOT NULL guard)."""
+    """AssetDecision with strategy=None must not attempt a DB write (NOT NULL guard)."""
     sched = _full_scheduler()
     null_strategy_decision = SessionDecision(
         session_id="run-1/session-0001",
-        etf1=ETFDecision(
-            etf="SPY",
-            action="HOLD",
-            strategy=None,  # type: ignore[arg-type]
-            lot_size=None,
-            exit_target=None,
-            reasoning="No regime qualified.",
-        ),
-        etf2=ETFDecision(
-            etf="QQQ",
-            action="HOLD",
-            strategy="MOMENTUM",
-            lot_size=None,
-            exit_target=None,
-            reasoning="Regime present but no entry signal.",
-        ),
+        decisions=[
+            AssetDecision(
+                ticker="SPY",
+                action="HOLD",
+                strategy=None,  # type: ignore[arg-type]
+                lot_size=None,
+                exit_target=None,
+                reasoning="No regime qualified.",
+            ),
+            AssetDecision(
+                ticker="QQQ",
+                action="HOLD",
+                strategy="MOMENTUM",
+                lot_size=None,
+                exit_target=None,
+                reasoning="Regime present but no entry signal.",
+            ),
+        ],
     )
 
     with patch.object(sched, "_run_investigation", return_value=null_strategy_decision):
@@ -884,5 +885,5 @@ def test_process_session_null_strategy_skips_memory_write() -> None:
     calls = sched._bank.write_memory_entry.call_args_list
     assert len(calls) == 1
     written_entry = calls[0].args[0]
-    assert written_entry.etf == "QQQ"
+    assert written_entry.ticker == "QQQ"
     assert written_entry.strategy == "MOMENTUM"

@@ -35,13 +35,8 @@ class Session(Base):
     status = Column(String, nullable=False)
     # Valid statuses: COMPLETED | SKIPPED_TIMEOUT | SKIPPED_MARKET_CLOSED | SKIPPED_DATA_UNAVAILABLE
     html_report_path = Column(String, nullable=True)
-    etf1_strategy = Column(String, nullable=True)   # MEAN_REVERSION | MOMENTUM
-    etf2_strategy = Column(String, nullable=True)
-    etf1_decision = Column(String, nullable=True)   # BUY | SELL | HOLD
-    etf2_decision = Column(String, nullable=True)
-    etf1_execution_result = Column(String, nullable=True)
-    # Valid results: EXECUTED | SKIPPED_BUDGET | SKIPPED_MARKET_CLOSED | SKIPPED_API_ERROR
-    etf2_execution_result = Column(String, nullable=True)
+    # JSON: {"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": "EXECUTED"}, ...}
+    ticker_decisions = Column(Text, nullable=True)
     warnings = Column(Text, nullable=True)  # JSON list of warning strings
 
     run = relationship("Run", back_populates="sessions")
@@ -50,13 +45,13 @@ class Session(Base):
 
 
 class Position(Base):
-    """One open paper trade on one ETF. Two ETFs are fully independent."""
+    """One open paper trade on one ticker. Tickers within a session are independent."""
 
     __tablename__ = "positions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
-    etf = Column(String, nullable=False)
+    ticker = Column(String, nullable=False)
     strategy = Column(String, nullable=False)   # MEAN_REVERSION | MOMENTUM
     direction = Column(String, nullable=False, default="BUY")
     entry_price = Column(Float, nullable=False)
@@ -98,12 +93,12 @@ class FeedbackEvaluation(Base):
 
 
 class MemoryEntry(Base):
-    """Per-ETF per-strategy running performance record. Queryable by main agent."""
+    """Per-ticker per-strategy running performance record. Queryable by main agent."""
 
     __tablename__ = "memory_entries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    etf = Column(String, nullable=False)
+    ticker = Column(String, nullable=False)
     strategy = Column(String, nullable=False)   # MEAN_REVERSION | MOMENTUM
     session_id = Column(String, ForeignKey("sessions.id"), nullable=False)
     decision = Column(String, nullable=False)   # BUY | SELL | HOLD

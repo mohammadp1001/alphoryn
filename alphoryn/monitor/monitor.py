@@ -57,7 +57,7 @@ class PositionMonitor(threading.Thread):
             self._check_position(pos)
 
     def _check_position(self, pos: Position) -> None:
-        current_price = self._market_data.get_latest_price(pos.etf)
+        current_price = self._market_data.get_latest_price(pos.ticker)
 
         if current_price <= pos.stop_loss_price:
             self._close_position(
@@ -123,7 +123,7 @@ class PositionMonitor(threading.Thread):
                 secret_key=os.environ.get("ALPACA_SECRET_KEY", ""),
                 paper=True,
             )
-            client.close_position(pos.etf)
+            client.close_position(pos.ticker)
         except Exception:
             return
 
@@ -137,14 +137,14 @@ class PositionMonitor(threading.Thread):
         self._logger.emit(
             trigger_event,
             "monitor",
-            {"etf": pos.etf, "exit_price": current_price, "exit_reason": exit_reason},
+            {"ticker": pos.ticker, "exit_price": current_price, "exit_reason": exit_reason},
             session_id=pos.session_id,
-            etf=pos.etf,
+            etf=pos.ticker,
         )
         self._logger.emit(
             "POSITION_CLOSED",
             "monitor",
-            {"etf": pos.etf, "status": new_status},
+            {"ticker": pos.ticker, "status": new_status},
             session_id=pos.session_id,
-            etf=pos.etf,
+            etf=pos.ticker,
         )

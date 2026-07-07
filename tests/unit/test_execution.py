@@ -1,62 +1,31 @@
 """Unit tests for alphoryn/execution/agent.py (T022 scope).
 
-Tests are written BEFORE the implementation (TDD). They verify:
-- BUY decision → BUDGET_CHECK + ORDER_PLACED events + Position written to memory bank
-- HOLD decision → AGENT_DECISION event only; no order placed
-- Budget exceeded → ORDER_FAILED event; no position written
-- Existing OPEN position on same ETF blocks new BUY (forced HOLD, reason "position-blocked")
+Tests verify:
+- BUY decision → ORDER_PLACED + Position written to memory bank
+- HOLD decision → no order placed
+- Budget exceeded → no order placed, no position written
+- Existing OPEN position on same ticker blocks new BUY (FR-014)
 - Zero LLM model calls — constitution Principle I
-- SELL decision → budget check + ORDER_PLACED + position status update
-
-Alpaca SDK calls are stubbed via MagicMock.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 from unittest.mock import MagicMock, patch
 
 import sqlalchemy.orm as orm
 
-from alphoryn.execution.agent import ExecutionAgent
+from alphoryn.execution.agent import AssetDecision, ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import Position
 from alphoryn.memory.schema import Session as Sess
-
-# ---------------------------------------------------------------------------
-# Decision dataclasses (mirror of contracts/agents.md)
-# We import them from the execution module once implemented; for now define
-# here to make the tests self-contained if contracts move.
-# ---------------------------------------------------------------------------
-
-try:
-    from alphoryn.execution.agent import ETFDecision, SessionDecision
-except ImportError:
-    # Pre-implementation: define stubs so test file can be parsed
-    @dataclass(frozen=True)
-    class ETFDecision:  # type: ignore[no-redef]
-        etf: str
-        action: Literal["BUY", "SELL", "HOLD"]
-        strategy: Literal["MEAN_REVERSION", "MOMENTUM"]
-        lot_size: int | None
-        exit_target: dict | None
-        reasoning: str
-
-    @dataclass(frozen=True)
-    class SessionDecision:  # type: ignore[no-redef]
-        session_id: str
-        etf1: ETFDecision
-        etf2: ETFDecision
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _buy(etf: str = "SPY", strategy: str = "MOMENTUM", lot: int = 10) -> ETFDecision:
-    return ETFDecision(
-        etf=etf,
+def _buy(ticker: str = "SPY", strategy: str = "MOMENTUM", lot: int = 10) -> AssetDecision:
+    return AssetDecision(
+        ticker=ticker,
         action="BUY",
         strategy=strategy,
         lot_size=lot,
@@ -65,9 +34,9 @@ def _buy(etf: str = "SPY", strategy: str = "MOMENTUM", lot: int = 10) -> ETFDeci
     )
 
 
-def _hold(etf: str = "SPY", strategy: str = "MOMENTUM") -> ETFDecision:
-    return ETFDecision(
-        etf=etf,
+def _hold(ticker: str = "SPY", strategy: str = "MOMENTUM") -> AssetDecision:
+    return AssetDecision(
+        ticker=ticker,
         action="HOLD",
         strategy=strategy,
         lot_size=None,
@@ -76,19 +45,8 @@ def _hold(etf: str = "SPY", strategy: str = "MOMENTUM") -> ETFDecision:
     )
 
 
-def _sell(etf: str = "SPY", strategy: str = "MOMENTUM", lot: int = 10) -> ETFDecision:
-    return ETFDecision(
-        etf=etf,
-        action="SELL",
-        strategy=strategy,
-        lot_size=lot,
-        exit_target=None,
-        reasoning="RSI overbought",
-    )
-
-
-def _decision(etf1: ETFDecision, etf2: ETFDecision) -> SessionDecision:
-    return SessionDecision(session_id="run-1/session-abc", etf1=etf1, etf2=etf2)
+def _decision(*asset_decisions: AssetDecision) -> SessionDecision:
+    return SessionDecision(session_id="run-1/session-abc", decisions=list(asset_decisions))
 
 
 def _make_agent(bank: MemoryBank) -> ExecutionAgent:
@@ -115,7 +73,7 @@ def test_hold_decision_no_order_placed(tmp_path) -> None:
 
 def test_hold_decision_no_position_written(tmp_path) -> None:
     bank = MemoryBank(str(tmp_path / "memory.db"))
-    bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
     agent = _make_agent(bank)
     decision = _decision(_hold("SPY"), _hold("QQQ"))
 
@@ -132,7 +90,7 @@ def test_hold_decision_no_position_written(tmp_path) -> None:
 
 def test_buy_decision_places_market_order(tmp_path) -> None:
     bank = MemoryBank(str(tmp_path / "memory.db"))
-    bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
     agent = _make_agent(bank)
     decision = _decision(_buy("SPY", lot=5), _hold("QQQ"))
 
@@ -152,7 +110,7 @@ def test_buy_decision_places_market_order(tmp_path) -> None:
 
 def test_buy_decision_writes_open_position(tmp_path) -> None:
     bank = MemoryBank(str(tmp_path / "memory.db"))
-    bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
     agent = _make_agent(bank)
     decision = _decision(_buy("SPY", lot=5), _hold("QQQ"))
 
@@ -167,7 +125,7 @@ def test_buy_decision_writes_open_position(tmp_path) -> None:
 
     positions = bank.load_open_positions()
     assert len(positions) == 1
-    assert positions[0].etf == "SPY"
+    assert positions[0].ticker == "SPY"
     assert positions[0].status == "OPEN"
 
 
@@ -179,7 +137,7 @@ def test_buy_decision_writes_open_position(tmp_path) -> None:
 def test_buy_blocked_by_insufficient_budget(tmp_path) -> None:
     """buying_power < required → no order placed, no position written."""
     bank = MemoryBank(str(tmp_path / "memory.db"))
-    bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
     agent = _make_agent(bank)
     decision = _decision(_buy("SPY", lot=1000), _hold("QQQ"))
 
@@ -202,9 +160,9 @@ def test_buy_blocked_by_insufficient_budget(tmp_path) -> None:
 
 
 def test_existing_open_position_blocks_new_buy(tmp_path) -> None:
-    """Open position on SPY → new BUY on SPY is forced to HOLD."""
+    """Open position on SPY → new BUY on SPY is blocked."""
     bank = MemoryBank(str(tmp_path / "memory.db"))
-    run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
 
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:
@@ -221,7 +179,7 @@ def test_existing_open_position_blocks_new_buy(tmp_path) -> None:
         s.add(
             Position(
                 session_id=sess_id,
-                etf="SPY",
+                ticker="SPY",
                 strategy="MOMENTUM",
                 direction="BUY",
                 entry_price=450.0,
@@ -253,10 +211,10 @@ def test_existing_open_position_blocks_new_buy(tmp_path) -> None:
     assert len(bank.load_open_positions()) == 1
 
 
-def test_open_position_on_etf1_does_not_block_etf2(tmp_path) -> None:
+def test_open_position_on_ticker1_does_not_block_ticker2(tmp_path) -> None:
     """OPEN position on SPY does not block BUY on QQQ."""
     bank = MemoryBank(str(tmp_path / "memory.db"))
-    run_id = bank.start_run('{"etf1":"SPY","etf2":"QQQ"}', 6)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
 
     sess_id = f"run-{run_id}/session-0001"
     with orm.Session(bank._engine) as s:
@@ -273,7 +231,7 @@ def test_open_position_on_etf1_does_not_block_etf2(tmp_path) -> None:
         s.add(
             Position(
                 session_id=sess_id,
-                etf="SPY",
+                ticker="SPY",
                 strategy="MOMENTUM",
                 direction="BUY",
                 entry_price=450.0,
@@ -303,8 +261,8 @@ def test_open_position_on_etf1_does_not_block_etf2(tmp_path) -> None:
     # QQQ order was placed
     mock_alpaca.submit_order.assert_called_once()
     positions = bank.load_open_positions()
-    etfs = {p.etf for p in positions}
-    assert "QQQ" in etfs
+    tickers = {p.ticker for p in positions}
+    assert "QQQ" in tickers
 
 
 # ---------------------------------------------------------------------------

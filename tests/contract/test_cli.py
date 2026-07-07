@@ -34,7 +34,7 @@ def _plain(text: str) -> str:
 
 @pytest.fixture()
 def config_file(tmp_path: Path) -> Path:
-    cfg = {"etf1": "SPY", "etf2": "QQQ"}
+    cfg = {"tickers": ["SPY", "QQQ"]}
     f = tmp_path / "config.json"
     f.write_text(json.dumps(cfg), encoding="utf-8")
     return f
@@ -65,9 +65,9 @@ def test_startup_banner_present(config_file: Path) -> None:
     assert "Alphoryn v0.0.1 — Paper Trading" in result.output
 
 
-def test_startup_etf_timeframe_duration_line(config_file: Path) -> None:
+def test_startup_tickers_timeframe_duration_line(config_file: Path) -> None:
     result = _patched_run(config_file)
-    assert "ETFs: SPY / QQQ" in result.output
+    assert "Tickers: SPY, QQQ" in result.output
     assert "Timeframe: 1H" in result.output
     assert "Duration: 24H" in result.output
 
@@ -84,7 +84,7 @@ def test_memory_bank_line_zero_positions(config_file: Path) -> None:
 
 def test_memory_bank_line_plural_positions(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
-    cfg_file.write_text(json.dumps({"etf1": "SPY", "etf2": "QQQ"}), encoding="utf-8")
+    cfg_file.write_text(json.dumps({"tickers": ["SPY", "QQQ"]}), encoding="utf-8")
     mock_pos1 = MagicMock()
     mock_pos2 = MagicMock()
     with (
@@ -101,7 +101,7 @@ def test_memory_bank_line_plural_positions(tmp_path: Path) -> None:
 
 def test_memory_bank_line_singular_position(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
-    cfg_file.write_text(json.dumps({"etf1": "SPY", "etf2": "QQQ"}), encoding="utf-8")
+    cfg_file.write_text(json.dumps({"tickers": ["SPY", "QQQ"]}), encoding="utf-8")
     with (
         patch("alphoryn.cli.main.load_alpaca_credentials"),
         patch("alphoryn.cli.main.MemoryBank") as mock_bank_cls,
@@ -120,7 +120,7 @@ def test_memory_bank_line_singular_position(tmp_path: Path) -> None:
 
 
 def test_exit_code_1_on_invalid_config(tmp_path: Path) -> None:
-    """Invalid config (missing etf1/etf2) → exit code 1."""
+    """Invalid config (missing tickers) → exit code 1."""
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(json.dumps({"candle_timeframe": "1H"}), encoding="utf-8")
     result = runner.invoke(app, ["run", "--config", str(cfg_file)])
@@ -163,9 +163,9 @@ def test_exit_code_3_on_secret_manager_unreachable(config_file: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_run_cli_etf_overrides(tmp_path: Path) -> None:
+def test_run_cli_tickers_override(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
-    cfg_file.write_text(json.dumps({"etf1": "SPY", "etf2": "QQQ"}), encoding="utf-8")
+    cfg_file.write_text(json.dumps({"tickers": ["SPY", "QQQ"]}), encoding="utf-8")
     with (
         patch("alphoryn.cli.main.load_alpaca_credentials"),
         patch("alphoryn.cli.main.MemoryBank") as mock_bank_cls,
@@ -176,9 +176,9 @@ def test_run_cli_etf_overrides(tmp_path: Path) -> None:
         mock_bank_cls.return_value = mock_bank
         result = runner.invoke(
             app,
-            ["run", "--config", str(cfg_file), "--etf1", "IVV", "--etf2", "DIA"],
+            ["run", "--config", str(cfg_file), "--tickers", "IVV,DIA"],
         )
-    assert "ETFs: IVV / DIA" in result.output
+    assert "Tickers: IVV, DIA" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +202,7 @@ def test_status_shows_no_runs_when_db_empty(tmp_path: Path) -> None:
 def test_status_shows_current_run(tmp_path: Path) -> None:
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    bank.start_run('{"etf1":"SPY"}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
 
     result = runner.invoke(app, ["status", "--db", str(db)])
     assert result.exit_code == 0
@@ -241,14 +241,14 @@ def test_history_shows_no_runs_when_db_empty(tmp_path: Path) -> None:
 def test_history_shows_table_header(tmp_path: Path) -> None:
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    bank.start_run('{"etf1":"SPY"}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
 
     result = runner.invoke(app, ["history", "--db", str(db)])
     assert result.exit_code == 0
     assert "Session" in result.output
     assert "Candle Close" in result.output
-    assert "ETF1" in result.output
-    assert "ETF2" in result.output
+    assert "SPY" in result.output
+    assert "QQQ" in result.output
 
 
 def test_history_exit_code_2_on_bad_db(tmp_path: Path) -> None:
@@ -261,8 +261,8 @@ def test_history_exit_code_2_on_bad_db(tmp_path: Path) -> None:
 def test_history_filter_by_run(tmp_path: Path) -> None:
     db = tmp_path / "memory.db"
     bank = MemoryBank(str(db))
-    bank.start_run('{"etf1":"SPY"}', 6)
-    bank.start_run('{"etf1":"SPY"}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
 
     result = runner.invoke(app, ["history", "--db", str(db), "--run", "1"])
     assert result.exit_code == 0
@@ -295,8 +295,7 @@ def test_run_help_lists_expected_options() -> None:
     result = runner.invoke(app, ["run", "--help"])
     plain = _plain(result.output)
     assert "--config" in plain
-    assert "--etf1" in plain
-    assert "--etf2" in plain
+    assert "--tickers" in plain
     assert "--stop-loss" in plain
 
 
@@ -308,8 +307,7 @@ def test_config_example_file_loads_without_error(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(json.dumps(data), encoding="utf-8")
     cfg = load_config(str(cfg_file))
-    assert cfg.etf1 == "SPY"
-    assert cfg.etf2 == "QQQ"
+    assert cfg.tickers == ["SPY", "QQQ"]
 
 
 def test_memory_bank_default_path_is_home_alphoryn(tmp_path: Path) -> None:

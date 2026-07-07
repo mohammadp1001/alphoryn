@@ -19,7 +19,7 @@ from alphoryn.monitor.monitor import PositionMonitor
 def _make_position(
     *,
     pos_id: int = 1,
-    etf: str = "SPY",
+    ticker: str = "SPY",
     stop_loss_price: float = 440.0,
     exit_target: dict | None = None,
     strategy: str = "MEAN_REVERSION",
@@ -31,7 +31,7 @@ def _make_position(
         exit_target = {"type": "price_level", "value": 460.0}
     pos = Position()
     pos.id = pos_id
-    pos.etf = etf
+    pos.ticker = ticker
     pos.stop_loss_price = stop_loss_price
     pos.exit_target = json.dumps(exit_target)
     pos.strategy = strategy

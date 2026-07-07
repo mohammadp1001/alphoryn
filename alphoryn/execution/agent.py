@@ -24,12 +24,12 @@ from alphoryn.memory.schema import Position
 
 
 @dataclass(frozen=True)
-class ETFDecision:
-    """Per-ETF decision produced by main_agent (contracts/agents.md)."""
+class AssetDecision:
+    """Per-ticker decision produced by main_agent (contracts/agents.md)."""
 
-    etf: str
+    ticker: str
     action: Literal["BUY", "SELL", "HOLD"]
-    strategy: Literal["MEAN_REVERSION", "MOMENTUM"]
+    strategy: Literal["MEAN_REVERSION", "MOMENTUM"] | None
     lot_size: int | None
     exit_target: dict | None
     reasoning: str
@@ -37,20 +37,19 @@ class ETFDecision:
 
 @dataclass(frozen=True)
 class SessionDecision:
-    """Full session decision containing one ETFDecision per ETF."""
+    """Full session decision containing one AssetDecision per ticker."""
 
     session_id: str
-    etf1: ETFDecision
-    etf2: ETFDecision
+    decisions: list[AssetDecision]
 
 
 class ExecutionAgent:
     """Deterministic order executor — no LLM model configured.
 
-    Processes a SessionDecision sequentially per ETF:
+    Processes a SessionDecision sequentially per ticker:
       - HOLD → skip
       - BUY/SELL → budget check → market order → write Position to memory bank
-      - Existing OPEN position on same ETF → force HOLD (position-blocked)
+      - Existing OPEN position on same ticker → force HOLD (position-blocked)
     """
 
     model = None  # Principle I: no LLM model
@@ -59,17 +58,17 @@ class ExecutionAgent:
         self._bank = bank
 
     def execute(self, decision: SessionDecision) -> None:
-        """Execute a SessionDecision for both ETFs sequentially."""
-        for etf_decision in (decision.etf1, decision.etf2):
-            self._execute_etf(etf_decision, decision.session_id)
+        """Execute a SessionDecision for all tickers sequentially."""
+        for asset_decision in decision.decisions:
+            self._execute_ticker(asset_decision, decision.session_id)
 
-    def _execute_etf(self, etf_decision: ETFDecision, session_id: str) -> None:
-        if etf_decision.action == "HOLD":
+    def _execute_ticker(self, asset_decision: AssetDecision, session_id: str) -> None:
+        if asset_decision.action == "HOLD":
             return
 
-        # Block new BUY if ETF already has an OPEN position (FR-014)
+        # Block new BUY if ticker already has an OPEN position (FR-014)
         open_positions = self._bank.load_open_positions()
-        if any(p.etf == etf_decision.etf for p in open_positions):
+        if any(p.ticker == asset_decision.ticker for p in open_positions):
             return  # position-blocked → treat as HOLD
 
         client = TradingClient(
@@ -87,21 +86,21 @@ class ExecutionAgent:
         )
         quotes = data_client.get_stock_latest_quote(
             StockLatestQuoteRequest(
-                symbol_or_symbols=etf_decision.etf,
+                symbol_or_symbols=asset_decision.ticker,
                 feed=DataFeed.IEX,
             )
         )
-        ask_price = float(quotes[etf_decision.etf].ask_price)
-        lot = etf_decision.lot_size or 1
+        ask_price = float(quotes[asset_decision.ticker].ask_price)
+        lot = asset_decision.lot_size or 1
         required = ask_price * lot
         if buying_power < required:
             return  # ORDER_FAILED — insufficient budget
 
         # Place market order
-        side = OrderSide.BUY if etf_decision.action == "BUY" else OrderSide.SELL
+        side = OrderSide.BUY if asset_decision.action == "BUY" else OrderSide.SELL
         client.submit_order(
             MarketOrderRequest(
-                symbol=etf_decision.etf,
+                symbol=asset_decision.ticker,
                 qty=lot,
                 side=side,
                 time_in_force=TimeInForce.DAY,
@@ -113,14 +112,14 @@ class ExecutionAgent:
         stop_loss_price = ask_price * (1 - stop_loss_pct)
         pos = Position(
             session_id=session_id,
-            etf=etf_decision.etf,
-            strategy=etf_decision.strategy,
-            direction=etf_decision.action,
+            ticker=asset_decision.ticker,
+            strategy=asset_decision.strategy,
+            direction=asset_decision.action,
             entry_price=ask_price,
             entry_time=datetime.now(UTC),
             lot_size=float(lot),
             stop_loss_price=stop_loss_price,
-            exit_target=json.dumps(etf_decision.exit_target) if etf_decision.exit_target else "{}",
+            exit_target=json.dumps(asset_decision.exit_target) if asset_decision.exit_target else "{}",
             evaluation_window_session=5,
             status="OPEN",
         )

@@ -35,14 +35,14 @@ def test_parse_duration_seconds_invalid_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_config_missing_etf1_raises() -> None:
+def test_config_missing_tickers_raises() -> None:
     with pytest.raises(ValidationError):
-        AlphorynConfig(etf2="QQQ")  # type: ignore[call-arg]
+        AlphorynConfig()  # type: ignore[call-arg]
 
 
-def test_config_missing_etf2_raises() -> None:
+def test_config_single_ticker_raises() -> None:
     with pytest.raises(ValidationError):
-        AlphorynConfig(etf1="SPY")  # type: ignore[call-arg]
+        AlphorynConfig(tickers=["SPY"])
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ def test_config_missing_etf2_raises() -> None:
 
 
 def _minimal(**extra) -> AlphorynConfig:
-    return AlphorynConfig(etf1="SPY", etf2="QQQ", **extra)
+    return AlphorynConfig(tickers=["SPY", "QQQ"], **extra)
 
 
 def test_config_defaults() -> None:
@@ -64,6 +64,11 @@ def test_config_defaults() -> None:
     assert cfg.memory_db_path == "~/.alphoryn/memory.db"
     assert cfg.session_money_budget is None
     assert cfg.exchange is None
+
+
+def test_config_tickers_stored() -> None:
+    cfg = _minimal()
+    assert cfg.tickers == ["SPY", "QQQ"]
 
 
 # ---------------------------------------------------------------------------
@@ -150,17 +155,16 @@ def test_alpaca_paper_mode_always_true() -> None:
 def test_load_config_from_file(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(
-        json.dumps({"etf1": "SPY", "etf2": "QQQ", "stop_loss_pct": 0.03}),
+        json.dumps({"tickers": ["SPY", "QQQ"], "stop_loss_pct": 0.03}),
         encoding="utf-8",
     )
     cfg = load_config(config_path=cfg_file)
-    assert cfg.etf1 == "SPY"
-    assert cfg.etf2 == "QQQ"
+    assert cfg.tickers == ["SPY", "QQQ"]
     assert cfg.stop_loss_pct == pytest.approx(0.03)
 
 
 def test_load_config_missing_file_uses_empty_dict() -> None:
-    # A missing file path should raise because etf1/etf2 are required
+    # A missing file path should raise because tickers is required
     with pytest.raises(ValidationError):
         load_config(config_path="/nonexistent/path/config.json")
 
@@ -168,7 +172,7 @@ def test_load_config_missing_file_uses_empty_dict() -> None:
 def test_load_config_cli_overrides_file(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(
-        json.dumps({"etf1": "SPY", "etf2": "QQQ", "stop_loss_pct": 0.03}),
+        json.dumps({"tickers": ["SPY", "QQQ"], "stop_loss_pct": 0.03}),
         encoding="utf-8",
     )
     cfg = load_config(config_path=cfg_file, overrides={"stop_loss_pct": 0.05})
@@ -178,7 +182,7 @@ def test_load_config_cli_overrides_file(tmp_path: Path) -> None:
 def test_load_config_none_overrides_not_applied(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(
-        json.dumps({"etf1": "SPY", "etf2": "QQQ", "stop_loss_pct": 0.03}),
+        json.dumps({"tickers": ["SPY", "QQQ"], "stop_loss_pct": 0.03}),
         encoding="utf-8",
     )
     cfg = load_config(config_path=cfg_file, overrides={"stop_loss_pct": None})
@@ -201,7 +205,7 @@ def test_load_config_invalid_json_raises(tmp_path: Path) -> None:
 def test_load_config_override_candle_timeframe(tmp_path: Path) -> None:
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text(
-        json.dumps({"etf1": "SPY", "etf2": "QQQ"}),
+        json.dumps({"tickers": ["SPY", "QQQ"]}),
         encoding="utf-8",
     )
     cfg = load_config(config_path=cfg_file, overrides={"candle_timeframe": "4H"})

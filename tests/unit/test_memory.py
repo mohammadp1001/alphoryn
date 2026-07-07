@@ -41,7 +41,7 @@ def _in_memory_bank() -> MemoryBank:
 def _sample_run(session_count_planned: int = 24) -> Run:
     return Run(
         started_at=_NOW,
-        config_snapshot='{"etf1":"SPY"}',
+        config_snapshot='{"tickers":["SPY","QQQ"]}',
         session_count_planned=session_count_planned,
     )
 
@@ -56,10 +56,10 @@ def _sample_session(run_id: int, ordinal: int = 1) -> Session:
     )
 
 
-def _sample_position(session_id: str, status: str = "OPEN", etf: str = "SPY") -> Position:
+def _sample_position(session_id: str, status: str = "OPEN", ticker: str = "SPY") -> Position:
     return Position(
         session_id=session_id,
-        etf=etf,
+        ticker=ticker,
         strategy="MOMENTUM",
         direction="BUY",
         entry_price=450.00,
@@ -114,7 +114,7 @@ def test_run_columns() -> None:
 
 def test_position_status_values_accepted() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         run = s.query(Run).filter(Run.id == run_id).one()
         sess = _sample_session(run.id)
@@ -174,7 +174,7 @@ def test_load_open_positions_empty_db() -> None:
 
 def test_load_open_positions_returns_only_open() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -192,7 +192,7 @@ def test_load_open_positions_returns_only_open() -> None:
 def test_load_open_positions_across_multiple_runs() -> None:
     bank = _in_memory_bank()
     for _ in range(3):
-        run_id = bank.start_run('{"etf1":"SPY"}', 24)
+        run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
         with DBSession(bank._engine) as s:
             sess = _sample_session(run_id)
             s.add(sess)
@@ -206,7 +206,7 @@ def test_load_open_positions_across_multiple_runs() -> None:
 
 def test_load_open_positions_ordered_by_entry_time() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
 
     # SQLite strips tzinfo on round-trip — use naive datetimes for comparison
     t1 = datetime(2024, 1, 1)
@@ -234,14 +234,14 @@ def test_load_open_positions_ordered_by_entry_time() -> None:
 
 def test_start_run_returns_id() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     assert isinstance(run_id, int)
     assert run_id > 0
 
 
 def test_end_run_sets_ended_at() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     bank.end_run(run_id)
     with DBSession(bank._engine) as s:
         run = s.query(Run).filter(Run.id == run_id).one()
@@ -255,7 +255,7 @@ def test_end_run_sets_ended_at() -> None:
 
 def test_write_session_persists() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     sess = _sample_session(run_id)
     bank.write_session(sess)
     with DBSession(bank._engine) as s:
@@ -265,7 +265,7 @@ def test_write_session_persists() -> None:
 
 def test_write_session_idempotent() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     sess = _sample_session(run_id)
     bank.write_session(sess)
     sess.status = "SKIPPED_TIMEOUT"
@@ -282,7 +282,7 @@ def test_write_session_idempotent() -> None:
 
 def test_write_position_returns_id() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -295,7 +295,7 @@ def test_write_position_returns_id() -> None:
 
 def test_update_position_close_sets_exit_fields() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -319,7 +319,7 @@ def test_update_position_close_sets_exit_fields() -> None:
 
 def test_update_position_close_with_watermark() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -341,7 +341,7 @@ def test_update_position_close_with_watermark() -> None:
 
 def test_update_trailing_watermark() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -361,7 +361,7 @@ def test_update_trailing_watermark() -> None:
 
 def test_write_feedback_evaluation_persists_and_updates_position() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -395,14 +395,14 @@ def test_write_feedback_evaluation_persists_and_updates_position() -> None:
 
 def test_write_memory_entry_persists() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
         s.commit()
 
     entry = MemoryEntry(
-        etf="SPY",
+        ticker="SPY",
         strategy="MOMENTUM",
         session_id=f"run-{run_id}/session-0001",
         decision="BUY",
@@ -412,20 +412,20 @@ def test_write_memory_entry_persists() -> None:
     bank.write_memory_entry(entry)
 
     with DBSession(bank._engine) as s:
-        result = s.query(MemoryEntry).filter(MemoryEntry.etf == "SPY").one()
+        result = s.query(MemoryEntry).filter(MemoryEntry.ticker == "SPY").one()
         assert result.decision == "BUY"
 
 
 def test_update_memory_entry_judgment() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
         s.commit()
     session_id = f"run-{run_id}/session-0001"
     entry = MemoryEntry(
-        etf="QQQ",
+        ticker="QQQ",
         strategy="MEAN_REVERSION",
         session_id=session_id,
         decision="HOLD",
@@ -435,7 +435,7 @@ def test_update_memory_entry_judgment() -> None:
     bank.write_memory_entry(entry)
     bank.update_memory_entry_judgment(session_id, "QQQ", "MEAN_REVERSION", "INCORRECT")
     with DBSession(bank._engine) as s:
-        result = s.query(MemoryEntry).filter(MemoryEntry.etf == "QQQ").one()
+        result = s.query(MemoryEntry).filter(MemoryEntry.ticker == "QQQ").one()
         assert result.outcome_judgment == "INCORRECT"
 
 
@@ -446,7 +446,7 @@ def test_update_memory_entry_judgment() -> None:
 
 def test_get_positions_due_for_feedback_returns_closed_at_window() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -470,7 +470,7 @@ def test_get_positions_due_for_feedback_returns_closed_at_window() -> None:
 
 def test_get_positions_due_for_feedback_excludes_already_evaluated() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -498,7 +498,7 @@ def test_get_positions_due_for_feedback_excludes_already_evaluated() -> None:
 
 def test_get_recent_memory_entries_returns_latest_first() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
@@ -507,7 +507,7 @@ def test_get_recent_memory_entries_returns_latest_first() -> None:
 
     for i in range(3):
         entry = MemoryEntry(
-            etf="SPY",
+            ticker="SPY",
             strategy="MOMENTUM",
             session_id=session_id,
             decision="BUY",
@@ -522,18 +522,18 @@ def test_get_recent_memory_entries_returns_latest_first() -> None:
     assert entries[0].created_at > entries[1].created_at
 
 
-def test_get_recent_memory_entries_filters_by_etf() -> None:
+def test_get_recent_memory_entries_filters_by_ticker() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)
         s.commit()
     session_id = f"run-{run_id}/session-0001"
 
-    for etf in ("SPY", "QQQ", "SPY"):
+    for ticker in ("SPY", "QQQ", "SPY"):
         entry = MemoryEntry(
-            etf=etf,
+            ticker=ticker,
             strategy="MOMENTUM",
             session_id=session_id,
             decision="BUY",
@@ -543,13 +543,8 @@ def test_get_recent_memory_entries_filters_by_etf() -> None:
         bank.write_memory_entry(entry)
 
     spy_entries = bank.get_recent_memory_entries("SPY")
-    assert all(e.etf == "SPY" for e in spy_entries)
+    assert all(e.ticker == "SPY" for e in spy_entries)
     assert len(spy_entries) == 2
-
-
-# ---------------------------------------------------------------------------
-# FeedbackEvaluation.attempt_count default
-# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -559,7 +554,7 @@ def test_get_recent_memory_entries_filters_by_etf() -> None:
 
 def test_get_session_returns_session_when_found() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     sess = _sample_session(run_id)
     bank.write_session(sess)
     result = bank.get_session(sess.id)
@@ -575,7 +570,7 @@ def test_get_session_returns_none_when_not_found() -> None:
 
 def test_feedback_evaluation_attempt_count_default_is_one() -> None:
     bank = _in_memory_bank()
-    run_id = bank.start_run('{"etf1":"SPY"}', 24)
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
     with DBSession(bank._engine) as s:
         sess = _sample_session(run_id)
         s.add(sess)

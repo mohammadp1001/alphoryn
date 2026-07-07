@@ -15,8 +15,8 @@ from alpaca.data.timeframe import TimeFrame
 
 
 @dataclass(frozen=True)
-class ETFSignals:
-    """Computed technical signals for one ETF (15 fields per data-model.md)."""
+class AssetSignals:
+    """Computed technical signals for one ticker (15 fields per data-model.md)."""
 
     rsi_14: float
     adx_14: float
@@ -37,11 +37,10 @@ class ETFSignals:
 
 @dataclass(frozen=True)
 class SignalSnapshot:
-    """Frozen snapshot of signals for both ETFs at one candle close."""
+    """Frozen snapshot of signals for all tickers at one candle close."""
 
     captured_at: datetime
-    etf1_signals: ETFSignals
-    etf2_signals: ETFSignals
+    signals: dict[str, AssetSignals]  # keyed by ticker symbol
 
 
 def _ema(values: list[float], period: int) -> float:
@@ -137,7 +136,7 @@ def _compute_macd(closes: list[float]) -> tuple[float, float, float]:
 
 
 class MarketDataClient:
-    """Fetches Alpaca bars and computes ETFSignals for both ETFs.
+    """Fetches Alpaca bars and computes AssetSignals for all tickers.
 
     build_snapshot is registered as an ADK tool (the agent calls it).
     _data_fetch is internal and never exposed to agents (Principle V).
@@ -149,32 +148,27 @@ class MarketDataClient:
         self._paper = paper
         self.model = None  # Principle I: no LLM model
 
-    def build_snapshot(self, etf1: str, etf2: str, candle_close_at: datetime | str) -> SignalSnapshot:
-        """ADK tool: fetch bars and return a frozen SignalSnapshot for both ETFs."""
+    def build_snapshot(self, tickers: list[str], candle_close_at: datetime | str) -> SignalSnapshot:
+        """ADK tool: fetch bars and return a frozen SignalSnapshot for all tickers."""
         if isinstance(candle_close_at, str):
             candle_close_at = datetime.fromisoformat(candle_close_at)
-        etf1_signals = self._data_fetch(etf1, candle_close_at)
-        etf2_signals = self._data_fetch(etf2, candle_close_at)
-        return SignalSnapshot(
-            captured_at=candle_close_at,
-            etf1_signals=etf1_signals,
-            etf2_signals=etf2_signals,
-        )
+        signals = {ticker: self._data_fetch(ticker, candle_close_at) for ticker in tickers}
+        return SignalSnapshot(captured_at=candle_close_at, signals=signals)
 
-    def _data_fetch(self, etf: str, candle_close_at: datetime) -> ETFSignals:
+    def _data_fetch(self, ticker: str, candle_close_at: datetime) -> AssetSignals:
         """Internal: fetch 60 1H bars ending at candle_close_at and compute all 15 signals."""
         client = StockHistoricalDataClient(
             api_key=self._api_key, secret_key=self._secret_key
         )
         start = candle_close_at - timedelta(hours=60)
         req = StockBarsRequest(
-            symbol_or_symbols=etf,
+            symbol_or_symbols=ticker,
             timeframe=TimeFrame.Hour,
             start=start,
             end=candle_close_at,
             feed=DataFeed.IEX,
         )
-        bars = client.get_stock_bars(req)[etf]
+        bars = client.get_stock_bars(req)[ticker]
 
         closes = [b.close for b in bars]
         highs = [b.high for b in bars]
@@ -194,7 +188,7 @@ class MarketDataClient:
         price_vs_ema_20_pct = (current_price - ema_20) / ema_20 * 100
         price_vs_sma_20_pct = (current_price - sma_20) / sma_20 * 100
 
-        return ETFSignals(
+        return AssetSignals(
             rsi_14=rsi_14,
             adx_14=adx_14,
             ema_20=ema_20,
@@ -212,17 +206,17 @@ class MarketDataClient:
             price_vs_sma_20_pct=price_vs_sma_20_pct,
         )
 
-    def get_latest_price(self, etf: str) -> float:
+    def get_latest_price(self, ticker: str) -> float:
         """Return the latest 1-min bar close price for the stop-loss monitor."""
         client = StockHistoricalDataClient(
             api_key=self._api_key, secret_key=self._secret_key
         )
         now = datetime.now(UTC)
         req = StockBarsRequest(
-            symbol_or_symbols=etf,
+            symbol_or_symbols=ticker,
             timeframe=TimeFrame.Minute,
             start=now - timedelta(minutes=5),
             end=now,
         )
-        bars = client.get_stock_bars(req)[etf]
+        bars = client.get_stock_bars(req)[ticker]
         return float(bars[-1].close)
