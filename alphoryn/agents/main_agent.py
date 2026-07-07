@@ -8,16 +8,28 @@ SessionDecision JSON. Constitution Principles I (no extra LLM calls) and V
 import json
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
+from google.adk.skills import load_skill_from_dir
+from google.adk.tools.skill_toolset import SkillToolset
 from google.genai import types as genai_types
 
 from alphoryn.agents.prompts import MAIN_AGENT_SYSTEM_PROMPT
 from alphoryn.execution.agent import ETFDecision, SessionDecision
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.telemetry.logger import TelemetryLogger
+
+_SKILLS_DIR = Path(__file__).parent.parent / "skills"
+_SKILL_NAMES = [
+    "identify-regime",
+    "mean-reversion-entry",
+    "momentum-entry",
+    "size-position",
+    "read-memory",
+]
 
 _logger = logging.getLogger(__name__)
 
@@ -41,11 +53,12 @@ class MainAgent:
         logger: TelemetryLogger,
     ) -> None:
         self._logger = logger
+        skills = [load_skill_from_dir(_SKILLS_DIR / name) for name in _SKILL_NAMES]
         self._agent = LlmAgent(
             name="alphoryn_main_agent",
             model=self._MODEL,
             instruction=MAIN_AGENT_SYSTEM_PROMPT,
-            tools=[market_data_client.build_snapshot],
+            tools=[market_data_client.build_snapshot, SkillToolset(skills)],
         )
 
     def decide(

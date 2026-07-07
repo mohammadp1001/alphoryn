@@ -77,7 +77,9 @@ def _make_agent(mock_client: MagicMock | None = None) -> tuple[MainAgent, MagicM
     if mock_client is None:
         mock_client = MagicMock()
     logger = MagicMock()
-    with patch("alphoryn.agents.main_agent.LlmAgent"):
+    with patch("alphoryn.agents.main_agent.LlmAgent"), \
+         patch("alphoryn.agents.main_agent.load_skill_from_dir"), \
+         patch("alphoryn.agents.main_agent.SkillToolset"):
         agent = MainAgent(mock_client, logger)
     return agent, logger
 
@@ -90,13 +92,31 @@ def _make_agent(mock_client: MagicMock | None = None) -> tuple[MainAgent, MagicM
 def test_init_creates_llm_agent_with_model_and_tools() -> None:
     mock_client = MagicMock()
     logger = MagicMock()
-    with patch("alphoryn.agents.main_agent.LlmAgent") as mock_llm_cls:
+    mock_toolset = MagicMock()
+    with patch("alphoryn.agents.main_agent.LlmAgent") as mock_llm_cls, \
+         patch("alphoryn.agents.main_agent.load_skill_from_dir"), \
+         patch("alphoryn.agents.main_agent.SkillToolset", return_value=mock_toolset):
         MainAgent(mock_client, logger)
     mock_llm_cls.assert_called_once()
     kwargs = mock_llm_cls.call_args.kwargs
     assert kwargs["name"] == "alphoryn_main_agent"
     assert kwargs["model"] == "gemini-2.5-pro"
     assert mock_client.build_snapshot in kwargs["tools"]
+    assert mock_toolset in kwargs["tools"]
+
+
+def test_init_loads_all_five_skills() -> None:
+    from alphoryn.agents.main_agent import _SKILL_NAMES
+    mock_client = MagicMock()
+    logger = MagicMock()
+    with patch("alphoryn.agents.main_agent.LlmAgent"), \
+         patch("alphoryn.agents.main_agent.load_skill_from_dir") as mock_load, \
+         patch("alphoryn.agents.main_agent.SkillToolset"):
+        MainAgent(mock_client, logger)
+    assert mock_load.call_count == len(_SKILL_NAMES)
+    loaded_names = [str(call.args[0]).split("skills")[-1].strip("/\\") for call in mock_load.call_args_list]
+    for name in _SKILL_NAMES:
+        assert any(name in n for n in loaded_names)
 
 
 # ---------------------------------------------------------------------------
