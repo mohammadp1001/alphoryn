@@ -23,8 +23,13 @@ def setup_otel() -> None:
 
     Sets OTEL_SERVICE_NAME and wires up Cloud Trace + Cloud Logging exporters
     via the ADK helper. Fails silently — a logging failure never blocks startup.
+
+    GenAI content capture is enabled by default so prompt/response reasoning
+    is visible in Cloud Logging. Override with:
+      OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false
     """
     os.environ.setdefault("OTEL_SERVICE_NAME", _SERVICE_NAME)
+    os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "true")
     try:
         gcp_exporters = _get_gcp_exporters(enable_cloud_logging=True)
         _maybe_set_otel_providers([gcp_exporters])

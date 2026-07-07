@@ -35,6 +35,22 @@ def test_setup_otel_does_not_override_existing_service_name(monkeypatch) -> None
     assert os.environ["OTEL_SERVICE_NAME"] == "my-custom-name"
 
 
+def test_setup_otel_enables_genai_content_capture_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", raising=False)
+    p1, p2 = _patched_otel()
+    with p1, p2:
+        setup_otel()
+    assert os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] == "true"
+
+
+def test_setup_otel_does_not_override_content_capture_if_set(monkeypatch) -> None:
+    monkeypatch.setenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "false")
+    p1, p2 = _patched_otel()
+    with p1, p2:
+        setup_otel()
+    assert os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] == "false"
+
+
 def test_setup_otel_calls_get_gcp_exporters_with_cloud_logging(monkeypatch) -> None:
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
     mock_get = MagicMock()
