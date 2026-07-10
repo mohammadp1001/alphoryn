@@ -113,35 +113,43 @@ If Cloud Logging is unavailable, events are written to stderr as JSON:
 - Dependency relationships between components
 - Error and exception details
 
-### Status: ⚠️ Fixed the crash; log-based OTel export confirmed, span export unconfirmed
+### Status: ✅ Confirmed working — both Cloud Logging and Cloud Trace export verified end-to-end
 
-`alphoryn/telemetry/otel.py:setup_otel()` calls `get_gcp_exporters(enable_cloud_logging=True)`
-unconditionally at every CLI startup (`cli/main.py`) — this was always meant to be on by
-default, no flag needed. It was failing because `pyproject.toml` was missing the package
-that provides the `opentelemetry.exporter.cloud_logging` module. PR #110 added
-`opentelemetry-exporter-gcp-trace` and `opentelemetry-exporter-gcp-monitoring` but missed
-`opentelemetry-exporter-gcp-logging` (a pre-release package, `1.12.0a0` at time of writing).
-Added to `pyproject.toml` dependencies. Verified 2026-07-10 end-to-end with a real
-`alphoryn run` session (`run-6/session-0001`):
+`alphoryn/telemetry/otel.py:setup_otel()` calls `get_gcp_exporters(enable_cloud_tracing=True,
+enable_cloud_logging=True)` unconditionally at every CLI startup (`cli/main.py`). Getting here
+required fixing three stacked gaps:
+
+1. **Cloud Logging crashed on startup** — `pyproject.toml` was missing
+   `opentelemetry-exporter-gcp-logging` (a pre-release package, `1.12.0a0`), which provides
+   the `opentelemetry.exporter.cloud_logging` module. PR #110 added
+   `opentelemetry-exporter-gcp-trace` and `opentelemetry-exporter-gcp-monitoring` but missed
+   this one.
+2. **Spans were never created** — `setup_otel()` only passed `enable_cloud_logging=True` to
+   `get_gcp_exporters()`; `enable_cloud_tracing` defaults to `False`, so the span
+   exporter/processor was never constructed.
+3. **Span export 400'd once created** — `telemetry.googleapis.com` rejects any span batch
+   whose OTel `Resource` lacks a `gcp.project_id` attribute. ADK's default resource detector
+   only reads it from the standard `OTEL_RESOURCE_ATTRIBUTES` env var, so `setup_otel()` now
+   resolves the project ID via `google.auth.default()` and sets that env var before
+   `maybe_set_otel_providers()` builds the `TracerProvider`. This also required adding
+   `opentelemetry-exporter-otlp-proto-http` as a dependency (the actual span exporter used by
+   ADK's `_get_gcp_span_exporter()`, pinned to match `google-adk`'s
+   `opentelemetry-api`/`opentelemetry-sdk` constraints).
+
+Verified 2026-07-10 end-to-end with a real `alphoryn run` session (`run-8/session-0001`):
 
 - ✅ `setup_otel()` completes with no warning (previously crashed on every startup)
 - ✅ GenAI prompt/response content is exported to Cloud Logging via OTel — confirmed logs
   under `projects/alphoryn/logs/gen_ai.system.message`, `gen_ai.user.message`, and
-  `gen_ai.choice`, timestamps matching the run exactly (this is the log-based half of the
-  fix and the part that was actually crashing before)
-- ⚠️ **Cloud Trace spans did not appear.** Polled `trace_v1.ListTraces` for ~2 minutes after
-  the run completed (8 checks, 10s apart) — zero traces returned, no permission error, no
-  export error logged. `MainAgent` does use `google.adk.runners.InMemoryRunner`, which
-  should auto-instrument spans, so this may be a separate, unrelated gap (ADK version
-  behavior, project/resource mismatch for spans specifically, or spans requiring an
-  explicit flush this short-lived CLI process never triggers). **Not blocking this fix** —
-  the crash this issue reports is specifically in the Cloud Logging exporter path, which is
-  now confirmed working. Filing a follow-up issue for the trace-visibility gap is
-  recommended before relying on Cloud Trace for latency analysis.
+  `gen_ai.choice`, timestamps matching the run exactly
+- ✅ **Cloud Trace spans confirmed.** `trace_v1.ListTraces()` for the run window returned a
+  22-span trace (`invocation` → `invoke_agent alphoryn_main_agent` → `call_llm` →
+  `generate_content gemini-2.5-pro` → `execute_tool ...`), matching the run's actual
+  tool-call sequence.
 
 ```bash
 # Already in pyproject.toml dependencies — for an existing venv, just:
-pip install "opentelemetry-exporter-gcp-logging>=1.12.0a0"
+pip install "opentelemetry-exporter-gcp-logging>=1.12.0a0" "opentelemetry-exporter-otlp-proto-http>=1.36.0"
 ```
 
 #### A) GCP Cloud Trace Console
@@ -180,7 +188,7 @@ client = TraceServiceClient()
 | **Data Retention** | ~30 days (GCP default) | ~30 days (GCP default) |
 | **Enabled by default** | ✅ Yes (`TelemetryLogger`, called from every component) | ✅ Yes (`setup_otel()` at CLI startup) |
 | **Fallback** | stderr (when Cloud unavailable) | None — traces are simply dropped |
-| **Verified 2026-07-10** | ✅ Confirmed — custom events + OTel `gen_ai.*` logs both landed | ⚠️ Setup succeeds, but no spans found in Cloud Trace after a real run (see status above) |
+| **Verified 2026-07-10** | ✅ Confirmed — custom events + OTel `gen_ai.*` logs both landed | ✅ Confirmed — real spans found in Cloud Trace after a real run (see status above) |
 
 ---
 
@@ -223,8 +231,8 @@ The installed console script (`alphoryn run ...`, from `[project.scripts]` in
 5. Inspect decision reasoning and latency
 
 ### Step 4: View traces in Cloud Trace
-No separate install needed as of 2026-07-10 (see status above) — traces are emitted
-automatically alongside the run in Step 2.
+Enabled by default as of 2026-07-10 (see status above) — traces are emitted automatically
+alongside the run in Step 2, no separate flag or install needed.
 ```
 https://console.cloud.google.com/traces → filter service.name = "alphoryn"
 ```
