@@ -222,3 +222,10 @@ results/
 
 # Claude Code local config (machine-specific, not shared)
 .claude/
+
+# Local docs not meant for the repo
+alphoryn_V_0_0.1.md
+TELEMETRY_ACCESS.md
+
+# speckit spec-driven-development scaffolding (local only)
+.specify/
