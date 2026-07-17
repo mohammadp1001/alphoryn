@@ -277,9 +277,10 @@ def history(
         except (json.JSONDecodeError, TypeError):
             td = {}
         if col_tickers:
+            entries = [td.get(t, {}) for t in col_tickers]
             cols = "  ".join(
-                f"{_format_decision(td.get(t, {}).get('strategy'), td.get(t, {}).get('decision'), None):<22}"
-                for t in col_tickers
+                f"{_format_decision(e.get('strategy'), e.get('decision'), None):<22}"
+                for e in entries
             )
         else:
             cols = "  ".join(

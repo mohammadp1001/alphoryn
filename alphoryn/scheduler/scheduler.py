@@ -387,7 +387,10 @@ class Scheduler:
         ticker_decisions_json: str | None = None
         if decision is not None:
             ticker_decisions_json = json.dumps(
-                {d.ticker: {"strategy": d.strategy, "decision": d.action} for d in decision.decisions}
+                {
+                    d.ticker: {"strategy": d.strategy, "decision": d.action}
+                    for d in decision.decisions
+                }
             )
 
         session_status = "COMPLETED" if decision is not None else "SKIPPED_TIMEOUT"
