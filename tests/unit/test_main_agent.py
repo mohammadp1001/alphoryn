@@ -116,7 +116,9 @@ def test_init_loads_all_five_skills() -> None:
          patch("alphoryn.agents.main_agent.SkillToolset"):
         MainAgent(mock_client, logger)
     assert mock_load.call_count == len(_SKILL_NAMES)
-    loaded_names = [str(call.args[0]).split("skills")[-1].strip("/\\") for call in mock_load.call_args_list]
+    loaded_names = [
+        str(call.args[0]).split("skills")[-1].strip("/\\") for call in mock_load.call_args_list
+    ]
     for name in _SKILL_NAMES:
         assert any(name in n for n in loaded_names)
 
