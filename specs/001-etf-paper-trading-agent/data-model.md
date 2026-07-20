@@ -1,4 +1,4 @@
-# Data Model: Alphoryn — Automated ETF Paper Trading System
+# Data Model: Alphoryn — Automated Ticker Paper Trading System
 
 **Phase 1 output** | **Date**: 2026-07-03 | **Plan**: [plan.md](plan.md)
 
@@ -13,14 +13,13 @@ for all session parameters (design doc §Configuration table; spec FR-001).
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `etf1` | `str` | required | Ticker symbol (e.g., `SPY`) |
-| `etf2` | `str` | required | Ticker symbol (e.g., `QQQ`) |
+| `ticker1` | `str` | required | Ticker symbol (e.g., `SPY`) |
+| `ticker2` | `str` | required | Ticker symbol (e.g., `QQQ`) |
 | `candle_timeframe` | `str` | `"1H"` | One of: `"30min"`, `"1H"`, `"4H"` |
 | `run_duration` | `str` | `"24H"` | e.g., `"24H"`, `"8H"` |
 | `exchange` | `str \| None` | `None` | Optional, informational only — Alpaca routes US equities automatically; market hours from Alpaca calendar API |
 | `session_money_budget` | `float \| None` | `None` | USD; `None` means no budget constraint |
 | `stop_loss_pct` | `float` | `0.02` | e.g., `0.02` = 2% below entry price |
-| `max_startup_latency_seconds` | `int` | `60` | Warn but proceed if candle alignment exceeds this |
 | `currency` | `str` | `"USD"` | Display currency — USD for Alpaca paper accounts |
 | `memory_db_path` | `str` | `"~/.alphoryn/memory.db"` | SQLite file path |
 
@@ -41,10 +40,9 @@ internally by `market_data/client.py` — the agent never sees OHLCV bars. Once
 | Field | Type | Notes |
 |---|---|---|
 | `captured_at` | `datetime` | Candle close timestamp (UTC) |
-| `etf1_signals` | `ETFSignals` | Computed signals for ETF 1 |
-| `etf2_signals` | `ETFSignals` | Computed signals for ETF 2 |
+| `signals` | `dict[str, AssetSignals]` | Computed signals keyed by ticker symbol — one entry per configured ticker, not fixed to two |
 
-**`ETFSignals` fields** (computed by `market_data/client.py` from `alpaca-py` bars):
+**`AssetSignals` fields** (computed by `market_data/client.py` from `alpaca-py` bars):
 
 | Field | Type | Description |
 |---|---|---|
@@ -95,25 +93,22 @@ One record per candle close processed. Linked to its Run.
 | `created_at` | `DATETIME` | When session record was written |
 | `status` | `TEXT` | `COMPLETED`, `SKIPPED_TIMEOUT`, `SKIPPED_MARKET_CLOSED`, `SKIPPED_DATA_UNAVAILABLE` |
 | `html_report_path` | `TEXT \| NULL` | Relative path to HTML report file |
-| `etf1_strategy` | `TEXT \| NULL` | `MEAN_REVERSION` or `MOMENTUM` |
-| `etf2_strategy` | `TEXT \| NULL` | `MEAN_REVERSION` or `MOMENTUM` |
-| `etf1_decision` | `TEXT \| NULL` | `BUY`, `SELL`, `HOLD` |
-| `etf2_decision` | `TEXT \| NULL` | `BUY`, `SELL`, `HOLD` |
-| `etf1_execution_result` | `TEXT \| NULL` | `EXECUTED`, `SKIPPED_BUDGET`, `SKIPPED_MARKET_CLOSED`, `SKIPPED_API_ERROR` |
-| `etf2_execution_result` | `TEXT \| NULL` | |
+| `ticker_decisions` | `TEXT \| NULL` | JSON object keyed by ticker symbol, e.g. `{"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": "EXECUTED"}, ...}`. One entry per ticker processed this session — supports any number of configured tickers, not just two. |
 | `warnings` | `TEXT \| NULL` | JSON list of warning strings |
+
+Per-ticker `strategy` is `MEAN_REVERSION` or `MOMENTUM`; `decision` is `BUY`, `SELL`, or `HOLD`; `execution_result` is `EXECUTED`, `SKIPPED_BUDGET`, `SKIPPED_MARKET_CLOSED`, or `SKIPPED_API_ERROR`.
 
 ---
 
 ### Position
 
-One record per open paper trade. ETF-scoped; two ETFs are fully independent.
+One record per open paper trade. Ticker-scoped; the two tickers are fully independent.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `INTEGER PK AUTOINCREMENT` | |
 | `session_id` | `TEXT FK → Session.id` | Entry session |
-| `etf` | `TEXT` | Ticker symbol |
+| `ticker` | `TEXT` | Ticker symbol |
 | `strategy` | `TEXT` | `MEAN_REVERSION` or `MOMENTUM` |
 | `direction` | `TEXT` | `BUY` (only Buy positions tracked; Sell closes an existing position) |
 | `entry_price` | `REAL` | Execution fill price |
@@ -163,13 +158,13 @@ Written by the feedback agent after comparing thesis to outcome
 
 ### MemoryEntry
 
-Per-ETF, per-strategy running performance record. Queryable by the main agent during
+Per-ticker, per-strategy running performance record. Queryable by the main agent during
 investigation (design doc §Memory Bank §Strategy performance log).
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `INTEGER PK AUTOINCREMENT` | |
-| `etf` | `TEXT` | Ticker symbol |
+| `ticker` | `TEXT` | Ticker symbol |
 | `strategy` | `TEXT` | `MEAN_REVERSION` or `MOMENTUM` |
 | `session_id` | `TEXT FK → Session.id` | |
 | `decision` | `TEXT` | `BUY`, `SELL`, `HOLD` |
@@ -187,18 +182,18 @@ Run ──< Session ──< Position ──< FeedbackEvaluation
 ```
 
 - One Run has many Sessions.
-- One Session has zero, one, or two Positions (one per ETF, only if Buy was executed).
+- One Session has zero, one, or two Positions (one per ticker, only if Buy was executed).
 - One Position has zero or one FeedbackEvaluation.
-- One Session has zero, one, or two MemoryEntry records (one per ETF that was processed).
+- One Session has zero, one, or two MemoryEntry records (one per ticker that was processed).
 
 ---
 
 ## Key Invariants
 
 - A Position in status `OPEN` always has a non-null `stop_loss_price` and `exit_target`.
-- At most one Position per ETF may be in status `OPEN` at any time.
+- At most one Position per ticker may be in status `OPEN` at any time.
 - A Session's `html_report_path` is non-null iff `status = COMPLETED`.
 - `FeedbackEvaluation.attempt_count` is always ≤ 3; if 3 and evaluation not complete,
-  parent Position moves to `EVALUATION_FAILED` and ETF is unblocked (spec FR-016a).
+  parent Position moves to `EVALUATION_FAILED` and the ticker is unblocked (spec FR-016a).
 - `MemoryEntry.outcome_judgment` is populated only after the linked Position has a
   `FeedbackEvaluation` record.

@@ -53,17 +53,16 @@ echo -n "YOUR_ALPACA_SECRET_KEY" | gcloud secrets create alphoryn-alpaca-secret-
 cp config.json.example config.json
 ```
 
-Minimum required fields (Alpaca supports US-listed ETFs):
+Minimum required fields — at least 2 US-listed tickers:
 
 ```json
 {
-  "etf1": "SPY",
-  "etf2": "QQQ"
+  "tickers": ["SPY", "QQQ"]
 }
 ```
 
 See `contracts/config-schema.md` for all fields and defaults.
-Note: ETFs must be US-listed (NYSE/NASDAQ/AMEX) — Alpaca covers US equities only.
+Note: tickers must be US-listed (NYSE/NASDAQ/AMEX) — Alpaca covers US equities only.
 
 ---
 
@@ -74,7 +73,7 @@ Note: ETFs must be US-listed (NYSE/NASDAQ/AMEX) — Alpaca covers US equities on
 alphoryn run
 
 # Override individual fields
-alphoryn run --etf1 SPY --etf2 QQQ --duration 8H --stop-loss 0.02
+alphoryn run --tickers SPY,QQQ --duration 8H --stop-loss 0.02
 
 # Use a different config file
 alphoryn run --config /path/to/my-config.json
@@ -108,6 +107,6 @@ alphoryn history --run 1
 | Exit code 2: memory bank inaccessible | `~/.alphoryn/memory.db` missing or corrupt | Delete and restart (positions lost) or restore from backup |
 | Exit code 3: Secret Manager unreachable | GCP credentials not set | Run `gcloud auth application-default login` |
 | `alpaca.common.exceptions.APIError: 403` | Invalid or expired Alpaca API key | Regenerate key at alpaca.markets and update GCP secrets |
-| `alpaca.common.exceptions.APIError: 422` | Invalid ticker symbol | Confirm ETF is US-listed and ticker is correct |
-| `etf1 == etf2` validation error | Duplicate ticker in config | Set different tickers |
+| `alpaca.common.exceptions.APIError: 422` | Invalid ticker symbol | Confirm ticker is US-listed and correct |
+| `tickers must contain at least 2 symbols` validation error | Fewer than 2 tickers in config | Provide at least 2 tickers |
 | Fractional session warning at startup | `run_duration` not evenly divisible by `candle_timeframe` | Adjust either field; system rounds down and proceeds |

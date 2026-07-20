@@ -13,13 +13,12 @@ No secrets belong in this file — credentials are fetched from Google Secret Ma
 
 ```json
 {
-  "etf1": "SPY",
-  "etf2": "QQQ",
+  "tickers": ["SPY", "QQQ"],
   "candle_timeframe": "1H",
   "run_duration": "24H",
+  "extended_hours": false,
   "session_money_budget": 1000.0,
   "stop_loss_pct": 0.02,
-  "max_startup_latency_seconds": 60,
   "currency": "USD",
   "memory_db_path": "~/.alphoryn/memory.db"
 }
@@ -29,20 +28,19 @@ No secrets belong in this file — credentials are fetched from Google Secret Ma
 
 | Field | Required | Type | Allowed Values | Notes |
 |---|---|---|---|---|
-| `etf1` | Yes | string | Any valid ticker | Exchange suffix auto-applied from `exchange` if absent |
-| `etf2` | Yes | string | Any valid ticker | Must differ from `etf1` |
-| `candle_timeframe` | No | string | `"30min"`, `"1H"`, `"4H"` | Default: `"1H"` |
+| `tickers` | Yes | list of string | Minimum 2 US-listed tickers | Evaluated independently; no cross-ticker correlation logic |
+| `candle_timeframe` | No | string | `"10min"`, `"15min"`, `"30min"`, `"1H"`, `"4H"` | Default: `"1H"` |
 | `run_duration` | No | string | `"NHM"` format, e.g. `"24H"`, `"8H"` | Default: `"24H"` |
-| `exchange` | No | string | `"NYSE"`, `"NASDAQ"`, `"AMEX"` | Informational only; Alpaca routes automatically. Market hours from Alpaca calendar API. Default: omitted (auto-detected from ticker). |
+| `extended_hours` | No | boolean | `true`/`false` | Default: `false`. Allows pre/post-market execution; testing affordance. |
+| `exchange` | No | string or null | Any string | Optional, informational only — Alpaca routes US equities automatically; market hours from Alpaca calendar API. Default: `null`. |
 | `session_money_budget` | No | float or null | Positive USD amount | `null` = no budget limit |
-| `stop_loss_pct` | No | float | `0.001`–`0.20` | Default: `0.02` (2%). Applied as hard config value at trade entry. |
-| `max_startup_latency_seconds` | No | integer | `10`–`300` | Default: `60`. System warns if exceeded; never blocks. |
+| `stop_loss_pct` | No | float | `(0, 1)` exclusive | Default: `0.02` (2%). Applied as hard config value at trade entry. |
 | `currency` | No | string | `"USD"` | Default: `"USD"`. Only USD supported in v0.0.1 (Alpaca paper accounts are USD). |
 | `memory_db_path` | No | string | Valid filesystem path | Default: `~/.alphoryn/memory.db` |
 
 ## Validation Rules
 
-- `etf1` ≠ `etf2` (enforced by Pydantic validator)
+- `tickers` must contain at least 2 symbols (enforced by Pydantic validator)
 - `run_duration` must be evenly divisible by `candle_timeframe` — if not, system warns and
   rounds down at startup (spec FR-003); this is a warning, not a config error
 - `stop_loss_pct` must be in range `(0, 1)` exclusive
