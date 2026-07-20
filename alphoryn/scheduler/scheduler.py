@@ -181,21 +181,11 @@ class Scheduler:
             target:  The UTC datetime to wait until.
             _sleep:  Injectable sleep callable (default: time.sleep).
                      Injected in tests to avoid real sleeps.
-
-        Emits a WARN to stderr if the wait exceeds max_startup_latency_seconds.
         """
         _do_sleep = _sleep if _sleep is not None else time.sleep
 
         now = datetime.now(UTC)
         total_secs = max(0.0, (target - now).total_seconds())
-
-        if total_secs > self._cfg.max_startup_latency_seconds:
-            typer.echo(
-                f"WARN: {total_secs:.0f}s wait to next candle exceeds "
-                f"max_startup_latency_seconds={self._cfg.max_startup_latency_seconds}. "
-                "Proceeding.",
-                err=True,
-            )
 
         close_str = target.strftime("%Y-%m-%d %H:%M UTC")
         bar_width = 30

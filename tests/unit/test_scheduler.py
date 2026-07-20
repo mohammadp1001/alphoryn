@@ -20,7 +20,6 @@ def _cfg(**kwargs) -> AlphorynConfig:
         "tickers": ["SPY", "QQQ"],
         "candle_timeframe": "1H",
         "run_duration": "24H",
-        "max_startup_latency_seconds": 60,
     }
     defaults.update(kwargs)
     return AlphorynConfig(**defaults)
@@ -235,7 +234,7 @@ def test_is_market_open_true_when_extended_hours_set() -> None:
 
 
 def test_wait_for_candle_close_prints_countdown_line() -> None:
-    sched = _scheduler(max_startup_latency_seconds=300)
+    sched = _scheduler()
     future = datetime.now(UTC).replace(microsecond=0)
     # target already passed → immediate exit
     with patch("alphoryn.scheduler.scheduler.datetime") as mock_dt:
@@ -249,55 +248,8 @@ def test_wait_for_candle_close_prints_countdown_line() -> None:
     assert "Waiting for next candle close at" in buf.getvalue()
 
 
-def test_wait_for_candle_close_warns_on_long_wait() -> None:
-    sched = _scheduler(max_startup_latency_seconds=10)
-    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
-
-    now_before = datetime(2024, 1, 15, 15, 45, 0, tzinfo=UTC)  # 15 min wait
-    now_after = datetime(2024, 1, 15, 16, 0, 1, tzinfo=UTC)   # past target
-
-    call_count = [0]
-
-    def fake_now(tz=None):
-        call_count[0] += 1
-        return now_before if call_count[0] == 1 else now_after
-
-    with patch("alphoryn.scheduler.scheduler.datetime") as mock_dt:
-        mock_dt.now.side_effect = fake_now
-        mock_dt.fromtimestamp = datetime.fromtimestamp
-        err_buf = StringIO()
-        with patch("sys.stderr", err_buf):
-            sched.wait_for_candle_close(future, _sleep=lambda _: None)
-
-    assert "WARN" in err_buf.getvalue()
-    assert "max_startup_latency_seconds" in err_buf.getvalue()
-
-
-def test_wait_for_candle_close_no_warn_within_latency() -> None:
-    sched = _scheduler(max_startup_latency_seconds=3600)
-    future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
-    now_val = datetime(2024, 1, 15, 15, 59, 0, tzinfo=UTC)  # 60s wait
-
-    call_count = [0]
-
-    def fake_now(tz=None):
-        call_count[0] += 1
-        if call_count[0] == 1:
-            return now_val
-        return datetime(2024, 1, 15, 16, 0, 1, tzinfo=UTC)
-
-    with patch("alphoryn.scheduler.scheduler.datetime") as mock_dt:
-        mock_dt.now.side_effect = fake_now
-        mock_dt.fromtimestamp = datetime.fromtimestamp
-        err_buf = StringIO()
-        with patch("sys.stderr", err_buf):
-            sched.wait_for_candle_close(future, _sleep=lambda _: None)
-
-    assert "WARN" not in err_buf.getvalue()
-
-
 def test_wait_for_candle_close_sleeps_in_1s_increments() -> None:
-    sched = _scheduler(max_startup_latency_seconds=3600)
+    sched = _scheduler()
     future = datetime(2024, 1, 15, 16, 0, 0, tzinfo=UTC)
 
     times = [
@@ -379,7 +331,6 @@ def _full_scheduler(**extra) -> Scheduler:
         tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
         run_duration="1H",  # session_count = 1
-        max_startup_latency_seconds=3600,
     )
     main_agent = MagicMock()
     main_agent.decide.return_value = _FIXTURE_DECISION
@@ -756,7 +707,6 @@ def _full_scheduler_with_feedback(**extra) -> Scheduler:
         tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
         run_duration="1H",
-        max_startup_latency_seconds=3600,
     )
     main_agent = MagicMock()
     main_agent.decide.return_value = _FIXTURE_DECISION

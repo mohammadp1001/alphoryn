@@ -49,11 +49,6 @@ def test_stop_loss_pct_default_is_0_02() -> None:
     assert cfg.stop_loss_pct == pytest.approx(0.02)
 
 
-def test_max_startup_latency_seconds_default_is_60() -> None:
-    cfg = AlphorynConfig(tickers=["SPY", "QQQ"])
-    assert cfg.max_startup_latency_seconds == 60
-
-
 def test_currency_default_is_usd() -> None:
     cfg = AlphorynConfig(tickers=["SPY", "QQQ"])
     assert cfg.currency == "USD"
@@ -195,7 +190,6 @@ def test_load_config_json_fields_all_accepted(tmp_path: Path) -> None:
         "run_duration": "8H",
         "session_money_budget": 500.0,
         "stop_loss_pct": 0.03,
-        "max_startup_latency_seconds": 120,
         "currency": "USD",
         "memory_db_path": "~/.alphoryn/memory.db",
     }

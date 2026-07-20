@@ -40,7 +40,6 @@ class AlphorynConfig(BaseModel):
     exchange: str | None = None
     session_money_budget: float | None = None
     stop_loss_pct: float = 0.02
-    max_startup_latency_seconds: int = 60
     currency: str = "USD"
     memory_db_path: str = "~/.alphoryn/memory.db"
 
