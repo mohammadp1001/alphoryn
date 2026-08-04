@@ -10,6 +10,7 @@ To capture full prompt/response content in traces, set:
 import logging
 import os
 
+import google.auth
 from google.adk.telemetry.google_cloud import get_gcp_exporters as _get_gcp_exporters
 from google.adk.telemetry.setup import maybe_set_otel_providers as _maybe_set_otel_providers
 
@@ -31,7 +32,13 @@ def setup_otel() -> None:
     os.environ.setdefault("OTEL_SERVICE_NAME", _SERVICE_NAME)
     os.environ.setdefault("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "true")
     try:
-        gcp_exporters = _get_gcp_exporters(enable_cloud_logging=True)
+        # telemetry.googleapis.com rejects span batches whose Resource lacks
+        # gcp.project_id; ADK's resource detector only reads it from this env var.
+        if "OTEL_RESOURCE_ATTRIBUTES" not in os.environ:
+            _, project_id = google.auth.default()
+            if project_id:
+                os.environ["OTEL_RESOURCE_ATTRIBUTES"] = f"gcp.project_id={project_id}"
+        gcp_exporters = _get_gcp_exporters(enable_cloud_tracing=True, enable_cloud_logging=True)
         _maybe_set_otel_providers([gcp_exporters])
     except Exception as exc:
         _logger.warning("OpenTelemetry setup failed, traces will not be exported: %s", exc)

@@ -4,7 +4,16 @@ import logging
 import os
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from alphoryn.telemetry.otel import setup_otel
+
+
+@pytest.fixture(autouse=True)
+def _mock_google_auth_default():
+    target = "alphoryn.telemetry.otel.google.auth.default"
+    with patch(target, return_value=(MagicMock(), "test-project")) as m:
+        yield m
 
 
 def _patched_otel(mock_get=None, mock_set=None):
@@ -51,13 +60,42 @@ def test_setup_otel_does_not_override_content_capture_if_set(monkeypatch) -> Non
     assert os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] == "false"
 
 
-def test_setup_otel_calls_get_gcp_exporters_with_cloud_logging(monkeypatch) -> None:
+def test_setup_otel_calls_get_gcp_exporters_with_tracing_and_logging(monkeypatch) -> None:
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
+    monkeypatch.delenv("OTEL_RESOURCE_ATTRIBUTES", raising=False)
     mock_get = MagicMock()
     p1, p2 = _patched_otel(mock_get=mock_get)
     with p1, p2:
         setup_otel()
-    mock_get.assert_called_once_with(enable_cloud_logging=True)
+    mock_get.assert_called_once_with(enable_cloud_tracing=True, enable_cloud_logging=True)
+
+
+def test_setup_otel_sets_project_id_resource_attribute(monkeypatch) -> None:
+    monkeypatch.delenv("OTEL_RESOURCE_ATTRIBUTES", raising=False)
+    p1, p2 = _patched_otel()
+    with p1, p2:
+        setup_otel()
+    assert os.environ["OTEL_RESOURCE_ATTRIBUTES"] == "gcp.project_id=test-project"
+
+
+def test_setup_otel_does_not_override_existing_resource_attributes(
+    monkeypatch, _mock_google_auth_default
+) -> None:
+    monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=custom")
+    p1, p2 = _patched_otel()
+    with p1, p2:
+        setup_otel()
+    _mock_google_auth_default.assert_not_called()
+    assert os.environ["OTEL_RESOURCE_ATTRIBUTES"] == "service.name=custom"
+
+
+def test_setup_otel_skips_resource_attribute_when_project_id_is_none(monkeypatch) -> None:
+    monkeypatch.delenv("OTEL_RESOURCE_ATTRIBUTES", raising=False)
+    p1, p2 = _patched_otel()
+    target = "alphoryn.telemetry.otel.google.auth.default"
+    with p1, p2, patch(target, return_value=(MagicMock(), None)):
+        setup_otel()
+    assert "OTEL_RESOURCE_ATTRIBUTES" not in os.environ
 
 
 def test_setup_otel_passes_exporters_to_maybe_set(monkeypatch) -> None:
