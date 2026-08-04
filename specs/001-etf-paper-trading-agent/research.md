@@ -1,4 +1,4 @@
-# Research: Alphoryn — Automated ETF Paper Trading System
+# Research: Alphoryn — Automated Ticker Paper Trading System
 
 **Phase 0 output** | **Date**: 2026-07-03 (updated 2026-07-03) | **Plan**: [plan.md](plan.md)
 
@@ -15,9 +15,10 @@ single integration. This replaces both ib-insync and yfinance from the initial p
 
 **Market scope note**: Alpaca covers **US equities markets** (NYSE, NASDAQ, AMEX). The
 original design doc referenced European exchanges (XETRA, Euronext, LSE) and EUR currency.
-With Alpaca as the execution and data provider, supported ETFs are US-listed (e.g., SPY,
-QQQ, EEM). The `exchange` config field is retired; market hours come from Alpaca's market
-calendar API. Currency is USD for Alpaca paper accounts.
+With Alpaca as the execution and data provider, supported tickers are US-listed (e.g., SPY,
+QQQ, EEM). The `exchange` config field is now optional and informational only (no longer
+required); market hours come from Alpaca's market calendar API regardless of its value.
+Currency is USD for Alpaca paper accounts.
 
 **Alternatives considered**:
 - IBKR / ib-insync: Covers European exchanges but requires TWS running locally, more complex
@@ -166,9 +167,9 @@ GCP auth: Application Default Credentials (`gcloud auth application-default logi
 data access. The agent calls it once; `market_data/client.py` handles all raw data fetching
 internally via `alpaca-py` — the agent never sees OHLCV bars.
 
-`build_snapshot` returns a frozen `SignalSnapshot` containing computed signals for both
-ETFs (fields TBD; blocked on strategy md files). The agent works entirely from these
-signals during investigation.
+`build_snapshot` returns a frozen `SignalSnapshot` containing a `signals: dict[str, AssetSignals]`
+keyed by ticker — one entry per configured ticker, not fixed to two. The agent works
+entirely from these signals during investigation.
 
 `data_fetch` is an internal function within `market_data/client.py`, not an ADK tool.
 The agent has no direct access to it.
@@ -228,30 +229,36 @@ correlation without a separate tracing backend.
 |---|---|---|
 | `event_type` | `str` | See event types table below |
 | `session_id` | `str \| None` | Parent session (`run-N/session-X`); null for run-level events |
-| `component` | `str` | Emitting component (e.g., `"main_agent"`, `"execution_agent"`, `"monitor"`, `"scheduler"`) |
-| `etf` | `str \| None` | ETF ticker where applicable |
+| `component` | `str` | Emitting component (e.g., `"main_agent"`, `"monitor"`, `"scheduler"`, `"feedback_agent"`) |
+| `etf` | `str \| None` | Ticker symbol where applicable. Field name intentionally kept as `etf` (not renamed to `ticker`) for log schema stability — renaming would break existing Cloud Logging queries. See `telemetry/logger.py::emit`. |
 | `timestamp` | `datetime` | UTC event time |
 | `latency_ms` | `int \| None` | Duration where applicable |
 | `payload` | `dict` | Event-specific fields (see below) |
 
-**Event types and their payload fields**:
+**Event types and their payload fields** (as actually implemented in `telemetry/logger.py::EVENT_TYPES` and each emit call site):
 
 | Event type | Component | Key payload fields |
 |---|---|---|
-| `AGENT_DECISION` | `main_agent`, `feedback_agent` | `decision`, `reasoning`, `strategy`, `model_name`, `token_usage` |
-| `TOOL_CALL` | any agent | `tool_name`, `tool_input`, `tool_output_summary`, `success` |
-| `SIGNAL_SNAPSHOT_BUILT` | `main_agent` | `etf1_signals_summary`, `etf2_signals_summary` |
-| `ORDER_PLACED` | `execution_agent` | `etf`, `side`, `qty`, `order_id` |
-| `ORDER_FAILED` | `execution_agent` | `etf`, `side`, `reason` |
-| `BUDGET_CHECK` | `execution_agent` | `etf`, `available_budget`, `required`, `passed` |
-| `STOP_LOSS_TRIGGERED` | `monitor` | `etf`, `position_id`, `trigger_price`, `stop_loss_price` |
-| `PROFIT_TARGET_TRIGGERED` | `monitor` | `etf`, `position_id`, `trigger_price`, `exit_target` |
-| `WINDOW_EXPIRY_TRIGGERED` | `monitor` | `etf`, `position_id`, `session_ordinal` |
-| `POSITION_CLOSED` | `monitor` | `etf`, `position_id`, `exit_reason`, `pnl` |
-| `SESSION_START` | `scheduler` | `candle_close_at`, `open_positions_count` |
-| `SESSION_END` | `scheduler` | `status`, `duration_ms` |
-| `MARKET_CLOSED` | `scheduler` | `reason` |
-| `BUDGET_TIMEOUT` | `scheduler` | `phase`, `elapsed_ms` |
+| `AGENT_DECISION` | `main_agent` | `decisions` (dict: ticker → action) |
+| `AGENT_DECISION` | `feedback_agent` | `position_id`, `ticker`, `outcome_judgment`, `attempt` |
+| `TOOL_CALL` | `main_agent` | `tool`, `args` |
+| `TOOL_CALL` | `feedback_agent` | `attempt` |
+| `SIGNAL_SNAPSHOT_BUILT` | `main_agent` | `snapshot` (stringified tool response) |
+| `STOP_LOSS_TRIGGERED` / `PROFIT_TARGET_TRIGGERED` / `WINDOW_EXPIRY_TRIGGERED` | `monitor` | `ticker`, `exit_price`, `exit_reason` |
+| `POSITION_CLOSED` | `monitor` | `ticker`, `status` |
+| `SESSION_START` | `scheduler` | (empty payload; `session_id` carries the identity) |
+| `SESSION_END` | `scheduler` | (empty payload; `latency_ms` carries duration) |
+| `MARKET_CLOSED` | `scheduler` | `session_ordinal` |
+| `BUDGET_TIMEOUT` | `scheduler` | `phase` (`"investigation"` or `"execute"`), `budget_secs` |
+| `EVALUATION_FAILED` | `feedback_agent` | `position_id`, `ticker`, `error` |
+
+**Known gap**: `ORDER_PLACED`, `ORDER_FAILED`, and `BUDGET_CHECK` are declared in the
+`EVENT_TYPES` constant but are never emitted — `execution/agent.py` has no
+`TelemetryLogger` wired in and does not call `emit()` at all. Also, `EVALUATION_FAILED`
+(emitted by `feedback_agent.py`) is missing from the `EVENT_TYPES` constant itself
+(the constant is documentation-only and not enforced by `emit()`, so this doesn't raise
+an error, but it is inconsistent). These are implementation gaps to track separately,
+not a documentation error.
 
 GCP Logs Explorer is the primary observability UI — filter by `session_id`, `event_type`,
 `component`, or `etf` to query any slice of system activity.

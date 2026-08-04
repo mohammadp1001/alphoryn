@@ -1,4 +1,4 @@
-# Implementation Plan: Alphoryn — Automated ETF Paper Trading System
+# Implementation Plan: Alphoryn — Automated Ticker Paper Trading System
 
 **Branch**: `001-etf-paper-trading-agent` | **Date**: 2026-07-03 | **Spec**: [spec.md](spec.md)
 
@@ -6,7 +6,7 @@
 
 ## Summary
 
-Alphoryn V0.0.1 is a CLI application for automated ETF paper trading driven by LLM agents
+Alphoryn V0.0.1 is a CLI application for automated ticker paper trading driven by LLM agents
 (Google ADK + Gemini). The user configures a session via a JSON config file with optional
 CLI argument overrides. The system autonomously executes a candle-by-candle
 investigate-decide-execute loop for a user-supplied list of tickers (min 2). A local SQLite database serves
@@ -130,7 +130,9 @@ alphoryn/
 ├── strategies/          # Strategy signal rules (mean_reversion.md, momentum.md)
 │   ├── mean_reversion.md
 │   └── momentum.md
-└── skills/              # Investigation skill files (identify_regime, entry, sizing, memory)
+└── skills/              # Investigation skill files, one dir per skill with a SKILL.md:
+                         #   identify-regime, mean-reversion-entry, momentum-entry,
+                         #   size-position, read-memory
 
 tests/
 ├── unit/                # Pure function tests; deterministic components
@@ -203,7 +205,7 @@ handoff contracts are noted — see `contracts/agents.md` before implementing th
 ### Stage 3 — Data and Execution (can be built in parallel after Stage 2)
 
 8. `market_data/client.py` — `build_snapshot` ADK tool + price polling; needs `alpaca-py`.
-   Signal fields defined in `data-model.md §ETFSignals`; computation logic from `alpaca-py`
+   Signal fields defined in `data-model.md §AssetSignals`; computation logic from `alpaca-py`
    bars (RSI, EMA, SMA, Bollinger, MACD, volume ratio).
 9. `execution/agent.py` — ADK BaseAgent; needs `memory/bank.py`, `telemetry/logger.py`.
    Requires `contracts/agents.md §Decision Handoff` before building input interface.
@@ -253,11 +255,11 @@ now fully unblocked (pending user refinement of strategies and skills).
 |---|---|---|
 | Mean Reversion strategy | Authored | `alphoryn/strategies/mean_reversion.md` |
 | Momentum strategy | Authored | `alphoryn/strategies/momentum.md` |
-| Skill: identify_regime | Authored | `alphoryn/skills/identify_regime.md` |
-| Skill: mean_reversion_entry | Authored | `alphoryn/skills/mean_reversion_entry.md` |
-| Skill: momentum_entry | Authored | `alphoryn/skills/momentum_entry.md` |
-| Skill: size_position | Authored | `alphoryn/skills/size_position.md` |
-| Skill: read_memory | Authored | `alphoryn/skills/read_memory.md` |
+| Skill: identify-regime | Authored | `alphoryn/skills/identify-regime/SKILL.md` |
+| Skill: mean-reversion-entry | Authored | `alphoryn/skills/mean-reversion-entry/SKILL.md` |
+| Skill: momentum-entry | Authored | `alphoryn/skills/momentum-entry/SKILL.md` |
+| Skill: size-position | Authored | `alphoryn/skills/size-position/SKILL.md` |
+| Skill: read-memory | Authored | `alphoryn/skills/read-memory/SKILL.md` |
 | HTML report template (unified) | Authored | `templates/reports/session.html.j2` |
 | Report context contract | Authored | `contracts/report-context.md` |
 | Feedback evaluation window | Resolved | Mean Reversion: +4 sessions; Momentum: +2 sessions |

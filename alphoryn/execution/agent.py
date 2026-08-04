@@ -119,7 +119,9 @@ class ExecutionAgent:
             entry_time=datetime.now(UTC),
             lot_size=float(lot),
             stop_loss_price=stop_loss_price,
-            exit_target=json.dumps(asset_decision.exit_target) if asset_decision.exit_target else "{}",
+            exit_target=(
+                json.dumps(asset_decision.exit_target) if asset_decision.exit_target else "{}"
+            ),
             evaluation_window_session=5,
             status="OPEN",
         )

@@ -60,7 +60,6 @@ def test_config_defaults() -> None:
     assert cfg.run_duration == "24H"
     assert cfg.currency == "USD"
     assert cfg.stop_loss_pct == pytest.approx(0.02)
-    assert cfg.max_startup_latency_seconds == 60
     assert cfg.memory_db_path == "~/.alphoryn/memory.db"
     assert cfg.session_money_budget is None
     assert cfg.exchange is None

@@ -1,4 +1,4 @@
-# Feature Specification: Alphoryn — Automated ETF Paper Trading System
+# Feature Specification: Alphoryn — Automated Ticker Paper Trading System
 
 **Feature Branch**: `001-etf-paper-trading-agent`
 
@@ -75,9 +75,9 @@ After a trade is placed, the system monitors the open position continuously and 
 **Acceptance Scenarios**:
 
 1. **Given** an open position where the price hits the configured stop-loss, **When** the monitoring loop detects this, **Then** the position is closed automatically and logged without any LLM call.
-2. **Given** an open position on ticker-A whose feedback has not been evaluated, **When** the main agent considers ticker-A, **Then** it is forced to Hold on ticker-A regardless of investigation output.
+2. **Given** an open position on ticker-A whose feedback has not been evaluated, **When** a session begins, **Then** ticker-A is excluded from the investigation step entirely (no LLM investigation call is made for it) and its session outcome is recorded as Hold.
 3. **Given** an open position on ticker-A and no open position on ticker-B, **When** a session runs, **Then** the main agent can freely decide on ticker-B while being forced to Hold on ticker-A.
-4. **Given** a position whose evaluation window has expired without hitting profit target or stop-loss, **When** the expiry is detected, **Then** the position is closed and the fact is logged.
+4. **Given** a position whose evaluation window has expired without hitting profit target or stop-loss, **When** the expiry is detected, **Then** the position is closed and the fact is logged. *** Added by me, Let's clarify wht evaluation window is? ***
 
 ---
 
@@ -91,8 +91,8 @@ At a strategy-defined point after the entry session (1–2 sessions for Momentum
 
 **Acceptance Scenarios**:
 
-1. **Given** a Momentum trade entry session, **When** 1–2 candle sessions have elapsed, **Then** the feedback agent reads the entry HTML report, fetches the candle close price at evaluation time, and writes a judgment to the memory bank.
-2. **Given** the feedback agent has written its evaluation, **When** the main agent next considers that ticker, **Then** it is free to open a new position on that ticker.
+1. **Given** a Momentum trade entry session, **When** 1–2 candle sessions have elapsed, **Then** the feedback agent reads the entry HTML report, calls the same market data tool the Investigation Agent uses to fetch the candle close price at evaluation time, and writes a judgment to the memory bank.
+2. **Given** the feedback agent has written its evaluation, **When** the main agent next considers that ticker, **Then** it is free to Buy, Sell, or Hold on that ticker, and its investigation input includes the ticker's recent feedback judgments from the memory bank so the decision can account for whether the prior thesis was correct.
 3. **Given** the feedback agent encounters an error at evaluation time, **When** the attempt fails, **Then** the feedback agent retries immediately up to 3 times. If all 3 attempts fail, the evaluation is marked failed, the ticker is unblocked, and a warning is logged — the position is considered closed from the main agent's perspective.
 
 ---
@@ -113,22 +113,24 @@ At a strategy-defined point after the entry session (1–2 sessions for Momentum
 
 ### Functional Requirements
 
-- **FR-001**: System MUST accept a configuration specifying a list of tickers (minimum two, US-listed), candle timeframe, run duration, an optional per-session money budget, a maximum startup latency window (`max_startup_latency_seconds`), a stop-loss percentage applied as a hard risk control at trade entry, an extended-hours flag (`extended_hours`), and a memory bank path (`memory_db_path`). No exchange configuration is required; market hours are sourced from the trading platform's market calendar.
+- **FR-001**: System MUST accept a configuration specifying a list of tickers (minimum two, US-listed), candle timeframe, run duration, an optional per-session money budget, a stop-loss percentage applied as a hard risk control at trade entry, an extended-hours flag (`extended_hours`), and a memory bank path (`memory_db_path`). No exchange configuration is required; market hours are sourced from the trading platform's market calendar.
 - **FR-002**: System MUST calculate total session count as `run_duration / candle_timeframe` (rounded down) at startup and display it to the user.
 - **FR-003**: System MUST warn the user if the session count is fractional and suggest a configuration adjustment.
 - **FR-004**: System MUST align to the next candle boundary (not system start time) before triggering the first session, and display the wait time.
-- **FR-005**: System MUST check, at each session start, whether the run is complete, the market is open, and whether any ticker has a feedback-blocked position. At the start of a new run, the system MUST additionally load all open positions from the memory bank and immediately apply position-blocking rules for any unevaluated carry-over positions.
+- **FR-005**: System MUST check, at each session start, whether the run is complete, the market is open, and whether any ticker has a feedback-blocked position (a closed position with no `FeedbackEvaluation` yet, per FR-014). Feedback-blocked tickers MUST be excluded from the investigation step entirely for that session — no Investigation Agent call is made for them — and their session outcome is recorded as Hold. At the start of a new run, the system MUST additionally load all open positions from the memory bank and immediately apply position-blocking rules for any unevaluated carry-over positions (positions still `OPEN`, or closed but unevaluated, at the time a new run starts, per FR-019).
 - **FR-006**: System MUST take a frozen market data snapshot at each candle close and reason exclusively over that snapshot during investigation; no live data may be fetched during investigation.
 - **FR-007**: System MUST enforce a session investigation budget of ≤87% of the candle timeframe and a decide+execute budget of ≤13% of the candle timeframe (for a 1H candle: 52 min / 7 min). Overruns MUST force a Hold decision on all tickers and emit a warning log. During investigation, the system MUST emit periodic heartbeat lines at a fixed interval indicating elapsed time (e.g., "investigating… 12 min elapsed"), so the user can confirm the system is active.
 - **FR-008**: System MUST perform regime recognition independently for each ticker within a session and select a strategy (Mean Reversion or Momentum) per ticker. One ticker may be assigned Mean Reversion while another is assigned Momentum in the same session. The investigation step covers all tickers but produces independent strategy selection and decision outputs for each.
+- **FR-008a**: Before investigating a ticker, the system MUST supply the Investigation Agent with that ticker's recent feedback judgments and strategy performance history from the memory bank, so the decision (including whether to continue, reverse, or exit an unblocked position) can account for prior evaluation outcomes.
 - **FR-009**: System MUST produce one of three actions per ticker per session: Buy, Sell, or Hold.
-- **FR-010**: System MUST enforce the session money budget at execution time: each ticker order is checked against the full remaining budget at the moment of execution, in sequence. If an order would exceed the remaining budget, that order is skipped and logged; other tickers' orders are unaffected. No pre-session budget split between tickers is performed.
+- **FR-010**: System MUST enforce the session money budget at execution time: each ticker order is checked against the full remaining budget at the moment of execution, in sequence. If an order would exceed the remaining budget, that order is skipped and logged; other tickers' orders are unaffected. No pre-session budget split between tickers is performed. This execution-time check is a hard, deterministic backstop regardless of what the Investigation Agent reasoned about.
+- **FR-010a**: The Investigation Agent MUST be given the session money budget as part of its input, and when it produces Buy decisions with lot sizes for more than one ticker in the same session, it MUST reason about them jointly against that shared budget (e.g., not size every ticker's order as if it alone had the full budget), since execution consumes the budget sequentially, ticker by ticker. This is advisory sizing guidance only — FR-010's execution-time check remains authoritative and may still skip an order the agent sized optimistically.
 - **FR-011**: System MUST generate a unified HTML report after each session covering all tickers, recording per-ticker strategy, action, reasoning, execution result, and any warnings. The report is stored under a composite session identifier (e.g., `run-3/session-0001`).
 - **FR-012**: System MUST write a memory bank entry after each session recording strategy selected, regime context, and decision per ticker.
 - **FR-013**: System MUST continuously monitor open positions using real-time price data and trigger deterministic exits (no LLM involvement) on three conditions: (1) price breaches the configured stop-loss percentage from entry price; (2) price reaches the agent-set exit target recorded at trade entry (mean-reversion price level or trailing stop for Momentum); (3) evaluation window expires without either prior exit triggering.
 - **FR-014**: System MUST block the main agent from opening a new position on a ticker while that ticker has an open, feedback-unevaluated position. Each ticker is independent.
 - **FR-015**: System MUST trigger the feedback agent at the strategy-defined evaluation window (1–2 sessions post-entry for Momentum; 3–6 sessions for Mean Reversion).
-- **FR-016**: Feedback agent MUST write a structured evaluation (thesis vs. outcome judgment) to the memory bank and mark the position as evaluated.
+- **FR-016**: Feedback agent MUST write a structured evaluation (thesis vs. outcome judgment) to the memory bank and mark the position as evaluated. It MUST use the same market data tool as the Investigation Agent to fetch the price at the evaluation timestamp, querying that specific past candle close rather than the latest one.
 - **FR-016a**: If a feedback evaluation attempt fails, the feedback agent MUST retry immediately up to 3 times. After 3 consecutive failures, the evaluation MUST be marked as failed, the ticker MUST be unblocked for new trades, and a warning MUST be logged. The position is treated as closed from the main agent's perspective.
 - **FR-017**: System MUST handle all failure conditions (API unavailable, market closed, budget exceeded, skill unavailable) with a Hold action and a structured log entry; no failure condition may leave a position in an ambiguous state.
 - **FR-018**: Timed-out sessions and data-unavailability skips MUST NOT count against the derived session total.
@@ -139,7 +141,7 @@ At a strategy-defined point after the entry session (1–2 sessions for Momentum
 The system is composed of four agents with a strict separation between reasoning (LLM-assisted) and execution (deterministic). This separation is a non-negotiable design principle: any agent that places or closes a trade MUST be deterministic and produce identical outputs for identical inputs.
 
 **Investigation Agent** (LLM-assisted, reasoning)
-Responsible for market regime recognition and per-session decision-making. At each candle close it receives a frozen market data snapshot and produces a structured decision record — one action (Buy/Sell/Hold), strategy, lot size, exit target, and reasoning summary per ticker. It operates exclusively on the frozen snapshot; no live data may be queried during the decision process. Invoked once per candle close.
+Responsible for market regime recognition and per-session decision-making. At each candle close it receives a frozen market data snapshot, plus each ticker's recent feedback judgments and strategy performance history from the memory bank, and produces a structured decision record — one action (Buy/Sell/Hold), strategy, lot size, exit target, and reasoning summary per ticker. Aside from the memory bank query, it operates exclusively on the frozen snapshot; no live market data may be queried during the decision process. Feedback-blocked tickers (FR-005) are excluded from its input entirely — it is never invoked for a blocked ticker, and that ticker's session outcome is recorded as Hold without an investigation call. Invoked once per candle close, per unblocked ticker.
 
 **Execution Agent** (deterministic, no reasoning)
 Responsible for carrying out the decisions produced by the investigation agent. Processes each ticker's decision sequentially, validates it against the session money budget, and submits market orders. Contains no LLM logic; given the same inputs it always produces the same result. Execution failures result in a Hold and a log entry, never in a retry loop.
@@ -148,7 +150,7 @@ Responsible for carrying out the decisions produced by the investigation agent. 
 Runs concurrently with the session loop as a background process. Continuously polls real-time price data and closes positions when any of three exit conditions is met: stop-loss breach, profit-target reached, or evaluation window expired. Makes no LLM calls. Thread-safe with respect to the session loop.
 
 **Feedback Agent** (LLM-assisted, reasoning)
-Triggered once per closed position at the strategy-defined evaluation window. Reads the original session HTML report to extract the entry reasoning, fetches the actual price outcome, and writes a structured judgment (Correct / Incorrect / Neutral) to the memory bank. Unblocks the ticker for future trades after evaluation (or after exhausting its retry policy). Invoked by the session loop before investigation begins.
+Triggered once per closed position at the strategy-defined evaluation window. Reads the original session HTML report to extract the entry reasoning, then calls the same market data tool the Investigation Agent uses (`market_data/client.py`) to fetch the actual price outcome at the evaluation timestamp, and writes a structured judgment (Correct / Incorrect / Neutral) to the memory bank. Unlike the Investigation Agent's snapshot-isolated call, the Feedback Agent's tool call targets a specific past candle close rather than the latest one. Unblocks the ticker for future trades after evaluation (or after exhausting its retry policy). Invoked by the session loop before investigation begins.
 
 **Interaction flow:**
 
@@ -165,7 +167,7 @@ Each agent communicates via structured records written to the memory bank or pas
 
 ### Key Entities
 
-- **Configuration**: List of tickers (min 2, US-listed), candle timeframe, run duration, optional money budget, extended-hours flag, stop-loss percentage, max startup latency, memory bank path. The single source of truth for all session parameters.
+- **Configuration**: List of tickers (min 2, US-listed), candle timeframe, run duration, optional money budget, extended-hours flag, stop-loss percentage, memory bank path. The single source of truth for all session parameters.
 - **Session**: One atomic decision unit triggered by a candle close. Identified by a composite key of sequential run number and a zero-padded sequential session number (e.g., `run-3/session-0001`). Contains a frozen data snapshot and per-ticker investigation outputs — each ticker produces an independent strategy selection, action, and execution result. The unified session HTML report captures all tickers and is stored under the session's composite ID.
 - **Position**: An open paper trade on one ticker. Tracks entry price, strategy, status (open/closed/evaluated), a hard stop-loss level (derived from the configured stop-loss percentage applied at entry), and a strategy-determined exit target (price level for Mean Reversion; trailing stop for Momentum — both set by the investigation agent at trade entry).
 - **Memory Bank**: A structured local store accumulating per-ticker strategy performance, regime context summaries, and feedback evaluations across all sessions and runs. Persists across runs.
@@ -177,7 +179,7 @@ Each agent communicates via structured records written to the memory bank or pas
 ## Success Criteria *(mandatory)*
 
 - **SC-001**: A user can start a configured trading session and reach the "waiting for candle close" idle state within 2 minutes of invoking the system.
-- **SC-002**: The system aligns to the next candle boundary within the configured `max_startup_latency_seconds` window. If alignment is delayed beyond this threshold, the system logs a warning and proceeds — it never blocks or silently skips a session due to startup latency alone.
+- **SC-002**: The system aligns to the next candle boundary at startup. If alignment is delayed, the system logs a warning and proceeds — it never blocks or silently skips a session due to startup latency alone.
 - **SC-003**: Every session produces either a completed decision record (Buy/Sell/Hold with unified HTML report) or a logged skip entry with reason — no session ends silently.
 - **SC-004**: Every failure condition results in a log entry with sufficient detail for the user to identify the cause without additional instrumentation.
 - **SC-005**: Stop-loss exits trigger within one 1-minute candle of the threshold being breached.
@@ -196,7 +198,7 @@ Each agent communicates via structured records written to the memory bank or pas
 - "Session money budget" applies per session, not as a cumulative portfolio limit across the full run.
 - All configured tickers operate independently throughout the system; no cross-ticker correlation logic is required in V0.0.1.
 - Mean Reversion and Momentum are the only two strategies. Each ticker undergoes independent regime recognition per session and receives its own strategy assignment; multiple tickers may run different strategies in the same session.
-- The agent determines lot size as part of its Buy decision, constrained by the session money budget communicated to it before investigation begins. The execution workflow validates the order value against the remaining budget at execution time and skips if exceeded.
+- The agent determines lot size as part of its Buy decision, constrained by the session money budget communicated to it before investigation begins, and reasons jointly across all tickers it decides to Buy in the same session so it doesn't size each order as if it alone had the full budget (FR-010a). The execution workflow validates each order's value against the remaining budget at execution time, in sequence, and skips if exceeded (FR-010) — this hard check is authoritative regardless of the agent's sizing.
 - The feedback agent evaluates a trade only once; re-evaluation is out of scope.
 - Run completion does not force-close open positions; positions remain under stop-loss monitoring after the run ends and are persisted in the memory bank so they are carried into subsequent runs.
 - `extended_hours: true` is a testing affordance; production runs should use standard market hours.

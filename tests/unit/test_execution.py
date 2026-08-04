@@ -144,7 +144,8 @@ def test_buy_blocked_by_insufficient_budget(tmp_path) -> None:
     mock_alpaca = MagicMock()
     mock_alpaca.get_account.return_value.buying_power = "100"  # way too low
     mock_data = MagicMock()
-    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}  # 1000 x 450 = $450k
+    # 1000 x 450 = $450k
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}
 
     with patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca), \
          patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data):

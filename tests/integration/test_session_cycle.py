@@ -126,7 +126,6 @@ def _make_scheduler(
         tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
         run_duration="1H",
-        max_startup_latency_seconds=3600,
     )
     return Scheduler(
         cfg,

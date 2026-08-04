@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Alphoryn — Automated ETF Paper Trading System
+# Specification Quality Checklist: Alphoryn — Automated Ticker Paper Trading System
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-07-03
@@ -33,7 +33,9 @@
 ## Notes
 
 - All items pass. Spec updated 2026-07-07 (two passes) to reflect V0.0.1 implemented state:
-  - Terminology updated from "ETF" to "ticker" throughout (PR #99)
+  - Terminology updated from "ETF" to "ticker" in spec.md and data-model.md (2026-07-07 pass;
+    PR #99 covered the codebase but missed contracts/agents.md, contracts/report-context.md,
+    and research.md — those were brought in line separately on 2026-07-21)
   - Config: removed `exchange`, added `extended_hours` and `memory_db_path`; tickers is now `list[str]` (min 2)
   - Session ID corrected to sequential format (`run-3/session-0001`)
   - US1 scenario 1 session count corrected (24H/1H = 24 sessions, not 6)

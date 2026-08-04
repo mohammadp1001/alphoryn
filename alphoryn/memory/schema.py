@@ -35,7 +35,7 @@ class Session(Base):
     status = Column(String, nullable=False)
     # Valid statuses: COMPLETED | SKIPPED_TIMEOUT | SKIPPED_MARKET_CLOSED | SKIPPED_DATA_UNAVAILABLE
     html_report_path = Column(String, nullable=True)
-    # JSON: {"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": "EXECUTED"}, ...}
+    # JSON: {"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": ...}}
     ticker_decisions = Column(Text, nullable=True)
     warnings = Column(Text, nullable=True)  # JSON list of warning strings
 
