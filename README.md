@@ -1,6 +1,6 @@
 # alphoryn
 
-Autonomous ETF paper trading agent.
+Autonomous agent.
 
 ---
 
