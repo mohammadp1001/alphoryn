@@ -2,7 +2,7 @@
 
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -238,7 +238,7 @@ def test_wait_for_candle_close_prints_countdown_line() -> None:
     future = datetime.now(UTC).replace(microsecond=0)
     # target already passed → immediate exit
     with patch("alphoryn.scheduler.scheduler.datetime") as mock_dt:
-        mock_dt.now.return_value = future.replace(second=future.second + 1)
+        mock_dt.now.return_value = future + timedelta(seconds=1)
         mock_dt.fromtimestamp = datetime.fromtimestamp
         buf = StringIO()
         sleep_calls: list = []
