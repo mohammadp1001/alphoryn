@@ -149,7 +149,8 @@ def test_add_gcp_project_resource_attribute_sets_when_unset(monkeypatch) -> None
 def test_add_gcp_project_resource_attribute_merges_with_existing(monkeypatch) -> None:
     monkeypatch.setenv("OTEL_RESOURCE_ATTRIBUTES", "service.name=custom")
     _add_gcp_project_resource_attribute("test-project")
-    assert os.environ["OTEL_RESOURCE_ATTRIBUTES"] == "service.name=custom,gcp.project_id=test-project"
+    expected = "service.name=custom,gcp.project_id=test-project"
+    assert os.environ["OTEL_RESOURCE_ATTRIBUTES"] == expected
 
 
 def test_add_gcp_project_resource_attribute_noop_if_already_present(monkeypatch) -> None:
