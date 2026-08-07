@@ -199,6 +199,7 @@ class MemoryBank:
             "CLOSED_STOP_LOSS",
             "CLOSED_PROFIT_TARGET",
             "CLOSED_WINDOW_EXPIRY",
+            "CLOSED_AGENT_EXIT",
         )
         with DBSession(self._engine) as s:
             candidates = (
@@ -222,6 +223,7 @@ class MemoryBank:
             "CLOSED_STOP_LOSS",
             "CLOSED_PROFIT_TARGET",
             "CLOSED_WINDOW_EXPIRY",
+            "CLOSED_AGENT_EXIT",
         )
         with DBSession(self._engine) as s:
             candidates = (

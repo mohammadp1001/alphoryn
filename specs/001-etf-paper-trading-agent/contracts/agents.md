@@ -40,14 +40,18 @@ Gating below) and re-inserts them as Hold afterwards.
 
 **Execution sequence in `execution/agent.py`** (per ticker, sequential, via `execute()` iterating `decision.decisions`):
 1. If action is HOLD: skip
-2. If action is BUY and the ticker is feedback-blocked: force HOLD (FR-014). This is a
+2. If action is SELL: close the ticker's open position — submit a sell for the position's
+   full `lot_size`, then update `exit_price` / `exit_time` / `exit_reason=AGENT_EXIT` /
+   `status=CLOSED_AGENT_EXIT` on the existing row. No new `Position` row is written. If the
+   ticker has no open position the order is **rejected**, not submitted: submitting it
+   would open a short, which v0.0.1 does not support
+3. If action is BUY and the ticker is feedback-blocked: force HOLD (FR-014). This is a
    second gate for direct callers of `ExecutionAgent`; the scheduler has normally already
-   excluded the ticker. SELL is deliberately exempt — a Sell closes an existing position,
-   so the blocking position is the very thing it unwinds
-3. Budget check via `alpaca-py` account API
-4. If budget insufficient: skip the ticker's order
-5. Place market order via `alpaca-py`
-6. On success: write `Position` record to memory bank with `status=OPEN`
+   excluded the ticker. SELL is exempt — the blocking position is the very thing it unwinds
+4. Budget check via `alpaca-py` account API (entry only; closing never needs buying power)
+5. If budget insufficient: skip the ticker's order
+6. Place market order via `alpaca-py`
+7. On success: write `Position` record to memory bank with `status=OPEN`, `direction=BUY`
 
 **Known gap**: unlike `main_agent`, `monitor`, and `feedback_agent`, `execution/agent.py`
 does not currently have a `TelemetryLogger` wired in and emits no telemetry events

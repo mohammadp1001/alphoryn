@@ -450,3 +450,89 @@ def test_buy_on_an_unrelated_ticker_is_unaffected(tmp_path) -> None:
     mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_buy("QQQ", lot=3)))
     mock_alpaca.submit_order.assert_called_once()
     bank._engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# SELL closes an existing Buy; it never opens a short (issue #126)
+# ---------------------------------------------------------------------------
+
+
+def test_sell_with_no_open_position_is_rejected(tmp_path) -> None:
+    """Regression for #126: this used to submit a sell and open a naked short."""
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_sell("SPY", lot=5)))
+    mock_alpaca.submit_order.assert_not_called()
+    bank._engine.dispose()
+
+
+def test_sell_with_no_open_position_writes_nothing(tmp_path) -> None:
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    _run(ExecutionAgent(bank, "1H"), _decision(_sell("SPY", lot=5)))
+    with orm.Session(bank._engine) as s:
+        assert s.query(Position).count() == 0
+    bank._engine.dispose()
+
+
+def test_sell_closes_the_existing_position_in_place(tmp_path) -> None:
+    """Regression for #126: this used to write a second Position row."""
+    bank = _bank_with_position(tmp_path, status="OPEN")
+    _run(ExecutionAgent(bank, "1H"), _decision(_sell("SPY", lot=5)))
+
+    with orm.Session(bank._engine) as s:
+        positions = s.query(Position).all()
+        assert len(positions) == 1  # closed in place, not duplicated
+        assert positions[0].status == "CLOSED_AGENT_EXIT"
+        assert positions[0].exit_reason == "AGENT_EXIT"
+        assert positions[0].exit_price == 450.0
+        assert positions[0].exit_time is not None
+    bank._engine.dispose()
+
+
+def test_sell_leaves_no_open_position_behind(tmp_path) -> None:
+    bank = _bank_with_position(tmp_path, status="OPEN")
+    _run(ExecutionAgent(bank, "1H"), _decision(_sell("SPY", lot=5)))
+    assert bank.load_open_positions() == []
+    bank._engine.dispose()
+
+
+def test_sell_closes_the_full_position_not_the_decision_lot(tmp_path) -> None:
+    """A Sell unwinds the whole position, whatever lot the agent suggested."""
+    bank = _bank_with_position(tmp_path, status="OPEN")  # lot_size 5.0
+    mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_sell("SPY", lot=2)))
+    assert mock_alpaca.submit_order.call_args.args[0].qty == 5
+    bank._engine.dispose()
+
+
+def test_sell_does_not_consume_the_budget_check(tmp_path) -> None:
+    """Closing never needs buying power, so a flat account must still be able to exit."""
+    bank = _bank_with_position(tmp_path, status="OPEN")
+    mock_alpaca = MagicMock()
+    mock_alpaca.get_account.return_value.buying_power = "0"
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}
+    with (
+        patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca),
+        patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data),
+    ):
+        ExecutionAgent(bank, "1H").execute(_decision(_sell("SPY", lot=5)))
+
+    mock_alpaca.submit_order.assert_called_once()
+    bank._engine.dispose()
+
+
+def test_sell_only_closes_the_matching_ticker(tmp_path) -> None:
+    bank = _bank_with_position(tmp_path, status="OPEN", ticker="SPY")
+    _run(ExecutionAgent(bank, "1H"), _decision(_sell("QQQ", lot=5)))
+    assert [p.ticker for p in bank.load_open_positions()] == ["SPY"]
+    bank._engine.dispose()
+
+
+def test_buy_always_records_direction_buy(tmp_path) -> None:
+    """Shorts are out of scope, so direction is BUY by construction."""
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
+    assert bank.load_open_positions()[0].direction == "BUY"
+    bank._engine.dispose()
