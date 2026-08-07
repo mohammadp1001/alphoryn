@@ -1315,3 +1315,72 @@ def test_timed_out_investigation_is_not_merged() -> None:
 
     written = sched._bank.write_session.call_args.args[0]
     assert written.status == "SKIPPED_TIMEOUT"
+
+
+# ---------------------------------------------------------------------------
+# Memory read-back — FR-008a (issue #128)
+# ---------------------------------------------------------------------------
+
+
+def _memory_entry(
+    ticker: str,
+    *,
+    strategy: str = "MOMENTUM",
+    decision: str = "BUY",
+    outcome_judgment: str | None = "CORRECT",
+) -> MagicMock:
+    entry = MagicMock()
+    entry.ticker = ticker
+    entry.strategy = strategy
+    entry.session_id = "run-1/session-0001"
+    entry.decision = decision
+    entry.outcome_judgment = outcome_judgment
+    entry.regime_context = '{"session_ordinal": 1}'
+    entry.created_at = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
+    return entry
+
+
+def test_recent_memory_serialises_every_field_the_skill_reads() -> None:
+    sched = _full_scheduler()
+    sched._bank.get_recent_memory_entries.return_value = [_memory_entry("SPY")]
+
+    assert sched._recent_memory(["SPY"]) == [
+        {
+            "ticker": "SPY",
+            "strategy": "MOMENTUM",
+            "session_id": "run-1/session-0001",
+            "decision": "BUY",
+            "outcome_judgment": "CORRECT",
+            "regime_context": '{"session_ordinal": 1}',
+            "created_at": "2024-01-15T15:00:00+00:00",
+        }
+    ]
+
+
+def test_recent_memory_covers_every_investigated_ticker() -> None:
+    sched = _full_scheduler()
+    sched._bank.get_recent_memory_entries.side_effect = lambda t: [_memory_entry(t)]
+
+    assert [e["ticker"] for e in sched._recent_memory(["SPY", "QQQ"])] == ["SPY", "QQQ"]
+
+
+def test_investigation_is_given_the_memory_entries() -> None:
+    """FR-008a: on main the bank was written and never read back."""
+    sched = _full_scheduler()
+    sched._bank.get_recent_memory_entries.side_effect = lambda t: [_memory_entry(t)]
+
+    _run_with_no_wait(sched)
+
+    memory_arg = sched._main_agent.decide.call_args.args[3]
+    assert [e["ticker"] for e in memory_arg] == ["SPY", "QQQ"]
+
+
+def test_blocked_tickers_contribute_no_memory_to_the_investigation() -> None:
+    """Only the tickers actually investigated are looked up."""
+    sched = _blocking_scheduler({"SPY"})
+    sched._bank.get_recent_memory_entries.side_effect = lambda t: [_memory_entry(t)]
+
+    sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    memory_arg = sched._main_agent.decide.call_args.args[3]
+    assert [e["ticker"] for e in memory_arg] == ["QQQ"]

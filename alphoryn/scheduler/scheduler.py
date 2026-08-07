@@ -238,6 +238,27 @@ class Scheduler:
             elapsed_min = int((time.time() - t_start) / 60)
             typer.echo(f"[{session_id}] investigating... {elapsed_min} min elapsed")
 
+    def _recent_memory(self, tickers: list[str]) -> list[dict[str, Any]]:
+        """Return each ticker's recent memory entries, newest first (FR-008a).
+
+        The investigation cannot account for prior evaluation outcomes unless
+        they are put in front of it: the read-memory skill filters this list,
+        and without it the whole learning loop was write-only.
+        """
+        return [
+            {
+                "ticker": entry.ticker,
+                "strategy": entry.strategy,
+                "session_id": entry.session_id,
+                "decision": entry.decision,
+                "outcome_judgment": entry.outcome_judgment,
+                "regime_context": entry.regime_context,
+                "created_at": entry.created_at.isoformat(),
+            }
+            for ticker in tickers
+            for entry in self._bank.get_recent_memory_entries(ticker)
+        ]
+
     def _run_investigation(
         self,
         session_id: str,
@@ -266,6 +287,7 @@ class Scheduler:
                     session_id,
                     tickers,
                     candle_close_at,
+                    self._recent_memory(tickers),
                 )
                 try:
                     return future.result(timeout=self._investigation_budget), None
