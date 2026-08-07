@@ -166,6 +166,25 @@ def test_start_scheduler_creates_and_runs_scheduler() -> None:
     mock_scheduler.run.assert_called_once()
 
 
+def test_start_scheduler_wires_position_monitor() -> None:
+    """Regression for #120: the monitor must be constructed and handed over."""
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"])
+    bank = MagicMock()
+
+    with (
+        patch("alphoryn.cli.main.Scheduler") as mock_scheduler_cls,
+        patch("alphoryn.cli.main.PositionMonitor") as mock_monitor_cls,
+    ):
+        _start_scheduler(cfg, bank)
+
+    monitor_kwargs = mock_monitor_cls.call_args.kwargs
+    assert monitor_kwargs["bank"] is bank
+    scheduler_kwargs = mock_scheduler_cls.call_args.kwargs
+    assert scheduler_kwargs["monitor"] is mock_monitor_cls.return_value
+    # Scheduler and monitor must share the same stop signal.
+    assert scheduler_kwargs["monitor_stop_event"] is monitor_kwargs["stop_event"]
+
+
 # ---------------------------------------------------------------------------
 # _format_decision
 # ---------------------------------------------------------------------------

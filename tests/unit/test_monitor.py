@@ -450,3 +450,26 @@ def test_run_calls_check_positions_before_stopping() -> None:
 def test_monitor_is_daemon_thread() -> None:
     monitor, _, _, _ = _make_monitor()
     assert monitor.daemon is True
+
+
+# ---------------------------------------------------------------------------
+# set_session_ordinal — the scheduler keeps the window-expiry clock moving
+# ---------------------------------------------------------------------------
+
+
+def test_set_session_ordinal_updates_window_expiry_check() -> None:
+    monitor, bank, market_data, _ = _make_monitor(current_session_ordinal=1)
+    pos = _make_position(evaluation_window_session=7)
+    bank.load_open_positions.return_value = [pos]
+    market_data.get_latest_price.return_value = 450.0  # no stop, no target
+
+    with patch("alphoryn.monitor.monitor.TradingClient"):
+        monitor._check_positions()
+    bank.update_position_close.assert_not_called()
+
+    monitor.set_session_ordinal(7)
+    with patch("alphoryn.monitor.monitor.TradingClient"):
+        monitor._check_positions()
+
+    bank.update_position_close.assert_called_once()
+    assert bank.update_position_close.call_args.kwargs["status"] == "CLOSED_WINDOW_EXPIRY"

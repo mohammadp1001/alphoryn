@@ -116,11 +116,19 @@ There is no inter-thread signaling — the monitor writes, the scheduler reads.
    the position remains `OPEN` and is retried on the next poll cycle
 
 **Monitor lifecycle**:
-- Started as `threading.Thread` by `cli/main.py` at run startup, before the first session
-- Stopped via `threading.Event` (stop signal) when the run ends normally or on hard abort
-- If the run ends with positions still `OPEN`, the monitor thread is NOT stopped — it
-  continues running until all open positions are closed (stop-loss, profit target, or
-  window expiry). The CLI process must remain alive while positions are open.
+- Constructed by `cli/main.py` together with its `threading.Event` stop signal, and handed
+  to the `Scheduler`, which owns the thread lifecycle
+- Started as `threading.Thread` by `scheduler/scheduler.py` at run startup, after candle
+  alignment and before the first session
+- The scheduler publishes the current session ordinal to the monitor
+  (`PositionMonitor.set_session_ordinal`) on every session boundary; the monitor's
+  window-expiry check reads that value, so without this the ordinal stays frozen at its
+  constructor value and window expiry can never fire
+- Stopped via the `threading.Event` stop signal when the run ends normally or on hard abort
+- If the run ends with positions still `OPEN`, the monitor thread is NOT stopped - the
+  scheduler keeps advancing the session ordinal on candle boundaries until all open
+  positions are closed (stop-loss, profit target, or window expiry). The CLI process must
+  remain alive while positions are open.
 - The stop signal is set only when no positions remain in `OPEN` status
 
 ---

@@ -24,6 +24,7 @@ from alphoryn.config.models import AlphorynConfig
 from alphoryn.execution.agent import ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import MemoryEntry, Session
+from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.telemetry.logger import TelemetryLogger
 
@@ -57,6 +58,8 @@ class Scheduler:
         feedback_agent: "FeedbackAgent | None" = None,
         report_generator: "ReportGenerator | None" = None,
         logger: "TelemetryLogger | None" = None,
+        monitor: "PositionMonitor | None" = None,
+        monitor_stop_event: "threading.Event | None" = None,
         _investigation_budget_secs: int | None = None,
         _execute_budget_secs: int | None = None,
         _heartbeat_interval_secs: int | None = None,
@@ -68,6 +71,8 @@ class Scheduler:
         self._feedback_agent = feedback_agent
         self._report_generator = report_generator
         self._logger = logger
+        self._monitor = monitor
+        self._monitor_stop_event = monitor_stop_event
         candle_secs = _TIMEFRAME_SECONDS[cfg.candle_timeframe]
         self._investigation_budget = (
             _investigation_budget_secs
@@ -419,6 +424,53 @@ class Scheduler:
         typer.echo(f"[{session_id}] SESSION END  status={session_status}")
 
     # ------------------------------------------------------------------
+    # Position monitor lifecycle
+    # ------------------------------------------------------------------
+
+    def _start_monitor(self, session_ordinal: int) -> None:
+        """Start the position monitor thread before the first session."""
+        if self._monitor is None:
+            return
+        self._monitor.set_session_ordinal(session_ordinal)
+        self._monitor.start()
+        typer.echo("Position monitor started.")
+        if self._logger is not None:
+            self._logger.emit("MONITOR_STARTED", "scheduler", {})
+
+    def _drain_open_positions(self, session_ordinal: int, *, _sleep: object = None) -> int:
+        """Keep the monitor running past the last session until nothing is OPEN.
+
+        Per contracts/agents.md the stop signal may only be set once no
+        positions remain OPEN, so after the session loop ends we keep advancing
+        the session ordinal on candle boundaries - that is what lets pending
+        window-expiry exits fire — until the bank reports no open positions.
+        Returns the ordinal reached.
+        """
+        if self._monitor is None or not self._bank.load_open_positions():
+            return session_ordinal
+        typer.echo("Run complete - holding process open until all positions close ...")
+        while self._bank.load_open_positions():
+            # The session loop exits right after a candle wait, so the ordinal
+            # it left us on has not been published yet - publish first, then
+            # give the monitor a full candle at it before advancing.
+            self._monitor.set_session_ordinal(session_ordinal)
+            next_close = self.compute_next_candle_close(datetime.now(UTC))
+            self.wait_for_candle_close(next_close, _sleep=_sleep)
+            session_ordinal += 1
+        return session_ordinal
+
+    def _stop_monitor(self) -> None:
+        """Signal the monitor to stop and wait for the thread to exit."""
+        if self._monitor is None:
+            return
+        if self._monitor_stop_event is not None:
+            self._monitor_stop_event.set()
+        self._monitor.join(timeout=5.0)
+        typer.echo("Position monitor stopped.")
+        if self._logger is not None:
+            self._logger.emit("MONITOR_STOPPED", "scheduler", {})
+
+    # ------------------------------------------------------------------
     # Entry point
     # ------------------------------------------------------------------
 
@@ -443,9 +495,12 @@ class Scheduler:
 
         sessions_completed = 0
         session_ordinal = 1
+        self._start_monitor(session_ordinal)
 
         while sessions_completed < self._cfg.session_count:
             candle_close_at = datetime.now(UTC)
+            if self._monitor is not None:
+                self._monitor.set_session_ordinal(session_ordinal)
 
             if not self.is_market_open():
                 typer.echo(
@@ -472,3 +527,5 @@ class Scheduler:
             self.wait_for_candle_close(next_close, _sleep=_sleep)
 
         self._bank.end_run(run_id)
+        self._drain_open_positions(session_ordinal, _sleep=_sleep)
+        self._stop_monitor()

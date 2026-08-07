@@ -45,6 +45,16 @@ class PositionMonitor(threading.Thread):
         self._stop_event = stop_event
         self._poll_interval = poll_interval
 
+    def set_session_ordinal(self, ordinal: int) -> None:
+        """Publish the scheduler's current session ordinal.
+
+        The window-expiry check compares this against
+        ``Position.evaluation_window_session``, so the scheduler must call this
+        on every session boundary - otherwise the ordinal stays frozen at the
+        value passed to ``__init__`` and window expiry can never fire.
+        """
+        self._current_session_ordinal = ordinal
+
     def run(self) -> None:
         """Poll positions until the stop event is set."""
         while not self._stop_event.is_set():
