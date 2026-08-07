@@ -293,15 +293,18 @@ def history(
         if col_tickers:
             entries = [td.get(t, {}) for t in col_tickers]
             cols = "  ".join(
-                f"{_format_decision(e.get('strategy'), e.get('decision'), None):<22}"
-                for e in entries
+                f"{_format_decision(*_decision_fields(e)):<22}" for e in entries
             )
         else:
             cols = "  ".join(
-                f"{_format_decision(v.get('strategy'), v.get('decision'), None):<22}"
-                for v in td.values()
+                f"{_format_decision(*_decision_fields(v)):<22}" for v in td.values()
             )
         typer.echo(f"{sess.id:<25} {close_str:<22} {cols}")
+
+
+def _decision_fields(entry: dict) -> tuple[str | None, str | None, str | None]:
+    """Unpack one ticker_decisions entry into _format_decision's arguments."""
+    return entry.get("strategy"), entry.get("decision"), entry.get("execution_result")
 
 
 def _format_decision(strategy: str | None, decision: str | None, result: str | None) -> str:

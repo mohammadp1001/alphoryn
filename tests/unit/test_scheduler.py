@@ -355,6 +355,9 @@ def _full_scheduler(**extra) -> Scheduler:
     main_agent = MagicMock()
     main_agent.decide.return_value = _FIXTURE_DECISION
     execution_agent = MagicMock()
+    # Explicit, not a bare MagicMock: execute() returns the per-ticker
+    # execution_result the session record carries (issue #131).
+    execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "EXECUTED"}
     logger = MagicMock()
     return Scheduler(
         cfg,
@@ -783,12 +786,16 @@ def _full_scheduler_with_feedback(**extra) -> Scheduler:
     main_agent = MagicMock()
     main_agent.decide.return_value = _FIXTURE_DECISION
     feedback_agent = MagicMock()
+    execution_agent = MagicMock()
+    # Explicit, not a bare MagicMock: execute() returns the per-ticker
+    # execution_result the session record carries (issue #131).
+    execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "EXECUTED"}
     logger = MagicMock()
     return Scheduler(
         cfg,
         bank,
         main_agent=main_agent,
-        execution_agent=MagicMock(),
+        execution_agent=execution_agent,
         feedback_agent=feedback_agent,
         logger=logger,
         **extra,
@@ -1089,8 +1096,8 @@ def test_run_holds_process_open_while_positions_remain() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _blocking_scheduler(blocked: set[str]) -> Scheduler:
-    sched = _full_scheduler_with_feedback()
+def _blocking_scheduler(blocked: set[str], **extra) -> Scheduler:
+    sched = _full_scheduler_with_feedback(**extra)
     sched._bank.get_feedback_blocked_tickers.return_value = blocked
     return sched
 
@@ -1152,8 +1159,89 @@ def test_blocked_ticker_outcome_is_recorded_as_hold() -> None:
 
     written = sched._bank.write_session.call_args.args[0]
     recorded = json.loads(written.ticker_decisions)
-    assert recorded["SPY"] == {"strategy": None, "decision": "HOLD"}
+    assert recorded["SPY"] == {
+        "strategy": None,
+        "decision": "HOLD",
+        "execution_result": "EXECUTED",
+    }
     assert recorded["QQQ"]["decision"] == "BUY"
+
+
+def test_session_record_carries_the_execution_result_per_ticker() -> None:
+    """Issue #131 / data-model.md: ticker_decisions omitted execution_result entirely."""
+    sched = _blocking_scheduler(set())
+    sched._execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "FAILED"}
+    with patch.object(
+        sched, "_run_investigation", return_value=(_decision_for("SPY", "QQQ"), None)
+    ):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    recorded = json.loads(sched._bank.write_session.call_args.args[0].ticker_decisions)
+    assert recorded["SPY"]["execution_result"] == "EXECUTED"
+    assert recorded["QQQ"]["execution_result"] == "FAILED"
+
+
+def test_blocked_ticker_is_recorded_as_a_session_warning() -> None:
+    """Issue #131 / FR-011: Session.warnings was always NULL."""
+    sched = _blocking_scheduler({"SPY"})
+    with patch.object(sched, "_run_investigation", return_value=(_decision_for("QQQ"), None)):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    warnings = json.loads(sched._bank.write_session.call_args.args[0].warnings)
+    assert any("SPY" in w and "feedback-blocked" in w for w in warnings)
+
+
+def test_a_clean_session_records_no_warnings() -> None:
+    sched = _blocking_scheduler(set())
+    with patch.object(
+        sched, "_run_investigation", return_value=(_decision_for("SPY", "QQQ"), None)
+    ):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    assert sched._bank.write_session.call_args.args[0].warnings is None
+
+
+def test_a_skipped_session_records_why_as_a_warning() -> None:
+    sched = _blocking_scheduler(set())
+    with patch.object(
+        sched, "_run_investigation", return_value=(None, "SKIPPED_DATA_UNAVAILABLE")
+    ):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    warnings = json.loads(sched._bank.write_session.call_args.args[0].warnings)
+    assert warnings == ["Session not completed: SKIPPED_DATA_UNAVAILABLE."]
+
+
+def test_a_ticker_the_investigation_dropped_is_recorded_as_a_warning() -> None:
+    sched = _blocking_scheduler(set())
+    with patch.object(sched, "_run_investigation", return_value=(_decision_for("SPY"), None)):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    warnings = json.loads(sched._bank.write_session.call_args.args[0].warnings)
+    assert warnings == ["QQQ: investigated but no decision returned; recorded Hold."]
+
+
+def test_a_ticker_the_agent_invented_is_recorded_as_a_warning() -> None:
+    sched = _blocking_scheduler(set())
+    with patch.object(
+        sched, "_run_investigation", return_value=(_decision_for("SPY", "QQQ", "IWM"), None)
+    ):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    warnings = json.loads(sched._bank.write_session.call_args.args[0].warnings)
+    assert warnings == ["IWM: not a configured ticker, but the agent returned it."]
+
+
+def test_an_execute_budget_overrun_is_recorded_as_a_warning() -> None:
+    sched = _blocking_scheduler(set(), _execute_budget_secs=0)
+    sched._execution_agent.execute.side_effect = lambda *a: time.sleep(0.5) or {}
+    with patch.object(
+        sched, "_run_investigation", return_value=(_decision_for("SPY", "QQQ"), None)
+    ):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    warnings = json.loads(sched._bank.write_session.call_args.args[0].warnings)
+    assert warnings == ["Execution budget of 0s exceeded."]
 
 
 def test_blocked_ticker_is_not_sent_to_the_execution_agent_as_a_buy() -> None:
@@ -1201,13 +1289,13 @@ def test_blocked_tickers_without_logger_does_not_raise() -> None:
 
 def test_merge_restores_configured_ticker_order() -> None:
     sched = _blocking_scheduler({"SPY"})
-    merged = sched._merge_blocked_holds(_decision_for("QQQ"), {"SPY"})
+    merged, _ = sched._merge_blocked_holds(_decision_for("QQQ"), {"SPY"})
     assert [d.ticker for d in merged.decisions] == ["SPY", "QQQ"]
 
 
 def test_merge_holds_a_ticker_the_agent_silently_dropped() -> None:
     sched = _blocking_scheduler(set())
-    merged = sched._merge_blocked_holds(_decision_for("SPY"), set())
+    merged, _ = sched._merge_blocked_holds(_decision_for("SPY"), set())
     qqq = next(d for d in merged.decisions if d.ticker == "QQQ")
     assert qqq.action == "HOLD"
     assert "No decision returned" in qqq.reasoning
@@ -1215,7 +1303,7 @@ def test_merge_holds_a_ticker_the_agent_silently_dropped() -> None:
 
 def test_merge_keeps_a_ticker_the_agent_invented() -> None:
     sched = _blocking_scheduler(set())
-    merged = sched._merge_blocked_holds(_decision_for("SPY", "QQQ", "IWM"), set())
+    merged, _ = sched._merge_blocked_holds(_decision_for("SPY", "QQQ", "IWM"), set())
     assert [d.ticker for d in merged.decisions] == ["SPY", "QQQ", "IWM"]
 
 

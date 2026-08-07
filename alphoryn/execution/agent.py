@@ -107,10 +107,16 @@ class ExecutionAgent:
         )
         return entry_time + timedelta(seconds=sessions * self._candle_seconds)
 
-    def execute(self, decision: SessionDecision) -> None:
-        """Execute a SessionDecision for all tickers sequentially."""
-        for asset_decision in decision.decisions:
-            self._execute_ticker(asset_decision, decision.session_id)
+    def execute(self, decision: SessionDecision) -> dict[str, str]:
+        """Execute a SessionDecision for all tickers sequentially.
+
+        Returns the per-ticker execution result keyed by ticker, one of
+        ``EXECUTED``, ``HOLD`` or ``FAILED`` — the ``execution_result`` the
+        session record carries per data-model.md.
+        """
+        return {
+            d.ticker: self._execute_ticker(d, decision.session_id) for d in decision.decisions
+        }
 
     def _trading_client(self) -> TradingClient:
         return TradingClient(
@@ -136,15 +142,14 @@ class ExecutionAgent:
         )
         return float(quotes[ticker].ask_price)
 
-    def _execute_ticker(self, asset_decision: AssetDecision, session_id: str) -> None:
+    def _execute_ticker(self, asset_decision: AssetDecision, session_id: str) -> str:
         if asset_decision.action == "HOLD":
-            return
+            return "HOLD"
         if asset_decision.action == "SELL":
-            self._close_position(asset_decision, session_id)
-            return
-        self._open_position(asset_decision, session_id)
+            return self._close_position(asset_decision, session_id)
+        return self._open_position(asset_decision, session_id)
 
-    def _close_position(self, asset_decision: AssetDecision, session_id: str) -> None:
+    def _close_position(self, asset_decision: AssetDecision, session_id: str) -> str:
         """Close the open position on this ticker (data-model.md: Sell closes a Buy).
 
         A Sell is only ever an instruction to unwind. With no open position there
@@ -162,7 +167,7 @@ class ExecutionAgent:
                 ticker=asset_decision.ticker,
                 session_id=session_id,
             )
-            return  # nothing to close; never open a short
+            return "FAILED"  # nothing to close; never open a short
 
         exit_price = self._latest_ask(asset_decision.ticker)
         qty = int(open_position.lot_size)  # close the whole position
@@ -187,8 +192,9 @@ class ExecutionAgent:
             exit_reason="AGENT_EXIT",
             status="CLOSED_AGENT_EXIT",
         )
+        return "EXECUTED"
 
-    def _open_position(self, asset_decision: AssetDecision, session_id: str) -> None:
+    def _open_position(self, asset_decision: AssetDecision, session_id: str) -> str:
         """Open a new long position (FR-014 blocked tickers are refused)."""
         # Second gate only — the scheduler already keeps blocked tickers out of
         # the investigation (FR-005) — so this protects direct callers.
@@ -199,7 +205,7 @@ class ExecutionAgent:
                 ticker=asset_decision.ticker,
                 session_id=session_id,
             )
-            return  # position-blocked → treat as HOLD
+            return "FAILED"  # position-blocked → treat as HOLD
 
         client = self._trading_client()
 
@@ -234,7 +240,7 @@ class ExecutionAgent:
                 ticker=asset_decision.ticker,
                 session_id=session_id,
             )
-            return
+            return "FAILED"
 
         client.submit_order(
             MarketOrderRequest(
@@ -273,3 +279,4 @@ class ExecutionAgent:
             status="OPEN",
         )
         self._bank.write_position(pos)
+        return "EXECUTED"

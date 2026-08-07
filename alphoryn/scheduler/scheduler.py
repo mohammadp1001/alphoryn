@@ -290,10 +290,12 @@ class Scheduler:
             stop_heartbeat.set()
             heartbeat_thread.join(timeout=1.0)
 
-    def _run_execute(self, decision: "SessionDecision") -> None:
+    def _run_execute(self, decision: "SessionDecision") -> tuple[dict[str, str], str | None]:
         """Run execution_agent.execute() with execute budget.
 
-        Emits BUDGET_TIMEOUT telemetry if the 7-min budget is exceeded.
+        Returns ``(results, warning)`` where *results* maps ticker to its
+        execution result. Emits BUDGET_TIMEOUT telemetry if the budget is
+        exceeded, in which case *results* is empty and *warning* explains why.
         """
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(
@@ -301,7 +303,7 @@ class Scheduler:
                 decision,
             )
             try:
-                future.result(timeout=self._execute_budget)
+                return future.result(timeout=self._execute_budget), None
             except concurrent.futures.TimeoutError:
                 if self._logger is not None:
                     self._logger.emit(
@@ -309,6 +311,7 @@ class Scheduler:
                         "scheduler",
                         {"phase": "execute", "budget_secs": self._execute_budget},
                     )
+                return {}, f"Execution budget of {self._execute_budget}s exceeded."
 
     # ------------------------------------------------------------------
     # Full session loop (T030)
@@ -371,15 +374,20 @@ class Scheduler:
         self,
         decision: "SessionDecision",
         blocked: set[str],
-    ) -> "SessionDecision":
+    ) -> "tuple[SessionDecision, list[str]]":
         """Re-expand a decision over every configured ticker, in config order.
 
         The investigation only ever sees unblocked tickers, so blocked ones come
         back as Hold here — FR-005 requires their session outcome to be recorded
         even though no Investigation Agent call was made for them.
+
+        Also returns the warnings this expansion uncovered: a ticker that was
+        investigated but came back with no decision, and any ticker the agent
+        invented. Both are recorded on the session per FR-011.
         """
         by_ticker = {d.ticker: d for d in decision.decisions}
         merged: list[AssetDecision] = []
+        warnings: list[str] = []
         for ticker in self._cfg.tickers:
             investigated = by_ticker.pop(ticker, None)
             if investigated is not None:
@@ -394,8 +402,11 @@ class Scheduler:
                 merged.append(
                     self._hold_decision(ticker, "No decision returned by the investigation.")
                 )
-        merged.extend(by_ticker.values())  # tickers the agent invented; keep, do not drop
-        return SessionDecision(session_id=decision.session_id, decisions=merged)
+                warnings.append(f"{ticker}: investigated but no decision returned; recorded Hold.")
+        for extra in by_ticker.values():  # tickers the agent invented; keep, do not drop
+            merged.append(extra)
+            warnings.append(f"{extra.ticker}: not a configured ticker, but the agent returned it.")
+        return SessionDecision(session_id=decision.session_id, decisions=merged), warnings
 
     def _process_session(
         self,
@@ -413,8 +424,13 @@ class Scheduler:
         self._run_feedback(session_id)
 
         t0 = datetime.now(UTC)
+        warnings: list[str] = []
         blocked = self._blocked_tickers(session_id)
         active = [t for t in self._cfg.tickers if t not in blocked]
+        warnings.extend(
+            f"{ticker}: feedback-blocked; prior position awaiting evaluation (FR-005)."
+            for ticker in sorted(blocked)
+        )
 
         if active:
             typer.echo(f"[{session_id}] Investigating market snapshot …")
@@ -425,19 +441,24 @@ class Scheduler:
             decision, skip_status = SessionDecision(session_id=session_id, decisions=[]), None
 
         if decision is not None:
-            decision = self._merge_blocked_holds(decision, blocked)
+            decision, merge_warnings = self._merge_blocked_holds(decision, blocked)
+            warnings.extend(merge_warnings)
 
         if decision is None:
             typer.echo(f"[{session_id}] SKIPPED  {skip_status}")
+            warnings.append(f"Session not completed: {skip_status}.")
         else:
             decision_str = "  |  ".join(
                 f"{d.ticker}: {d.action} ({d.strategy})" for d in decision.decisions
             )
             typer.echo(f"[{session_id}] DECISION  {decision_str}")
 
+        execution_results: dict[str, str] = {}
         if decision is not None and self._execution_agent is not None:
             typer.echo(f"[{session_id}] Executing …")
-            self._run_execute(decision)
+            execution_results, execute_warning = self._run_execute(decision)
+            if execute_warning is not None:
+                warnings.append(execute_warning)
             typer.echo(f"[{session_id}] Execution done")
 
         report_path: str | None = None
@@ -454,6 +475,7 @@ class Scheduler:
                         "strategy": d.strategy,
                         "reasoning": d.reasoning,
                         "memory_summary": None,
+                        "execution_result": execution_results.get(d.ticker),
                     }
                     for d in decision.decisions
                 ],
@@ -469,7 +491,11 @@ class Scheduler:
         if decision is not None:
             ticker_decisions_json = json.dumps(
                 {
-                    d.ticker: {"strategy": d.strategy, "decision": d.action}
+                    d.ticker: {
+                        "strategy": d.strategy,
+                        "decision": d.action,
+                        "execution_result": execution_results.get(d.ticker),
+                    }
                     for d in decision.decisions
                 }
             )
@@ -483,6 +509,7 @@ class Scheduler:
             status=session_status,
             html_report_path=report_path,
             ticker_decisions=ticker_decisions_json,
+            warnings=json.dumps(warnings) if warnings else None,
         )
         self._bank.write_session(session_record)
 
