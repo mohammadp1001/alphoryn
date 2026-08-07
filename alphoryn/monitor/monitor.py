@@ -51,8 +51,27 @@ class PositionMonitor(threading.Thread):
 
     def _check_positions(self) -> None:
         """Load all OPEN positions and check each for exit conditions."""
-        for pos in self._bank.load_open_positions():
-            self._check_position(pos)
+        try:
+            positions = self._bank.load_open_positions()
+        except Exception as exc:
+            self._logger.emit(
+                "MONITOR_ERROR",
+                "monitor",
+                {"error": f"Failed to load open positions: {exc}"},
+            )
+            return
+
+        for pos in positions:
+            try:
+                self._check_position(pos)
+            except Exception as exc:
+                self._logger.emit(
+                    "MONITOR_ERROR",
+                    "monitor",
+                    {"ticker": pos.ticker, "error": str(exc)},
+                    session_id=pos.session_id,
+                    etf=pos.ticker,
+                )
 
     def _check_position(self, pos: Position) -> None:
         current_price = self._market_data.get_latest_price(pos.ticker)
@@ -124,7 +143,14 @@ class PositionMonitor(threading.Thread):
                 paper=True,
             )
             client.close_position(pos.ticker)
-        except Exception:
+        except Exception as exc:
+            self._logger.emit(
+                "MONITOR_ERROR",
+                "monitor",
+                {"ticker": pos.ticker, "error": f"Alpaca close_position failed: {exc}"},
+                session_id=pos.session_id,
+                etf=pos.ticker,
+            )
             return
 
         self._bank.update_position_close(

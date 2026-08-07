@@ -1,7 +1,17 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    event,
+)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -117,11 +127,24 @@ class MemoryEntry(Base):
 def get_engine(db_path: str) -> Engine:
     """Create a SQLAlchemy engine for the given SQLite file path.
 
-    Creates parent directories if they do not exist.
+    Creates parent directories if they do not exist. Configures busy timeout
+    and WAL journal mode for concurrent thread resiliency.
     """
     path = Path(db_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    return create_engine(f"sqlite:///{path}", echo=False)
+    engine = create_engine(
+        f"sqlite:///{path}",
+        echo=False,
+        connect_args={"timeout": 30.0},
+    )
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.close()
+
+    return engine
 
 
 def create_tables(engine: Engine) -> None:

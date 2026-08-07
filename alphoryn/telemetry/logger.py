@@ -27,6 +27,7 @@ EVENT_TYPES = frozenset(
         "TICKER_BLOCKED",
         "MONITOR_STARTED",
         "MONITOR_STOPPED",
+        "MONITOR_ERROR",
         "EVALUATION_FAILED",
     }
 )

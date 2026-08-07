@@ -96,6 +96,16 @@ def test_get_engine_expands_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     engine.dispose()
 
 
+def test_get_engine_configures_sqlite_pragmas(tmp_path: Path) -> None:
+    db_file = tmp_path / "pragma_test.db"
+    engine = get_engine(str(db_file))
+    with engine.connect() as conn:
+        journal_mode = conn.exec_driver_sql("PRAGMA journal_mode").scalar()
+        assert str(journal_mode).lower() == "wal"
+    engine.dispose()
+
+
+
 # ---------------------------------------------------------------------------
 # create_tables / schema integrity
 # ---------------------------------------------------------------------------
