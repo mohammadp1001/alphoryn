@@ -270,6 +270,10 @@ class ExecutionAgent:
             entry_time=entry_time,
             lot_size=float(lot),
             stop_loss_price=stop_loss_price,
+            # strategies/momentum.md: initialised to entry_price at entry. Left
+            # NULL, a position that gaps down before ever printing a new high
+            # seeds its trail floor from the lower price (issue #130).
+            trailing_stop_high_watermark=ask_price,
             exit_target=(
                 json.dumps(asset_decision.exit_target) if asset_decision.exit_target else "{}"
             ),
