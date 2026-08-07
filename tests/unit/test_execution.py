@@ -8,12 +8,17 @@ Tests verify:
 - Zero LLM model calls — constitution Principle I
 """
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import sqlalchemy.orm as orm
 
-from alphoryn.execution.agent import AssetDecision, ExecutionAgent, SessionDecision
+from alphoryn.execution.agent import (
+    EVALUATION_WINDOW_SESSIONS,
+    AssetDecision,
+    ExecutionAgent,
+    SessionDecision,
+)
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import Position
 from alphoryn.memory.schema import Session as Sess
@@ -188,7 +193,7 @@ def test_existing_open_position_blocks_new_buy(tmp_path) -> None:
                 lot_size=5.0,
                 stop_loss_price=441.0,
                 exit_target='{"type":"trailing_stop","trail_pct":0.015}',
-                evaluation_window_session=5,
+                evaluation_window_close_at=datetime(2024, 1, 15, 19, 0),
                 status="OPEN",
             )
         )
@@ -240,7 +245,7 @@ def test_open_position_on_ticker1_does_not_block_ticker2(tmp_path) -> None:
                 lot_size=5.0,
                 stop_loss_price=441.0,
                 exit_target='{"type":"trailing_stop","trail_pct":0.015}',
-                evaluation_window_session=5,
+                evaluation_window_close_at=datetime(2024, 1, 15, 19, 0),
                 status="OPEN",
             )
         )
@@ -277,3 +282,73 @@ def test_execution_agent_has_no_llm_model() -> None:
     agent = ExecutionAgent(bank=bank)
     # Google ADK LlmAgent stores the model on self.model. ExecutionAgent must not.
     assert not hasattr(agent, "model") or agent.model is None
+
+
+# ---------------------------------------------------------------------------
+# Evaluation window deadline (issue #122)
+# ---------------------------------------------------------------------------
+
+
+def test_evaluation_window_uses_mean_reversion_horizon() -> None:
+    agent = ExecutionAgent(bank=MagicMock(), candle_timeframe="1H")
+    entry = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
+    assert agent._evaluation_window_close_at("MEAN_REVERSION", entry) == entry + timedelta(hours=4)
+
+
+def test_evaluation_window_uses_momentum_horizon() -> None:
+    agent = ExecutionAgent(bank=MagicMock(), candle_timeframe="1H")
+    entry = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
+    assert agent._evaluation_window_close_at("MOMENTUM", entry) == entry + timedelta(hours=2)
+
+
+def test_evaluation_window_scales_with_candle_timeframe() -> None:
+    agent = ExecutionAgent(bank=MagicMock(), candle_timeframe="30min")
+    entry = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
+    assert agent._evaluation_window_close_at("MOMENTUM", entry) == entry + timedelta(hours=1)
+
+
+def test_evaluation_window_falls_back_when_strategy_is_none() -> None:
+    agent = ExecutionAgent(bank=MagicMock(), candle_timeframe="1H")
+    entry = datetime(2024, 1, 15, 15, 0, tzinfo=UTC)
+    assert agent._evaluation_window_close_at(None, entry) == entry + timedelta(hours=4)
+
+
+def test_evaluation_window_horizons_match_strategy_docs() -> None:
+    assert EVALUATION_WINDOW_SESSIONS == {"MEAN_REVERSION": 4, "MOMENTUM": 2}
+
+
+def test_buy_writes_derived_window_deadline_not_a_fixed_ordinal(tmp_path) -> None:
+    """Regression for #122: the deadline is derived from entry time, not hardcoded."""
+    bank = MemoryBank(str(tmp_path / "m.db"))
+    run_id = bank.start_run('{"tickers":["SPY"]}', 6)
+    sess_id = f"run-{run_id}/session-0001"
+    with orm.Session(bank._engine) as s:
+        s.add(
+            Sess(
+                id=sess_id,
+                run_id=run_id,
+                candle_close_at=datetime(2024, 1, 15, 15, 0),
+                created_at=datetime(2024, 1, 15, 15, 0),
+                status="COMPLETED",
+            )
+        )
+        s.commit()
+
+    agent = ExecutionAgent(bank=bank, candle_timeframe="1H")
+    mock_alpaca = MagicMock()
+    mock_alpaca.get_account.return_value.buying_power = "100000"
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}
+
+    with (
+        patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca),
+        patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data),
+    ):
+        agent.execute(
+            SessionDecision(session_id=sess_id, decisions=[_buy("SPY", "MOMENTUM", 1)])
+        )
+
+    pos = bank.load_open_positions()[0]
+    delta = pos.evaluation_window_close_at - pos.entry_time
+    assert delta == timedelta(hours=2)  # MOMENTUM horizon at a 1H candle
+    bank._engine.dispose()

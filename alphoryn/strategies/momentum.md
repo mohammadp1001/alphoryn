@@ -122,7 +122,7 @@ the trailing stop is the operative floor and `hard_stop_price` is no longer chec
 |---|---|---|
 | Trailing stop (gain) | Trailing stop triggers above entry price | `PROFIT_TARGET` |
 | Hard stop / trailing stop (loss) | Price ≤ hard_stop_price OR trailing stop triggers at/below entry | `STOP_LOSS` |
-| Window expiry | Session ordinal reaches `evaluation_window_session` | `WINDOW_EXPIRY` |
+| Window expiry | Wall clock reaches `evaluation_window_close_at` | `WINDOW_EXPIRY` |
 
 ---
 
@@ -130,7 +130,7 @@ the trailing stop is the operative floor and `hard_stop_price` is no longer chec
 
 **2 sessions after the position closes.**
 
-`evaluation_window_session = entry_session_ordinal + 2`
+`evaluation_window_close_at = entry_time + 2 x candle_timeframe`
 
 Momentum trades resolve quickly — price either continues in the trend direction or
 reverses. Two sessions is sufficient to determine whether the thesis held.

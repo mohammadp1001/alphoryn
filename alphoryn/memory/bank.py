@@ -11,6 +11,7 @@ from .schema import (
     Session,
     create_tables,
     get_engine,
+    to_db_utc,
 )
 
 _logger = logging.getLogger(__name__)
@@ -184,8 +185,14 @@ class MemoryBank:
     # Queries for scheduler / feedback trigger
     # ------------------------------------------------------------------
 
-    def get_positions_due_for_feedback(self, current_session_ordinal: int) -> list[Position]:
-        """Return closed positions whose evaluation window has arrived."""
+    def get_positions_due_for_feedback(self, now: datetime) -> list[Position]:
+        """Return closed positions whose evaluation window has closed by *now*.
+
+        Keyed on the window deadline having passed rather than an exact session
+        match (issue #122): a position whose window elapsed during a
+        market-closed session — which the scheduler skips without running
+        feedback — must still be picked up at the next session that runs.
+        """
         closed_statuses = (
             "CLOSED_STOP_LOSS",
             "CLOSED_PROFIT_TARGET",
@@ -196,8 +203,9 @@ class MemoryBank:
                 s.query(Position)
                 .filter(
                     Position.status.in_(closed_statuses),
-                    Position.evaluation_window_session == current_session_ordinal,
+                    Position.evaluation_window_close_at <= to_db_utc(now),
                 )
+                .order_by(Position.evaluation_window_close_at.asc())
                 .all()
             )
             return [p for p in candidates if p.feedback_evaluation is None]

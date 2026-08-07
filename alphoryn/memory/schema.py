@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
@@ -60,7 +61,9 @@ class Position(Base):
     stop_loss_price = Column(Float, nullable=False)
     exit_target = Column(Text, nullable=False)  # JSON: {"type": ..., ...}
     trailing_stop_high_watermark = Column(Float, nullable=True)  # Momentum only
-    evaluation_window_session = Column(Integer, nullable=False)
+    # Absolute UTC deadline for window expiry / feedback. Stored rather than a
+    # per-run session ordinal so it stays meaningful across runs and restarts.
+    evaluation_window_close_at = Column(DateTime, nullable=False)
     status = Column(String, nullable=False, default="OPEN")
     # Valid statuses: OPEN | CLOSED_STOP_LOSS | CLOSED_PROFIT_TARGET |
     #                 CLOSED_WINDOW_EXPIRY | EVALUATED | EVALUATION_FAILED
@@ -122,3 +125,23 @@ def get_engine(db_path: str) -> Engine:
 def create_tables(engine: Engine) -> None:
     """Create all tables if they do not already exist."""
     Base.metadata.create_all(engine)
+
+
+def to_db_utc(value: datetime) -> datetime:
+    """Return *value* in the naive-UTC form SQLite DATETIME columns hold.
+
+    SQLAlchemy's SQLite DATETIME renders without a UTC offset, so an aware
+    datetime is persisted as a naive UTC string and read back naive. Binding an
+    aware datetime into a comparison would compare inconsistent representations,
+    so normalise before it reaches the query.
+    """
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def from_db_utc(value: datetime) -> datetime:
+    """Return a datetime read from a DATETIME column as aware UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

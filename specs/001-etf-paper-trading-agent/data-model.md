@@ -117,7 +117,7 @@ One record per open paper trade. Ticker-scoped; the two tickers are fully indepe
 | `stop_loss_price` | `REAL` | Derived: `entry_price * (1 - stop_loss_pct)` |
 | `exit_target` | `TEXT` | JSON: `{"type": "price_level", "value": 123.45}` for Mean Reversion; `{"type": "trailing_stop", "trail_pct": 0.015}` for Momentum |
 | `trailing_stop_high_watermark` | `REAL \| NULL` | Updated by monitor when price makes a new high; used for trailing stop computation; NULL for non-Momentum positions |
-| `evaluation_window_session` | `INTEGER` | Session ordinal at which feedback agent fires. Mean Reversion: `entry_session_ordinal + 4`; Momentum: `entry_session_ordinal + 2` |
+| `evaluation_window_close_at` | `DATETIME` | Absolute UTC deadline at which the window expires and the feedback agent fires. Derived at entry: `entry_time + N x candle_timeframe`, N = 4 for Mean Reversion, 2 for Momentum. Stored as wall-clock rather than a session ordinal so it stays meaningful across runs, restarts, and market-closed sessions |
 | `status` | `TEXT` | See Position States below |
 | `exit_price` | `REAL \| NULL` | NULL until closed |
 | `exit_time` | `DATETIME \| NULL` | NULL until closed |

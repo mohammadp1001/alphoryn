@@ -20,7 +20,7 @@ from alpaca.trading.client import TradingClient
 
 from alphoryn.agents.feedback_agent import FeedbackAgent, FeedbackInput
 from alphoryn.agents.main_agent import MainAgent
-from alphoryn.config.models import AlphorynConfig
+from alphoryn.config.models import TIMEFRAME_SECONDS, AlphorynConfig
 from alphoryn.execution.agent import ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import MemoryEntry, Session
@@ -28,13 +28,6 @@ from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.telemetry.logger import TelemetryLogger
 
-_TIMEFRAME_SECONDS: dict[str, int] = {
-    "10min": 600,
-    "15min": 900,
-    "30min": 1800,
-    "1H": 3600,
-    "4H": 14400,
-}
 _INVESTIGATION_BUDGET_FRACTION = 0.87
 _EXECUTE_BUDGET_FRACTION = 0.13
 _HEARTBEAT_INTERVAL_SECS = 5 * 60
@@ -73,7 +66,7 @@ class Scheduler:
         self._logger = logger
         self._monitor = monitor
         self._monitor_stop_event = monitor_stop_event
-        candle_secs = _TIMEFRAME_SECONDS[cfg.candle_timeframe]
+        candle_secs = TIMEFRAME_SECONDS[cfg.candle_timeframe]
         self._investigation_budget = (
             _investigation_budget_secs
             if _investigation_budget_secs is not None
@@ -126,7 +119,7 @@ class Scheduler:
 
         The returned datetime is always strictly after *now*.
         """
-        period_secs = _TIMEFRAME_SECONDS[self._cfg.candle_timeframe]
+        period_secs = TIMEFRAME_SECONDS[self._cfg.candle_timeframe]
         ts = now.timestamp()
         next_ts = math.ceil(ts / period_secs) * period_secs
         # If ceil gives the same second (ts was exactly on boundary), add one period
@@ -293,14 +286,14 @@ class Scheduler:
     # Full session loop (T030)
     # ------------------------------------------------------------------
 
-    def _run_feedback(self, session_id: str, session_ordinal: int) -> None:
-        """Run feedback evaluation for positions due at this session ordinal.
+    def _run_feedback(self, session_id: str) -> None:
+        """Run feedback evaluation for positions whose window has closed.
 
         Called before investigation so the learning loop closes before new decisions.
         """
         if self._feedback_agent is None:
             return
-        positions = self._bank.get_positions_due_for_feedback(session_ordinal)
+        positions = self._bank.get_positions_due_for_feedback(datetime.now(UTC))
         for pos in positions:
             entry_session = self._bank.get_session(pos.session_id)
             html_report_path = (
@@ -333,7 +326,7 @@ class Scheduler:
         if self._logger is not None:
             self._logger.emit("SESSION_START", "scheduler", {}, session_id=session_id)
 
-        self._run_feedback(session_id, session_ordinal)
+        self._run_feedback(session_id)
 
         t0 = datetime.now(UTC)
         typer.echo(f"[{session_id}] Investigating market snapshot …")
@@ -427,37 +420,29 @@ class Scheduler:
     # Position monitor lifecycle
     # ------------------------------------------------------------------
 
-    def _start_monitor(self, session_ordinal: int) -> None:
+    def _start_monitor(self) -> None:
         """Start the position monitor thread before the first session."""
         if self._monitor is None:
             return
-        self._monitor.set_session_ordinal(session_ordinal)
         self._monitor.start()
         typer.echo("Position monitor started.")
         if self._logger is not None:
             self._logger.emit("MONITOR_STARTED", "scheduler", {})
 
-    def _drain_open_positions(self, session_ordinal: int, *, _sleep: object = None) -> int:
+    def _drain_open_positions(self, *, _sleep: object = None) -> None:
         """Keep the monitor running past the last session until nothing is OPEN.
 
         Per contracts/agents.md the stop signal may only be set once no
-        positions remain OPEN, so after the session loop ends we keep advancing
-        the session ordinal on candle boundaries - that is what lets pending
-        window-expiry exits fire — until the bank reports no open positions.
-        Returns the ordinal reached.
+        positions remain OPEN, so the process waits candle by candle until the
+        monitor has closed everything. Each position carries its own window
+        deadline, so nothing has to be published to the monitor here.
         """
         if self._monitor is None or not self._bank.load_open_positions():
-            return session_ordinal
+            return
         typer.echo("Run complete - holding process open until all positions close ...")
         while self._bank.load_open_positions():
-            # The session loop exits right after a candle wait, so the ordinal
-            # it left us on has not been published yet - publish first, then
-            # give the monitor a full candle at it before advancing.
-            self._monitor.set_session_ordinal(session_ordinal)
             next_close = self.compute_next_candle_close(datetime.now(UTC))
             self.wait_for_candle_close(next_close, _sleep=_sleep)
-            session_ordinal += 1
-        return session_ordinal
 
     def _stop_monitor(self) -> None:
         """Signal the monitor to stop and wait for the thread to exit."""
@@ -495,12 +480,10 @@ class Scheduler:
 
         sessions_completed = 0
         session_ordinal = 1
-        self._start_monitor(session_ordinal)
+        self._start_monitor()
 
         while sessions_completed < self._cfg.session_count:
             candle_close_at = datetime.now(UTC)
-            if self._monitor is not None:
-                self._monitor.set_session_ordinal(session_ordinal)
 
             if not self.is_market_open():
                 typer.echo(
@@ -527,5 +510,5 @@ class Scheduler:
             self.wait_for_candle_close(next_close, _sleep=_sleep)
 
         self._bank.end_run(run_id)
-        self._drain_open_positions(session_ordinal, _sleep=_sleep)
+        self._drain_open_positions(_sleep=_sleep)
         self._stop_monitor()

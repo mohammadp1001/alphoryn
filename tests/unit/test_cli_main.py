@@ -249,7 +249,7 @@ def test_status_shows_open_positions(tmp_path: Path) -> None:
             lot_size=10.0,
             stop_loss_price=441.0,
             exit_target='{"type":"fixed","target_price":460.0}',
-            evaluation_window_session=5,
+            evaluation_window_close_at=datetime(2024, 1, 15, 19, 0),
             status="OPEN",
         )
         s.add(pos)

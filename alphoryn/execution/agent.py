@@ -9,7 +9,7 @@ Constitution Principle I: zero LLM model calls.
 import json
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from alpaca.data.enums import DataFeed
@@ -19,8 +19,17 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
 
+from alphoryn.config.models import TIMEFRAME_SECONDS
 from alphoryn.memory.bank import MemoryBank
-from alphoryn.memory.schema import Position
+from alphoryn.memory.schema import Position, to_db_utc
+
+# Sessions from entry until the feedback agent evaluates the trade, per
+# strategies/mean_reversion.md §Evaluation Window and strategies/momentum.md.
+EVALUATION_WINDOW_SESSIONS: dict[str, int] = {
+    "MEAN_REVERSION": 4,
+    "MOMENTUM": 2,
+}
+_DEFAULT_EVALUATION_WINDOW_SESSIONS = 4
 
 
 @dataclass(frozen=True)
@@ -54,8 +63,22 @@ class ExecutionAgent:
 
     model = None  # Principle I: no LLM model
 
-    def __init__(self, bank: MemoryBank) -> None:
+    def __init__(self, bank: MemoryBank, candle_timeframe: str = "1H") -> None:
         self._bank = bank
+        self._candle_seconds = TIMEFRAME_SECONDS[candle_timeframe]
+
+    def _evaluation_window_close_at(self, strategy: str | None, entry_time: datetime) -> datetime:
+        """Return the absolute UTC deadline at which this position's window closes.
+
+        Expressed as wall-clock rather than a session ordinal so it survives the
+        run that opened the position (issue #122). The window burns down over
+        every elapsed candle, including ones where the market was closed —
+        matching the ordinal behaviour it replaces.
+        """
+        sessions = EVALUATION_WINDOW_SESSIONS.get(
+            strategy or "", _DEFAULT_EVALUATION_WINDOW_SESSIONS
+        )
+        return entry_time + timedelta(seconds=sessions * self._candle_seconds)
 
     def execute(self, decision: SessionDecision) -> None:
         """Execute a SessionDecision for all tickers sequentially."""
@@ -110,19 +133,22 @@ class ExecutionAgent:
         # Write OPEN Position record to memory bank
         stop_loss_pct = 0.02
         stop_loss_price = ask_price * (1 - stop_loss_pct)
+        entry_time = datetime.now(UTC)
         pos = Position(
             session_id=session_id,
             ticker=asset_decision.ticker,
             strategy=asset_decision.strategy,
             direction=asset_decision.action,
             entry_price=ask_price,
-            entry_time=datetime.now(UTC),
+            entry_time=entry_time,
             lot_size=float(lot),
             stop_loss_price=stop_loss_price,
             exit_target=(
                 json.dumps(asset_decision.exit_target) if asset_decision.exit_target else "{}"
             ),
-            evaluation_window_session=5,
+            evaluation_window_close_at=to_db_utc(
+                self._evaluation_window_close_at(asset_decision.strategy, entry_time)
+            ),
             status="OPEN",
         )
         self._bank.write_position(pos)

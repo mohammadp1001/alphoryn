@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator
 
 _logger = logging.getLogger(__name__)
 
-_TIMEFRAME_SECONDS: dict[str, int] = {
+TIMEFRAME_SECONDS: dict[str, int] = {
     "10min": 600,
     "15min": 900,
     "30min": 1800,
@@ -68,7 +68,7 @@ class AlphorynConfig(BaseModel):
     def session_count(self) -> int:
         """Derived session count: floor(run_duration / candle_timeframe)."""
         run_secs = _parse_duration_seconds(self.run_duration)
-        candle_secs = _TIMEFRAME_SECONDS[self.candle_timeframe]
+        candle_secs = TIMEFRAME_SECONDS[self.candle_timeframe]
         return math.floor(run_secs / candle_secs)
 
     @property

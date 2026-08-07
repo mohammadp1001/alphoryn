@@ -19,7 +19,11 @@ from sqlalchemy.orm import Session as DBSession
 from alphoryn.agents.feedback_agent import FeedbackAgent
 from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.loader import load_config
-from alphoryn.config.models import AlphorynConfig, _parse_duration_seconds
+from alphoryn.config.models import (
+    TIMEFRAME_SECONDS,
+    AlphorynConfig,
+    _parse_duration_seconds,
+)
 from alphoryn.execution.agent import ExecutionAgent
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
@@ -132,9 +136,8 @@ def run(
 
 def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
     """Emit a warning when session count is fractional (rounded down)."""
-    _timeframe_seconds = {"10min": 600, "15min": 900, "30min": 1800, "1H": 3600, "4H": 14400}
     run_secs = _parse_duration_seconds(cfg.run_duration)
-    candle_secs = _timeframe_seconds[cfg.candle_timeframe]
+    candle_secs = TIMEFRAME_SECONDS[cfg.candle_timeframe]
     if run_secs % candle_secs != 0:
         typer.echo(
             f"WARN: {cfg.run_duration} is not evenly divisible by {cfg.candle_timeframe};"
@@ -152,14 +155,13 @@ def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
         bank=bank,
         market_data=market_data,
         logger=logger,
-        current_session_ordinal=1,
         stop_event=monitor_stop_event,
     )
     scheduler = Scheduler(
         cfg,
         bank,
         main_agent=MainAgent(market_data, logger),
-        execution_agent=ExecutionAgent(bank),
+        execution_agent=ExecutionAgent(bank, cfg.candle_timeframe),
         feedback_agent=FeedbackAgent(market_data, bank, logger),
         report_generator=ReportGenerator(),
         logger=logger,
