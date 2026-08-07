@@ -243,11 +243,13 @@ class Scheduler:
         session_id: str,
         candle_close_at: datetime,
         tickers: list[str],
-    ) -> "SessionDecision | None":
+    ) -> "tuple[SessionDecision | None, str | None]":
         """Run main_agent.decide() with investigation budget and heartbeat.
 
-        Returns the SessionDecision, or None if the budget was exceeded.
-        Emits BUDGET_TIMEOUT telemetry on timeout.
+        Returns ``(decision, skip_status)``. On success ``skip_status`` is None.
+        A budget overrun yields ``SKIPPED_TIMEOUT``; any failure reaching market
+        data or the investigation agent yields ``SKIPPED_DATA_UNAVAILABLE``.
+        Both leave ``decision`` as None. Emits BUDGET_TIMEOUT on timeout.
         """
         stop_heartbeat = threading.Event()
         heartbeat_thread = threading.Thread(
@@ -266,7 +268,7 @@ class Scheduler:
                     candle_close_at,
                 )
                 try:
-                    return future.result(timeout=self._investigation_budget)
+                    return future.result(timeout=self._investigation_budget), None
                 except concurrent.futures.TimeoutError:
                     if self._logger is not None:
                         self._logger.emit(
@@ -275,7 +277,15 @@ class Scheduler:
                             {"phase": "investigation", "budget_secs": self._investigation_budget},
                             session_id=session_id,
                         )
-                    return None
+                    return None, "SKIPPED_TIMEOUT"
+                except Exception as exc:
+                    # Market data or the agent itself was unreachable. Skipping
+                    # the session is correct; crashing the run is not.
+                    typer.echo(
+                        f"[{session_id}] Investigation failed: {exc}",
+                        err=True,
+                    )
+                    return None, "SKIPPED_DATA_UNAVAILABLE"
         finally:
             stop_heartbeat.set()
             heartbeat_thread.join(timeout=1.0)
@@ -408,17 +418,17 @@ class Scheduler:
 
         if active:
             typer.echo(f"[{session_id}] Investigating market snapshot …")
-            decision = self._run_investigation(session_id, candle_close_at, active)
+            decision, skip_status = self._run_investigation(session_id, candle_close_at, active)
         else:
             # FR-005: no Investigation Agent call is made when every ticker is blocked.
             typer.echo(f"[{session_id}] All tickers feedback-blocked — skipping investigation")
-            decision = SessionDecision(session_id=session_id, decisions=[])
+            decision, skip_status = SessionDecision(session_id=session_id, decisions=[]), None
 
         if decision is not None:
             decision = self._merge_blocked_holds(decision, blocked)
 
         if decision is None:
-            typer.echo(f"[{session_id}] SKIPPED  investigation budget exceeded")
+            typer.echo(f"[{session_id}] SKIPPED  {skip_status}")
         else:
             decision_str = "  |  ".join(
                 f"{d.ticker}: {d.action} ({d.strategy})" for d in decision.decisions
@@ -466,7 +476,7 @@ class Scheduler:
                 }
             )
 
-        session_status = "COMPLETED" if decision is not None else "SKIPPED_TIMEOUT"
+        session_status = "COMPLETED" if decision is not None else skip_status
         session_record = Session(
             id=session_id,
             run_id=run_id,
@@ -500,6 +510,31 @@ class Scheduler:
                 "SESSION_END", "scheduler", {}, session_id=session_id, latency_ms=latency_ms
             )
         typer.echo(f"[{session_id}] SESSION END  status={session_status}")
+
+    def _record_skipped_session(
+        self,
+        run_id: int,
+        session_id: str,
+        candle_close_at: datetime,
+        status: str,
+    ) -> None:
+        """Persist a Session row for a candle the scheduler never processed.
+
+        SC-003: no session ends silently. Without this a closed-market candle
+        leaves no trace, so `alphoryn history` cannot tell "the market was
+        closed" apart from "the process was not running".
+        """
+        self._bank.write_session(
+            Session(
+                id=session_id,
+                run_id=run_id,
+                candle_close_at=candle_close_at,
+                created_at=datetime.now(UTC),
+                status=status,
+                html_report_path=None,
+                ticker_decisions=None,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Position monitor lifecycle
@@ -570,22 +605,25 @@ class Scheduler:
         while sessions_completed < self._cfg.session_count:
             candle_close_at = datetime.now(UTC)
 
+            session_id = f"run-{run_id}/session-{session_ordinal:04d}"
+
             if not self.is_market_open():
-                typer.echo(
-                    f"[session-{session_ordinal:04d}] MARKET_CLOSED — waiting for next candle"
-                )
+                typer.echo(f"[{session_id}] MARKET_CLOSED - waiting for next candle")
                 if self._logger is not None:
                     self._logger.emit(
                         "MARKET_CLOSED",
                         "scheduler",
                         {"session_ordinal": session_ordinal},
+                        session_id=session_id,
                     )
+                self._record_skipped_session(
+                    run_id, session_id, candle_close_at, "SKIPPED_MARKET_CLOSED"
+                )
                 next_close = self.compute_next_candle_close(datetime.now(UTC))
                 self.wait_for_candle_close(next_close, _sleep=_sleep)
                 session_ordinal += 1
                 continue  # skipped sessions not counted against total (FR-018)
 
-            session_id = f"run-{run_id}/session-{session_ordinal:04d}"
             self._process_session(run_id, session_id, session_ordinal, candle_close_at)
 
             sessions_completed += 1
