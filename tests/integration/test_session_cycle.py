@@ -151,6 +151,7 @@ def test_process_session_writes_session_record(tmp_path: Path) -> None:
     bank = _init_bank(tmp_path / "memory.db")
     run_id = _write_run(bank)
     execution_agent = MagicMock()
+    execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "EXECUTED"}
     logger = MagicMock()
 
     sched = _make_scheduler(bank, tmp_path=tmp_path, execution_agent=execution_agent, logger=logger)
@@ -175,6 +176,7 @@ def test_process_session_writes_memory_entries(tmp_path: Path) -> None:
     bank = _init_bank(tmp_path / "memory.db")
     run_id = _write_run(bank)
     execution_agent = MagicMock()
+    execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "EXECUTED"}
     logger = MagicMock()
 
     sched = _make_scheduler(bank, tmp_path=tmp_path, execution_agent=execution_agent, logger=logger)
@@ -249,6 +251,7 @@ def test_process_session_writes_report_path_to_db(tmp_path: Path) -> None:
     bank = _init_bank(tmp_path / "memory.db")
     run_id = _write_run(bank)
     execution_agent = MagicMock()
+    execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "EXECUTED"}
     report_generator = _make_report_generator_with_stub(tmp_path)
     logger = MagicMock()
 
@@ -278,6 +281,7 @@ def test_process_session_report_generator_write_called_with_session_id(tmp_path:
     bank = _init_bank(tmp_path / "memory.db")
     run_id = _write_run(bank)
     execution_agent = MagicMock()
+    execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "EXECUTED"}
     report_generator = _make_report_generator_with_stub(tmp_path)
 
     sched = _make_scheduler(
@@ -432,6 +436,7 @@ def test_execution_agent_receives_decision(tmp_path: Path) -> None:
     bank = _init_bank(tmp_path / "memory.db")
     run_id = _write_run(bank)
     execution_agent = MagicMock()
+    execution_agent.execute.return_value = {"SPY": "EXECUTED", "QQQ": "EXECUTED"}
 
     sched = _make_scheduler(
         bank, tmp_path=tmp_path, execution_agent=execution_agent

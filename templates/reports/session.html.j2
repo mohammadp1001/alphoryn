@@ -39,13 +39,18 @@
 <section id="decisions">
   <h2>Decisions</h2>
   <table>
-    <thead><tr><th>Ticker</th><th>Action</th><th>Strategy</th></tr></thead>
+    <thead><tr><th>Ticker</th><th>Action</th><th>Strategy</th><th>Execution</th></tr></thead>
     <tbody>
       {% for detail in ticker_details %}
       <tr>
         <td><strong>{{ detail.ticker }}</strong></td>
         <td><span class="badge {{ detail.action }}">{{ detail.action }}</span></td>
         <td>{{ detail.strategy or "&mdash;" }}</td>
+        <td>
+          {%- if detail.execution_result %}
+          <span class="badge {{ detail.execution_result }}">{{ detail.execution_result }}</span>
+          {%- else %}&mdash;{% endif -%}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

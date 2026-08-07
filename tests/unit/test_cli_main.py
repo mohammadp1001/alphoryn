@@ -356,3 +356,33 @@ def test_history_shows_session_rows(tmp_path: Path) -> None:
     assert sess_id in result.output
     assert "MR -> BUY" in result.output
     assert "MOM -> HOLD" in result.output
+
+
+def test_history_renders_the_execution_marker(tmp_path: Path) -> None:
+    """Issue #131: the '(exec)' branch was unreachable - callers always passed None."""
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    run_id = bank.start_run('{"tickers":["SPY"]}', 6)
+
+    with __import__("sqlalchemy.orm", fromlist=["Session"]).Session(bank._engine) as s:
+        s.add(
+            Sess(
+                id=f"run-{run_id}/session-0001",
+                run_id=run_id,
+                candle_close_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+                created_at=datetime(2024, 1, 15, 15, 0, tzinfo=UTC),
+                status="COMPLETED",
+                ticker_decisions=json.dumps({
+                    "SPY": {
+                        "strategy": "MEAN_REVERSION",
+                        "decision": "BUY",
+                        "execution_result": "EXECUTED",
+                    },
+                }),
+            )
+        )
+        s.commit()
+
+    result = runner.invoke(app, ["history", "--db", str(db)])
+    assert result.exit_code == 0
+    assert "MR -> BUY (exec)" in result.output
