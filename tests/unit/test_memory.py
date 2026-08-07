@@ -660,3 +660,95 @@ def test_from_db_utc_attaches_utc_to_naive_value() -> None:
 def test_from_db_utc_normalises_aware_value_to_utc() -> None:
     berlin = datetime(2024, 6, 1, 14, 0, 0, tzinfo=timezone(timedelta(hours=2)))
     assert from_db_utc(berlin) == datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
+
+
+# ---------------------------------------------------------------------------
+# get_feedback_blocked_tickers — FR-005 / FR-014 (issue #124)
+# ---------------------------------------------------------------------------
+
+
+def _bank_with_session() -> tuple[MemoryBank, str]:
+    bank = _in_memory_bank()
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
+    with DBSession(bank._engine) as s:
+        s.add(_sample_session(run_id))
+        s.commit()
+    return bank, f"run-{run_id}/session-0001"
+
+
+def test_open_position_blocks_its_ticker() -> None:
+    bank, sess_id = _bank_with_session()
+    bank.write_position(_sample_position(sess_id, ticker="SPY", status="OPEN"))
+    assert bank.get_feedback_blocked_tickers() == {"SPY"}
+
+
+def test_closed_but_unevaluated_position_blocks_its_ticker() -> None:
+    """The exact FR-005 definition — the case the old OPEN-only check missed."""
+    bank, sess_id = _bank_with_session()
+    bank.write_position(
+        _sample_position(sess_id, ticker="SPY", status="CLOSED_PROFIT_TARGET")
+    )
+    assert bank.get_feedback_blocked_tickers() == {"SPY"}
+
+
+def test_evaluated_position_does_not_block() -> None:
+    bank, sess_id = _bank_with_session()
+    pos_id = bank.write_position(
+        _sample_position(sess_id, ticker="SPY", status="CLOSED_STOP_LOSS")
+    )
+    bank.write_feedback_evaluation(
+        FeedbackEvaluation(
+            position_id=pos_id,
+            evaluated_at=_NOW,
+            candle_close_price=460.0,
+            thesis_summary="ok",
+            outcome_judgment="CORRECT",
+            reasoning="done",
+        ),
+        "EVALUATED",
+    )
+    assert bank.get_feedback_blocked_tickers() == set()
+
+
+def test_evaluation_failed_position_does_not_block() -> None:
+    """contracts/agents.md §Retry policy unblocks the ticker after 3 failures."""
+    bank, sess_id = _bank_with_session()
+    bank.write_position(
+        _sample_position(sess_id, ticker="SPY", status="EVALUATION_FAILED")
+    )
+    assert bank.get_feedback_blocked_tickers() == set()
+
+
+def test_closed_position_with_evaluation_but_stale_status_does_not_block() -> None:
+    """Defensive: an evaluation exists, so the ticker is clear whatever the status says."""
+    bank, sess_id = _bank_with_session()
+    pos_id = bank.write_position(
+        _sample_position(sess_id, ticker="SPY", status="CLOSED_WINDOW_EXPIRY")
+    )
+    bank.write_feedback_evaluation(
+        FeedbackEvaluation(
+            position_id=pos_id,
+            evaluated_at=_NOW,
+            candle_close_price=460.0,
+            thesis_summary="ok",
+            outcome_judgment="NEUTRAL",
+            reasoning="done",
+        ),
+        "CLOSED_WINDOW_EXPIRY",  # status not advanced
+    )
+    assert bank.get_feedback_blocked_tickers() == set()
+
+
+def test_blocked_tickers_are_independent_per_ticker() -> None:
+    bank, sess_id = _bank_with_session()
+    bank.write_position(_sample_position(sess_id, ticker="SPY", status="OPEN"))
+    bank.write_position(
+        _sample_position(sess_id, ticker="QQQ", status="CLOSED_STOP_LOSS")
+    )
+    bank.write_position(_sample_position(sess_id, ticker="IWM", status="EVALUATED"))
+    assert bank.get_feedback_blocked_tickers() == {"SPY", "QQQ"}
+
+
+def test_no_positions_blocks_nothing() -> None:
+    bank, _ = _bank_with_session()
+    assert bank.get_feedback_blocked_tickers() == set()

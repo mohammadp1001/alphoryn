@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import sqlalchemy.orm as orm
+from alpaca.trading.enums import OrderSide
 
 from alphoryn.execution.agent import (
     EVALUATION_WINDOW_SESSIONS,
@@ -351,4 +352,101 @@ def test_buy_writes_derived_window_deadline_not_a_fixed_ordinal(tmp_path) -> Non
     pos = bank.load_open_positions()[0]
     delta = pos.evaluation_window_close_at - pos.entry_time
     assert delta == timedelta(hours=2)  # MOMENTUM horizon at a 1H candle
+    bank._engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Feedback-blocking — FR-014 (issue #124)
+# ---------------------------------------------------------------------------
+
+
+def _sell(ticker: str = "SPY", strategy: str = "MOMENTUM", lot: int = 5) -> AssetDecision:
+    return AssetDecision(
+        ticker=ticker,
+        action="SELL",
+        strategy=strategy,
+        lot_size=lot,
+        exit_target=None,
+        reasoning="Exit signal",
+    )
+
+
+def _bank_with_position(tmp_path, status: str, ticker: str = "SPY") -> MemoryBank:
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    sess_id = f"run-{run_id}/session-0001"
+    with orm.Session(bank._engine) as s:
+        s.add(
+            Sess(
+                id=sess_id,
+                run_id=run_id,
+                candle_close_at=datetime(2024, 1, 15, 15, 0),
+                created_at=datetime(2024, 1, 15, 15, 0),
+                status="COMPLETED",
+            )
+        )
+        s.commit()
+        s.add(
+            Position(
+                session_id=sess_id,
+                ticker=ticker,
+                strategy="MOMENTUM",
+                direction="BUY",
+                entry_price=450.0,
+                entry_time=datetime(2024, 1, 15, 15, 0),
+                lot_size=5.0,
+                stop_loss_price=441.0,
+                exit_target='{"type":"trailing_stop","trail_pct":0.015}',
+                evaluation_window_close_at=datetime(2024, 1, 15, 19, 0),
+                status=status,
+            )
+        )
+        s.commit()
+    return bank
+
+
+def _run(agent: ExecutionAgent, decision: SessionDecision) -> MagicMock:
+    mock_alpaca = MagicMock()
+    mock_alpaca.get_account.return_value.buying_power = "100000"
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {
+        "SPY": MagicMock(ask_price=450.0),
+        "QQQ": MagicMock(ask_price=380.0),
+    }
+    with (
+        patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca),
+        patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data),
+    ):
+        agent.execute(decision)
+    return mock_alpaca
+
+
+def test_closed_but_unevaluated_position_blocks_new_buy(tmp_path) -> None:
+    """Regression for #124: the old OPEN-only check let this straight through."""
+    bank = _bank_with_position(tmp_path, status="CLOSED_PROFIT_TARGET")
+    mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
+    mock_alpaca.submit_order.assert_not_called()
+    bank._engine.dispose()
+
+
+def test_evaluated_position_does_not_block_new_buy(tmp_path) -> None:
+    bank = _bank_with_position(tmp_path, status="EVALUATED")
+    mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
+    mock_alpaca.submit_order.assert_called_once()
+    bank._engine.dispose()
+
+
+def test_sell_is_not_blocked_by_the_position_it_closes(tmp_path) -> None:
+    """Regression for #124: SELL used to be blocked by the very position it unwinds."""
+    bank = _bank_with_position(tmp_path, status="OPEN")
+    mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_sell("SPY", lot=5)))
+    mock_alpaca.submit_order.assert_called_once()
+    assert mock_alpaca.submit_order.call_args.args[0].side == OrderSide.SELL
+    bank._engine.dispose()
+
+
+def test_buy_on_an_unrelated_ticker_is_unaffected(tmp_path) -> None:
+    bank = _bank_with_position(tmp_path, status="OPEN", ticker="SPY")
+    mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_buy("QQQ", lot=3)))
+    mock_alpaca.submit_order.assert_called_once()
     bank._engine.dispose()

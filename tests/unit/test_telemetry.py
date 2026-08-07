@@ -11,8 +11,8 @@ from alphoryn.telemetry.logger import EVENT_TYPES, TelemetryLogger
 # ---------------------------------------------------------------------------
 
 
-def test_event_types_contains_all_14() -> None:
-    assert len(EVENT_TYPES) == 14
+def test_event_types_contains_all_17() -> None:
+    assert len(EVENT_TYPES) == 17
 
 
 def test_event_types_includes_expected_values() -> None:
@@ -31,6 +31,9 @@ def test_event_types_includes_expected_values() -> None:
         "SESSION_END",
         "MARKET_CLOSED",
         "BUDGET_TIMEOUT",
+        "TICKER_BLOCKED",
+        "MONITOR_STARTED",
+        "MONITOR_STOPPED",
     }
     assert EVENT_TYPES == expected
 

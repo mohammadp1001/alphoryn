@@ -89,9 +89,15 @@ class ExecutionAgent:
         if asset_decision.action == "HOLD":
             return
 
-        # Block new BUY if ticker already has an OPEN position (FR-014)
-        open_positions = self._bank.load_open_positions()
-        if any(p.ticker == asset_decision.ticker for p in open_positions):
+        # FR-014: never open a new position on a feedback-blocked ticker. Second
+        # gate only — the scheduler already keeps blocked tickers out of the
+        # investigation (FR-005) — so this protects direct callers of the agent.
+        # SELL is exempt: a Sell closes an existing position, so the blocking
+        # position is the very thing it is trying to unwind.
+        if (
+            asset_decision.action == "BUY"
+            and asset_decision.ticker in self._bank.get_feedback_blocked_tickers()
+        ):
             return  # position-blocked → treat as HOLD
 
         client = TradingClient(

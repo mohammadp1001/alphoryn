@@ -250,6 +250,8 @@ correlation without a separate tracing backend.
 | `SESSION_END` | `scheduler` | (empty payload; `latency_ms` carries duration) |
 | `MARKET_CLOSED` | `scheduler` | `session_ordinal` |
 | `BUDGET_TIMEOUT` | `scheduler` | `phase` (`"investigation"` or `"execute"`), `budget_secs` |
+| `TICKER_BLOCKED` | `scheduler` | `reason` (`"FEEDBACK_UNEVALUATED"`); `etf` carries the ticker |
+| `MONITOR_STARTED` / `MONITOR_STOPPED` | `scheduler` | (empty payload) |
 | `EVALUATION_FAILED` | `feedback_agent` | `position_id`, `ticker`, `error` |
 
 **Known gap**: `ORDER_PLACED`, `ORDER_FAILED`, and `BUDGET_CHECK` are declared in the

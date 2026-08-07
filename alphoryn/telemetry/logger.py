@@ -24,6 +24,9 @@ EVENT_TYPES = frozenset(
         "SESSION_END",
         "MARKET_CLOSED",
         "BUDGET_TIMEOUT",
+        "TICKER_BLOCKED",
+        "MONITOR_STARTED",
+        "MONITOR_STOPPED",
     }
 )
 
@@ -58,7 +61,7 @@ class TelemetryLogger:
         """Emit a structured event to Cloud Logging (or stderr on failure).
 
         Args:
-            event_type: One of the 14 defined event types (see EVENT_TYPES).
+            event_type: One of the defined event types (see EVENT_TYPES).
             component:  Emitting component (e.g. ``"main_agent"``, ``"monitor"``).
             payload:    Event-specific fields.
             session_id: Parent session ID (``run-N/session-X``); None for run-level.
