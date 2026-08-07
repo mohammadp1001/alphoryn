@@ -240,7 +240,7 @@ _FIXTURE_SIGNALS = {
 def _make_report_generator_with_stub(tmp_path: Path) -> MagicMock:
     """Return a stub report generator that writes a minimal HTML file."""
     gen = MagicMock()
-    report_path = str(tmp_path / "reports" / "run-1" / "run-1/session-0001.html")
+    report_path = str(tmp_path / "reports" / "run-1" / "session-0001.html")
     gen.write.return_value = report_path
     return gen
 
@@ -295,9 +295,10 @@ def test_process_session_report_generator_write_called_with_session_id(tmp_path:
             candle_close_at=_CANDLE_CLOSE_AT,
         )
 
+    # Issue #133: the composite session ID is the whole path - passing the run
+    # separately double-nested it into reports/run-1/run-1/session-0001.html.
     report_generator.write.assert_called_once()
-    call_args = report_generator.write.call_args
-    assert "run-1/session-0001" in str(call_args)
+    assert report_generator.write.call_args.args[0] == "run-1/session-0001"
 
 
 # ---------------------------------------------------------------------------

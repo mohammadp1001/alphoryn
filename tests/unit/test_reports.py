@@ -153,25 +153,25 @@ def _generator(tmp_path: Path) -> ReportGenerator:
 
 def test_mean_reversion_renders_investment_thesis_section(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-abc", _MEAN_REVERSION_CONTEXT)
+    html = gen.render("run-1/session-abc", _MEAN_REVERSION_CONTEXT)
     assert '<section id="investment-thesis">' in html
 
 
 def test_mean_reversion_contains_strategy_name(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-abc", _MEAN_REVERSION_CONTEXT)
+    html = gen.render("run-1/session-abc", _MEAN_REVERSION_CONTEXT)
     assert "MEAN_REVERSION" in html
 
 
 def test_mean_reversion_contains_etf_ticker(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-abc", _MEAN_REVERSION_CONTEXT)
+    html = gen.render("run-1/session-abc", _MEAN_REVERSION_CONTEXT)
     assert "SPY" in html
 
 
 def test_mean_reversion_contains_reasoning(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-abc", _MEAN_REVERSION_CONTEXT)
+    html = gen.render("run-1/session-abc", _MEAN_REVERSION_CONTEXT)
     assert "RSI below 30" in html
 
 
@@ -182,19 +182,19 @@ def test_mean_reversion_contains_reasoning(tmp_path: Path) -> None:
 
 def test_momentum_renders_investment_thesis_section(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-def", _MOMENTUM_CONTEXT)
+    html = gen.render("run-1/session-def", _MOMENTUM_CONTEXT)
     assert '<section id="investment-thesis">' in html
 
 
 def test_momentum_contains_trailing_stop_watermark(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-def", _MOMENTUM_CONTEXT)
+    html = gen.render("run-1/session-def", _MOMENTUM_CONTEXT)
     assert "watermark" in html.lower()
 
 
 def test_momentum_contains_strategy_name(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-def", _MOMENTUM_CONTEXT)
+    html = gen.render("run-1/session-def", _MOMENTUM_CONTEXT)
     assert "MOMENTUM" in html
 
 
@@ -205,7 +205,7 @@ def test_momentum_contains_strategy_name(tmp_path: Path) -> None:
 
 def test_hold_decision_still_has_investment_thesis_section(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-abc", _HOLD_CONTEXT)
+    html = gen.render("run-1/session-abc", _HOLD_CONTEXT)
     assert '<section id="investment-thesis">' in html
 
 
@@ -216,20 +216,20 @@ def test_hold_decision_still_has_investment_thesis_section(tmp_path: Path) -> No
 
 def test_multi_ticker_shows_all_tickers_in_title(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-multi", _MULTI_TICKER_CONTEXT)
+    html = gen.render("run-1/session-multi", _MULTI_TICKER_CONTEXT)
     assert "SPY" in html
     assert "QQQ" in html
 
 
 def test_multi_ticker_shows_decisions_section(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-multi", _MULTI_TICKER_CONTEXT)
+    html = gen.render("run-1/session-multi", _MULTI_TICKER_CONTEXT)
     assert '<section id="decisions">' in html
 
 
 def test_multi_ticker_shows_both_reasonings(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-multi", _MULTI_TICKER_CONTEXT)
+    html = gen.render("run-1/session-multi", _MULTI_TICKER_CONTEXT)
     assert "Entry conditions not met" in html
     assert "Strong trend confirmed" in html
 
@@ -241,7 +241,7 @@ def test_multi_ticker_shows_both_reasonings(tmp_path: Path) -> None:
 
 def test_write_report_creates_file_at_correct_path(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    path = gen.write("run-1", "session-abc", _MEAN_REVERSION_CONTEXT)
+    path = gen.write("run-1/session-abc", _MEAN_REVERSION_CONTEXT)
     expected = tmp_path / "reports" / "run-1" / "session-abc.html"
     assert Path(path) == expected
     assert expected.exists()
@@ -249,14 +249,23 @@ def test_write_report_creates_file_at_correct_path(tmp_path: Path) -> None:
 
 def test_write_report_path_format_run_2(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    path = gen.write("run-2", "session-xyz", _MOMENTUM_CONTEXT)
+    path = gen.write("run-2/session-xyz", _MOMENTUM_CONTEXT)
     assert "run-2" in path
     assert "session-xyz.html" in path
 
 
+def test_write_report_does_not_double_nest_the_run_directory(tmp_path: Path) -> None:
+    """Issue #133: reports/run-3/run-3/session-0001.html was produced on main."""
+    gen = _generator(tmp_path)
+    path = Path(gen.write("run-3/session-0001", _MEAN_REVERSION_CONTEXT))
+    assert path == tmp_path / "reports" / "run-3" / "session-0001.html"
+    assert path.exists()
+    assert not (tmp_path / "reports" / "run-3" / "run-3").exists()
+
+
 def test_write_report_creates_parent_directories(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    path = gen.write("run-42", "session-new", _MEAN_REVERSION_CONTEXT)
+    path = gen.write("run-42/session-new", _MEAN_REVERSION_CONTEXT)
     assert Path(path).exists()
 
 
@@ -273,11 +282,11 @@ def test_render_with_memory_summary(tmp_path: Path) -> None:
         ],
     }
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-abc", ctx)
+    html = gen.render("run-1/session-abc", ctx)
     assert "Prior BUY CORRECT" in html
 
 
 def test_render_with_no_position(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
-    html = gen.render("run-1", "session-hold", _HOLD_CONTEXT)
+    html = gen.render("run-1/session-hold", _HOLD_CONTEXT)
     assert html
