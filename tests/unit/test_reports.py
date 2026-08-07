@@ -1,7 +1,7 @@
 """Unit tests for alphoryn/reports/generator.py (T023 scope).
 
 Tests verify:
-- session.html.j2 template renders <section id="investment-thesis">
+- session.html.j2 template renders one <section id="investment-thesis-{ticker}"> each
 - Momentum position renders trailing stop watermark field
 - Output path format: reports/run-{run_id}/session-{seq}.html
 - Context object contains tickers list and ticker_details list
@@ -154,7 +154,7 @@ def _generator(tmp_path: Path) -> ReportGenerator:
 def test_mean_reversion_renders_investment_thesis_section(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
     html = gen.render("run-1/session-abc", _MEAN_REVERSION_CONTEXT)
-    assert '<section id="investment-thesis">' in html
+    assert '<section id="investment-thesis-SPY">' in html
 
 
 def test_mean_reversion_contains_strategy_name(tmp_path: Path) -> None:
@@ -183,7 +183,7 @@ def test_mean_reversion_contains_reasoning(tmp_path: Path) -> None:
 def test_momentum_renders_investment_thesis_section(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
     html = gen.render("run-1/session-def", _MOMENTUM_CONTEXT)
-    assert '<section id="investment-thesis">' in html
+    assert '<section id="investment-thesis-QQQ">' in html
 
 
 def test_momentum_contains_trailing_stop_watermark(tmp_path: Path) -> None:
@@ -206,7 +206,7 @@ def test_momentum_contains_strategy_name(tmp_path: Path) -> None:
 def test_hold_decision_still_has_investment_thesis_section(tmp_path: Path) -> None:
     gen = _generator(tmp_path)
     html = gen.render("run-1/session-abc", _HOLD_CONTEXT)
-    assert '<section id="investment-thesis">' in html
+    assert '<section id="investment-thesis-SPY">' in html
 
 
 # ---------------------------------------------------------------------------

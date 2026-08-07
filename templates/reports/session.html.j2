@@ -58,7 +58,7 @@
 </section>
 
 {% for detail in ticker_details %}
-<section id="investment-thesis">
+<section id="investment-thesis-{{ detail.ticker }}">
   <h2>{{ detail.ticker }} &mdash; Investment Thesis</h2>
   <div class="thesis-box">{{ detail.reasoning }}</div>
   {% if detail.memory_summary %}

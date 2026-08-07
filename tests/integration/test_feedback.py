@@ -28,6 +28,7 @@ from alphoryn.memory.schema import (
     Session,
     create_tables,
 )
+from alphoryn.reports.generator import ReportGenerator
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -259,7 +260,7 @@ def test_evaluate_extracts_thesis_from_real_html(tmp_path: Path) -> None:
     """_extract_thesis reads investment-thesis section from real HTML file."""
     html = (
         "<html><body>"
-        '<section id="investment-thesis"><p>ADX was low; price oversold.</p></section>'
+        '<section id="investment-thesis-SPY"><p>ADX was low; price oversold.</p></section>'
         "</body></html>"
     )
     report = tmp_path / "report.html"
@@ -432,3 +433,42 @@ def test_retry_succeeds_on_third_attempt_writes_evaluated() -> None:
         pos = s.query(Position).filter(Position.id == pos_id).one()
     assert pos.status == "EVALUATED"
     assert call_count[0] == 3
+
+
+def test_thesis_extraction_matches_the_report_the_generator_writes(tmp_path: Path) -> None:
+    """Issue #134 end to end: a real multi-ticker report, read back per ticker."""
+    report_path = ReportGenerator(output_dir=str(tmp_path)).write(
+        "run-1/session-0001",
+        {
+            "session_id": "run-1/session-0001",
+            "candle_close_at": "2024-01-15 15:00 UTC",
+            "tickers": ["SPY", "QQQ"],
+            "ticker_details": [
+                {
+                    "ticker": "SPY",
+                    "action": "HOLD",
+                    "strategy": None,
+                    "reasoning": "SPY had no clear signal.",
+                    "memory_summary": None,
+                    "execution_result": "HOLD",
+                },
+                {
+                    "ticker": "QQQ",
+                    "action": "BUY",
+                    "strategy": "MOMENTUM",
+                    "reasoning": "QQQ broke out on rising ADX.",
+                    "memory_summary": None,
+                    "execution_result": "EXECUTED",
+                },
+            ],
+            "strategy": None,
+            "signals": None,
+            "execution_result": None,
+            "position": None,
+        },
+    )
+
+    # The evaluated position is on QQQ, the second ticker in the report.
+    thesis = FeedbackAgent._extract_thesis(report_path, "QQQ")
+    assert "QQQ broke out on rising ADX." in thesis
+    assert "SPY had no clear signal." not in thesis
