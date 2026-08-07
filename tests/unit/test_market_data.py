@@ -16,7 +16,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from alphoryn.config.models import TIMEFRAME_SECONDS
 from alphoryn.market_data.client import (
+    REQUIRED_BARS,
+    TIMEFRAMES,
     AssetSignals,
     MarketDataClient,
     SignalSnapshot,
@@ -336,3 +339,56 @@ def test_get_latest_price_returns_float() -> None:
         price = client.get_latest_price("QQQ")
     assert isinstance(price, float)
     assert price == pytest.approx(452.75, rel=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Configured candle timeframe drives the bar request (issue #135)
+# ---------------------------------------------------------------------------
+
+
+def _captured_bars_request(candle_timeframe: str) -> object:
+    """Run _data_fetch for a timeframe and return the StockBarsRequest it built."""
+    client = MarketDataClient(
+        api_key="k", secret_key="s", candle_timeframe=candle_timeframe
+    )
+    mock_response = MagicMock()
+    mock_response.__getitem__ = MagicMock(return_value=_trending_bars())
+    with patch("alphoryn.market_data.client.StockHistoricalDataClient") as mock_cls:
+        mock_cls.return_value.get_stock_bars.return_value = mock_response
+        client._data_fetch("SPY", datetime(2024, 1, 15, 15, 0, tzinfo=UTC))
+        return mock_cls.return_value.get_stock_bars.call_args.args[0]
+
+
+@pytest.mark.parametrize("timeframe", ["10min", "15min", "30min", "1H", "4H"])
+def test_bar_request_uses_the_configured_timeframe(timeframe: str) -> None:
+    """On main every timeframe silently fetched 1H bars."""
+    assert _captured_bars_request(timeframe).timeframe == TIMEFRAMES[timeframe]
+
+
+@pytest.mark.parametrize("timeframe", ["10min", "15min", "30min", "1H", "4H"])
+def test_lookback_scales_with_the_configured_timeframe(timeframe: str) -> None:
+    """A fixed 60-hour window is only ever right for one timeframe."""
+    req = _captured_bars_request(timeframe)
+    assert (req.end - req.start).total_seconds() == (
+        REQUIRED_BARS * TIMEFRAME_SECONDS[timeframe] * 8
+    )
+
+
+def test_every_configured_timeframe_is_mapped() -> None:
+    assert set(TIMEFRAMES) == set(TIMEFRAME_SECONDS)
+
+
+def test_data_fetch_uses_only_the_most_recent_required_bars() -> None:
+    """Over-fetching for market hours must not drag stale bars into the signals."""
+    client = MarketDataClient(api_key="k", secret_key="s", candle_timeframe="1H")
+    bars = [*_flat_bars(n=REQUIRED_BARS + 40, price=100.0), _make_bar(200.0)]
+    mock_response = MagicMock()
+    mock_response.__getitem__ = MagicMock(return_value=bars)
+    with patch("alphoryn.market_data.client.StockHistoricalDataClient") as mock_cls:
+        mock_cls.return_value.get_stock_bars.return_value = mock_response
+        signals = client._data_fetch("SPY", datetime(2024, 1, 15, 15, 0, tzinfo=UTC))
+
+    # 60 bars: 59 flat at 100 plus the 200 spike. The SMA-20 would be 100.0 flat
+    # if the older bars had been included beyond the slice.
+    assert signals.current_price == 200.0
+    assert signals.sma_20 == (19 * 100.0 + 200.0) / 20

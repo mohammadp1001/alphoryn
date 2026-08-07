@@ -11,7 +11,29 @@ from datetime import UTC, datetime, timedelta
 from alpaca.data.enums import DataFeed
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+
+from alphoryn.config.models import TIMEFRAME_SECONDS
+
+# Alpaca bar timeframe for each configured candle_timeframe. Without this the
+# agent reasoned over 1H bars whatever the config said (issue #135).
+TIMEFRAMES: dict[str, TimeFrame] = {
+    "10min": TimeFrame(10, TimeFrameUnit.Minute),
+    "15min": TimeFrame(15, TimeFrameUnit.Minute),
+    "30min": TimeFrame(30, TimeFrameUnit.Minute),
+    "1H": TimeFrame.Hour,
+    "4H": TimeFrame(4, TimeFrameUnit.Hour),
+}
+
+# EMA-50 and the MACD signal line need a long series; 60 bars is the shortest
+# that leaves headroom over both.
+REQUIRED_BARS = 60
+
+# US equities trade ~6.5 hours of each 24-hour day, 5 days in 7 - so a window of
+# wall-clock time yields well under a fifth as many bars as it looks like it
+# should. Over-fetch by this factor and slice, rather than silently computing
+# EMA-50 from a handful of bars.
+_MARKET_HOURS_OVERSAMPLE = 8
 
 
 @dataclass(frozen=True)
@@ -142,10 +164,17 @@ class MarketDataClient:
     _data_fetch is internal and never exposed to agents (Principle V).
     """
 
-    def __init__(self, api_key: str = "", secret_key: str = "", paper: bool = True) -> None:
+    def __init__(
+        self,
+        api_key: str = "",
+        secret_key: str = "",
+        paper: bool = True,
+        candle_timeframe: str = "1H",
+    ) -> None:
         self._api_key = api_key or os.environ.get("ALPACA_API_KEY", "")
         self._secret_key = secret_key or os.environ.get("ALPACA_SECRET_KEY", "")
         self._paper = paper
+        self._candle_timeframe = candle_timeframe
         self.model = None  # Principle I: no LLM model
 
     def build_snapshot(self, tickers: list[str], candle_close_at: datetime | str) -> SignalSnapshot:
@@ -155,20 +184,29 @@ class MarketDataClient:
         signals = {ticker: self._data_fetch(ticker, candle_close_at) for ticker in tickers}
         return SignalSnapshot(captured_at=candle_close_at, signals=signals)
 
+    def _lookback(self) -> timedelta:
+        """Wall-clock window to request in order to come back with REQUIRED_BARS."""
+        bar_seconds = TIMEFRAME_SECONDS[self._candle_timeframe]
+        return timedelta(seconds=REQUIRED_BARS * bar_seconds * _MARKET_HOURS_OVERSAMPLE)
+
     def _data_fetch(self, ticker: str, candle_close_at: datetime) -> AssetSignals:
-        """Internal: fetch 60 1H bars ending at candle_close_at and compute all 15 signals."""
+        """Internal: fetch the configured-timeframe bars and compute all 15 signals.
+
+        The timeframe is the configured candle_timeframe, not a hardcoded 1H:
+        the indicators describe the timeframe the agent is told they describe.
+        """
         client = StockHistoricalDataClient(
             api_key=self._api_key, secret_key=self._secret_key
         )
-        start = candle_close_at - timedelta(hours=60)
+        start = candle_close_at - self._lookback()
         req = StockBarsRequest(
             symbol_or_symbols=ticker,
-            timeframe=TimeFrame.Hour,
+            timeframe=TIMEFRAMES[self._candle_timeframe],
             start=start,
             end=candle_close_at,
             feed=DataFeed.IEX,
         )
-        bars = client.get_stock_bars(req)[ticker]
+        bars = client.get_stock_bars(req)[ticker][-REQUIRED_BARS:]
 
         closes = [b.close for b in bars]
         highs = [b.high for b in bars]
