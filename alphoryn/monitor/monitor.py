@@ -79,6 +79,8 @@ class PositionMonitor(threading.Thread):
 
         elif target_type == "trailing_stop":
             trail_pct = float(exit_target.get("trail_pct", 0.015))
+            # Entries seed the watermark with the entry price (issue #130); the
+            # None case only covers rows written before that fix.
             watermark = pos.trailing_stop_high_watermark
             if watermark is None or current_price > watermark:
                 self._bank.update_trailing_watermark(pos.id, current_price)

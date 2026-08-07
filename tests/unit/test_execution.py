@@ -8,6 +8,7 @@ Tests verify:
 - Zero LLM model calls — constitution Principle I
 """
 
+import threading
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -23,6 +24,7 @@ from alphoryn.execution.agent import (
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import Position
 from alphoryn.memory.schema import Session as Sess
+from alphoryn.monitor.monitor import PositionMonitor
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -637,4 +639,42 @@ def test_execution_without_a_logger_still_executes(tmp_path) -> None:
     bank.start_run('{"tickers":["SPY"]}', 6)
     mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
     mock_alpaca.submit_order.assert_called_once()
+    bank._engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Trailing stop watermark is seeded at entry (issue #130)
+# ---------------------------------------------------------------------------
+
+
+def test_entry_seeds_the_trailing_watermark_with_the_entry_price(tmp_path) -> None:
+    """strategies/momentum.md: initialised to entry_price at entry."""
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
+
+    position = bank.load_open_positions()[0]
+    assert position.trailing_stop_high_watermark == position.entry_price == 450.0
+    bank._engine.dispose()
+
+
+def test_a_position_that_gaps_down_keeps_its_entry_price_as_the_trail_floor(tmp_path) -> None:
+    """On main the watermark was NULL, so the first (lower) price became the floor."""
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
+
+    pos = bank.load_open_positions()[0]
+    monitor = PositionMonitor(
+        bank=bank,
+        market_data=MagicMock(get_latest_price=MagicMock(return_value=447.0)),
+        logger=MagicMock(),
+        stop_event=threading.Event(),
+    )
+    with patch("alphoryn.monitor.monitor.TradingClient"):
+        monitor._check_position(pos)
+
+    # 447 is above the 441 stop-loss and above 450 * (1 - 0.015) = 443.25, so the
+    # position survives - and the watermark must not have ratcheted down to 447.
+    assert bank.load_open_positions()[0].trailing_stop_high_watermark == 450.0
     bank._engine.dispose()
