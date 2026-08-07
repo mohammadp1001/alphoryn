@@ -85,53 +85,93 @@ class ExecutionAgent:
         for asset_decision in decision.decisions:
             self._execute_ticker(asset_decision, decision.session_id)
 
-    def _execute_ticker(self, asset_decision: AssetDecision, session_id: str) -> None:
-        if asset_decision.action == "HOLD":
-            return
-
-        # FR-014: never open a new position on a feedback-blocked ticker. Second
-        # gate only — the scheduler already keeps blocked tickers out of the
-        # investigation (FR-005) — so this protects direct callers of the agent.
-        # SELL is exempt: a Sell closes an existing position, so the blocking
-        # position is the very thing it is trying to unwind.
-        if (
-            asset_decision.action == "BUY"
-            and asset_decision.ticker in self._bank.get_feedback_blocked_tickers()
-        ):
-            return  # position-blocked → treat as HOLD
-
-        client = TradingClient(
+    def _trading_client(self) -> TradingClient:
+        return TradingClient(
             api_key=os.environ.get("ALPACA_API_KEY", ""),
             secret_key=os.environ.get("ALPACA_SECRET_KEY", ""),
             paper=True,
         )
 
-        # Budget check via Alpaca account API
-        account = client.get_account()
-        buying_power = float(account.buying_power)
+    def _latest_ask(self, ticker: str) -> float:
+        """Return the latest ask price for *ticker*.
+
+        Used for both entry and exit pricing. It is an approximation of the fill
+        price in either direction — a market order does not fill at the quote —
+        but keeping entry and exit on the same reference means the feedback
+        agent compares like with like.
+        """
         data_client = StockHistoricalDataClient(
             api_key=os.environ.get("ALPACA_API_KEY", ""),
             secret_key=os.environ.get("ALPACA_SECRET_KEY", ""),
         )
         quotes = data_client.get_stock_latest_quote(
-            StockLatestQuoteRequest(
-                symbol_or_symbols=asset_decision.ticker,
-                feed=DataFeed.IEX,
+            StockLatestQuoteRequest(symbol_or_symbols=ticker, feed=DataFeed.IEX)
+        )
+        return float(quotes[ticker].ask_price)
+
+    def _execute_ticker(self, asset_decision: AssetDecision, session_id: str) -> None:
+        if asset_decision.action == "HOLD":
+            return
+        if asset_decision.action == "SELL":
+            self._close_position(asset_decision)
+            return
+        self._open_position(asset_decision, session_id)
+
+    def _close_position(self, asset_decision: AssetDecision) -> None:
+        """Close the open position on this ticker (data-model.md: Sell closes a Buy).
+
+        A Sell is only ever an instruction to unwind. With no open position there
+        is nothing to unwind, so the order is rejected rather than submitted —
+        submitting it would open a short, which v0.0.1 does not support.
+        """
+        open_position = next(
+            (p for p in self._bank.load_open_positions() if p.ticker == asset_decision.ticker),
+            None,
+        )
+        if open_position is None:
+            return  # ORDER_FAILED — nothing to close; never open a short
+
+        exit_price = self._latest_ask(asset_decision.ticker)
+        self._trading_client().submit_order(
+            MarketOrderRequest(
+                symbol=asset_decision.ticker,
+                qty=int(open_position.lot_size),  # close the whole position
+                side=OrderSide.SELL,
+                time_in_force=TimeInForce.DAY,
             )
         )
-        ask_price = float(quotes[asset_decision.ticker].ask_price)
+        self._bank.update_position_close(
+            open_position.id,
+            exit_price=exit_price,
+            exit_time=datetime.now(UTC),
+            exit_reason="AGENT_EXIT",
+            status="CLOSED_AGENT_EXIT",
+        )
+
+    def _open_position(self, asset_decision: AssetDecision, session_id: str) -> None:
+        """Open a new long position (FR-014 blocked tickers are refused)."""
+        # Second gate only — the scheduler already keeps blocked tickers out of
+        # the investigation (FR-005) — so this protects direct callers.
+        if asset_decision.ticker in self._bank.get_feedback_blocked_tickers():
+            return  # position-blocked → treat as HOLD
+
+        client = self._trading_client()
+
+        # Budget check via Alpaca account API. Buying power only constrains an
+        # entry; closing a position never needs it, which is why this sits here.
+        account = client.get_account()
+        buying_power = float(account.buying_power)
+        ask_price = self._latest_ask(asset_decision.ticker)
         lot = asset_decision.lot_size or 1
         required = ask_price * lot
         if buying_power < required:
             return  # ORDER_FAILED — insufficient budget
 
-        # Place market order
-        side = OrderSide.BUY if asset_decision.action == "BUY" else OrderSide.SELL
         client.submit_order(
             MarketOrderRequest(
                 symbol=asset_decision.ticker,
                 qty=lot,
-                side=side,
+                side=OrderSide.BUY,
                 time_in_force=TimeInForce.DAY,
             )
         )
@@ -144,7 +184,7 @@ class ExecutionAgent:
             session_id=session_id,
             ticker=asset_decision.ticker,
             strategy=asset_decision.strategy,
-            direction=asset_decision.action,
+            direction="BUY",  # data-model.md: only Buy positions are ever tracked
             entry_price=ask_price,
             entry_time=entry_time,
             lot_size=float(lot),

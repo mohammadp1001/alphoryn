@@ -121,7 +121,7 @@ One record per open paper trade. Ticker-scoped; the two tickers are fully indepe
 | `status` | `TEXT` | See Position States below |
 | `exit_price` | `REAL \| NULL` | NULL until closed |
 | `exit_time` | `DATETIME \| NULL` | NULL until closed |
-| `exit_reason` | `TEXT \| NULL` | `STOP_LOSS`, `PROFIT_TARGET`, `WINDOW_EXPIRY` |
+| `exit_reason` | `TEXT \| NULL` | `STOP_LOSS`, `PROFIT_TARGET`, `WINDOW_EXPIRY` (all monitor-driven), `AGENT_EXIT` (main agent decided Sell) |
 
 **Position States** (design doc §Step 4; spec FR-014):
 
@@ -129,11 +129,22 @@ One record per open paper trade. Ticker-scoped; the two tickers are fully indepe
 OPEN
   → CLOSED_STOP_LOSS       (monitor: price ≤ stop_loss_price)
   → CLOSED_PROFIT_TARGET   (monitor: price reaches exit_target)
-  → CLOSED_WINDOW_EXPIRY   (scheduler: evaluation window session reached)
+  → CLOSED_WINDOW_EXPIRY   (monitor: evaluation_window_close_at reached)
+  → CLOSED_AGENT_EXIT      (execution agent: main agent decided Sell)
         ↓
 EVALUATED                  (feedback agent: wrote evaluation record)
 EVALUATION_FAILED          (feedback agent: 3 retries exhausted — spec FR-016a)
 ```
+
+All four `CLOSED_*` statuses block their ticker until evaluated (FR-005) and are picked up
+by the feedback trigger once `evaluation_window_close_at` passes.
+
+**Sell handling**: a Sell decision closes the ticker's open position in place — it updates
+`exit_price` / `exit_time` / `exit_reason` / `status` on the existing row and never writes
+a new one. A Sell on a ticker with no open position is rejected outright rather than
+submitted, since submitting it would open a short. Short positions are out of scope for
+v0.0.1, which is why `direction` is always `BUY` and the monitor's exit checks are
+long-only.
 
 ---
 

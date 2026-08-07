@@ -66,10 +66,12 @@ class Position(Base):
     evaluation_window_close_at = Column(DateTime, nullable=False)
     status = Column(String, nullable=False, default="OPEN")
     # Valid statuses: OPEN | CLOSED_STOP_LOSS | CLOSED_PROFIT_TARGET |
-    #                 CLOSED_WINDOW_EXPIRY | EVALUATED | EVALUATION_FAILED
+    #                 CLOSED_WINDOW_EXPIRY | CLOSED_AGENT_EXIT |
+    #                 EVALUATED | EVALUATION_FAILED
     exit_price = Column(Float, nullable=True)
     exit_time = Column(DateTime, nullable=True)
-    exit_reason = Column(String, nullable=True)  # STOP_LOSS | PROFIT_TARGET | WINDOW_EXPIRY
+    # STOP_LOSS | PROFIT_TARGET | WINDOW_EXPIRY (monitor) | AGENT_EXIT (Sell decision)
+    exit_reason = Column(String, nullable=True)
 
     session = relationship("Session", back_populates="positions")
     feedback_evaluation = relationship(

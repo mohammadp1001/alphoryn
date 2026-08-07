@@ -752,3 +752,27 @@ def test_blocked_tickers_are_independent_per_ticker() -> None:
 def test_no_positions_blocks_nothing() -> None:
     bank, _ = _bank_with_session()
     assert bank.get_feedback_blocked_tickers() == set()
+
+
+# ---------------------------------------------------------------------------
+# CLOSED_AGENT_EXIT participates in both queries (issue #126)
+# ---------------------------------------------------------------------------
+
+
+def test_agent_exit_position_blocks_its_ticker() -> None:
+    bank, sess_id = _bank_with_session()
+    bank.write_position(
+        _sample_position(sess_id, ticker="SPY", status="CLOSED_AGENT_EXIT")
+    )
+    assert bank.get_feedback_blocked_tickers() == {"SPY"}
+
+
+def test_agent_exit_position_is_due_for_feedback() -> None:
+    """An agent-decided exit must be learned from like any other close."""
+    bank, sess_id = _bank_with_session()
+    pos = _sample_position(sess_id, ticker="SPY", status="CLOSED_AGENT_EXIT")
+    pos.evaluation_window_close_at = _WINDOW_CLOSED
+    bank.write_position(pos)
+
+    due = bank.get_positions_due_for_feedback(_NOW)
+    assert [p.status for p in due] == ["CLOSED_AGENT_EXIT"]
