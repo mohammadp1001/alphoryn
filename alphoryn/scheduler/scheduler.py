@@ -462,9 +462,7 @@ class Scheduler:
                 "execution_result": None,
                 "position": None,
             }
-            report_path = self._report_generator.write(
-                f"run-{run_id}", session_id, context
-            )
+            report_path = self._report_generator.write(session_id, context)
             typer.echo(f"[{session_id}] Report -> {report_path}")
 
         ticker_decisions_json: str | None = None
