@@ -158,15 +158,32 @@ class Scheduler:
         the scheduler can run during pre/post-market hours and for integration
         testing (constitution Development Standards).
 
-        Falls back to True (optimistic) if the Alpaca API is unavailable.
+        Falls back to False if the Alpaca clock is unavailable or malformed
+        (Principle IV: fail loud, hold safe). An unreachable clock is not
+        evidence that the market is open, and trading on that assumption is
+        the one failure mode the guard exists to prevent — so the session is
+        held and the reason is written to stderr.
         """
         if self._cfg.extended_hours:
             return True
         try:
             clock = self.get_market_clock()
-            return bool(getattr(clock, "is_open", True))
-        except Exception:
-            return True
+        except Exception as exc:
+            typer.echo(
+                f"WARN: Could not fetch market clock from Alpaca: {exc}. "
+                "Holding — treating the market as closed.",
+                err=True,
+            )
+            return False
+        is_open = getattr(clock, "is_open", None)
+        if is_open is None:
+            typer.echo(
+                "WARN: Alpaca clock has no is_open field. "
+                "Holding — treating the market as closed.",
+                err=True,
+            )
+            return False
+        return bool(is_open)
 
     # ------------------------------------------------------------------
     # Countdown display and wait
