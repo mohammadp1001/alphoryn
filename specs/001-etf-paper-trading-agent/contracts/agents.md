@@ -34,9 +34,16 @@ class SessionDecision:
 - Mean Reversion: `{"type": "price_level", "value": 123.45}`
 - Momentum: `{"type": "trailing_stop", "trail_pct": 0.015}`
 
+Blocked tickers never reach this handoff as anything but Hold: the scheduler filters them
+out of the investigation input before `main_agent` is invoked (FR-005, see §Investigation
+Gating below) and re-inserts them as Hold afterwards.
+
 **Execution sequence in `execution/agent.py`** (per ticker, sequential, via `execute()` iterating `decision.decisions`):
 1. If action is HOLD: skip
-2. If an existing `OPEN` position exists for the same ticker: force HOLD (position-blocked, FR-014)
+2. If action is BUY and the ticker is feedback-blocked: force HOLD (FR-014). This is a
+   second gate for direct callers of `ExecutionAgent`; the scheduler has normally already
+   excluded the ticker. SELL is deliberately exempt — a Sell closes an existing position,
+   so the blocking position is the very thing it unwinds
 3. Budget check via `alpaca-py` account API
 4. If budget insufficient: skip the ticker's order
 5. Place market order via `alpaca-py`
@@ -143,6 +150,26 @@ open_positions = session.query(Position).filter(
 ```
 
 These are passed to the session loop and monitor at startup. Per FR-019: if a position
-exists for a ticker from a prior run, that ticker is blocked from new Buy orders until the
-position closes. The block is enforced in `execution/agent.py` at order time by checking
-for an existing OPEN position for the same ticker before proceeding.
+exists for a ticker from a prior run, that ticker is blocked until the position closes
+*and* its feedback evaluation completes.
+
+---
+
+## Investigation Gating (FR-005)
+
+A ticker is **feedback-blocked** while it holds a position that is still `OPEN`, or that
+has closed but has no `FeedbackEvaluation` yet. `EVALUATED` clears the block, and so does
+`EVALUATION_FAILED` (§Retry policy unblocks the ticker rather than stranding it).
+
+`MemoryBank.get_feedback_blocked_tickers()` is the single definition. At each session start
+the scheduler:
+
+1. Computes the blocked set and emits `TICKER_BLOCKED` per blocked configured ticker
+2. Passes only the unblocked tickers to `main_agent.decide` — a blocked ticker is never
+   part of an Investigation Agent call, which is the FR-005 requirement
+3. Skips the `main_agent.decide` call entirely when every configured ticker is blocked
+4. Re-expands the returned decision over all configured tickers in config order, recording
+   Hold for the blocked ones so the session outcome is still written
+
+Blocked tickers outside `cfg.tickers` (a stale position on a ticker no longer traded) are
+ignored.

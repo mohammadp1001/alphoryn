@@ -21,7 +21,7 @@ from alpaca.trading.client import TradingClient
 from alphoryn.agents.feedback_agent import FeedbackAgent, FeedbackInput
 from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.models import TIMEFRAME_SECONDS, AlphorynConfig
-from alphoryn.execution.agent import ExecutionAgent, SessionDecision
+from alphoryn.execution.agent import AssetDecision, ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import MemoryEntry, Session
 from alphoryn.monitor.monitor import PositionMonitor
@@ -225,6 +225,7 @@ class Scheduler:
         self,
         session_id: str,
         candle_close_at: datetime,
+        tickers: list[str],
     ) -> "SessionDecision | None":
         """Run main_agent.decide() with investigation budget and heartbeat.
 
@@ -244,7 +245,7 @@ class Scheduler:
                 future = executor.submit(
                     self._main_agent.decide,  # type: ignore[union-attr]
                     session_id,
-                    self._cfg.tickers,
+                    tickers,
                     candle_close_at,
                 )
                 try:
@@ -313,6 +314,62 @@ class Scheduler:
             )
             self._feedback_agent.evaluate(feedback_input, session_id)
 
+    def _blocked_tickers(self, session_id: str) -> set[str]:
+        """Return configured tickers that are feedback-blocked this session (FR-005)."""
+        blocked = self._bank.get_feedback_blocked_tickers() & set(self._cfg.tickers)
+        for ticker in sorted(blocked):
+            typer.echo(f"[{session_id}] BLOCKED  {ticker} — prior position awaiting evaluation")
+            if self._logger is not None:
+                self._logger.emit(
+                    "TICKER_BLOCKED",
+                    "scheduler",
+                    {"reason": "FEEDBACK_UNEVALUATED"},
+                    session_id=session_id,
+                    etf=ticker,
+                )
+        return blocked
+
+    def _hold_decision(self, ticker: str, reasoning: str) -> "AssetDecision":
+        """Build the Hold outcome recorded for a ticker that was not investigated."""
+        return AssetDecision(
+            ticker=ticker,
+            action="HOLD",
+            strategy=None,
+            lot_size=None,
+            exit_target=None,
+            reasoning=reasoning,
+        )
+
+    def _merge_blocked_holds(
+        self,
+        decision: "SessionDecision",
+        blocked: set[str],
+    ) -> "SessionDecision":
+        """Re-expand a decision over every configured ticker, in config order.
+
+        The investigation only ever sees unblocked tickers, so blocked ones come
+        back as Hold here — FR-005 requires their session outcome to be recorded
+        even though no Investigation Agent call was made for them.
+        """
+        by_ticker = {d.ticker: d for d in decision.decisions}
+        merged: list[AssetDecision] = []
+        for ticker in self._cfg.tickers:
+            investigated = by_ticker.pop(ticker, None)
+            if investigated is not None:
+                merged.append(investigated)
+            elif ticker in blocked:
+                merged.append(
+                    self._hold_decision(
+                        ticker, "Feedback-blocked: prior position awaiting evaluation (FR-005)."
+                    )
+                )
+            else:
+                merged.append(
+                    self._hold_decision(ticker, "No decision returned by the investigation.")
+                )
+        merged.extend(by_ticker.values())  # tickers the agent invented; keep, do not drop
+        return SessionDecision(session_id=decision.session_id, decisions=merged)
+
     def _process_session(
         self,
         run_id: int,
@@ -329,8 +386,19 @@ class Scheduler:
         self._run_feedback(session_id)
 
         t0 = datetime.now(UTC)
-        typer.echo(f"[{session_id}] Investigating market snapshot …")
-        decision = self._run_investigation(session_id, candle_close_at)
+        blocked = self._blocked_tickers(session_id)
+        active = [t for t in self._cfg.tickers if t not in blocked]
+
+        if active:
+            typer.echo(f"[{session_id}] Investigating market snapshot …")
+            decision = self._run_investigation(session_id, candle_close_at, active)
+        else:
+            # FR-005: no Investigation Agent call is made when every ticker is blocked.
+            typer.echo(f"[{session_id}] All tickers feedback-blocked — skipping investigation")
+            decision = SessionDecision(session_id=session_id, decisions=[])
+
+        if decision is not None:
+            decision = self._merge_blocked_holds(decision, blocked)
 
         if decision is None:
             typer.echo(f"[{session_id}] SKIPPED  investigation budget exceeded")

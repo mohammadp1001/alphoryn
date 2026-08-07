@@ -1,5 +1,6 @@
 """Unit tests for alphoryn/scheduler/scheduler.py (T016 + T029/T030 scope)."""
 
+import json
 import threading
 import time
 from datetime import UTC, datetime, timedelta
@@ -328,6 +329,7 @@ def _full_scheduler(**extra) -> Scheduler:
     """Build a scheduler with 1 session and mock agents/logger."""
     bank = MagicMock()
     bank.start_run.return_value = 1
+    bank.get_feedback_blocked_tickers.return_value = set()
     cfg = AlphorynConfig(
         tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
@@ -549,14 +551,14 @@ def test_heartbeat_loop_exits_when_stop_event_set() -> None:
 
 def test_run_investigation_returns_decision_on_success() -> None:
     sched = _full_scheduler()
-    result = sched._run_investigation("sess-001", datetime.now(UTC))
+    result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
     assert result == _FIXTURE_DECISION
 
 
 def test_run_investigation_returns_none_on_timeout() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
-    result = sched._run_investigation("sess-001", datetime.now(UTC))
+    result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
     assert result is None
 
 
@@ -661,7 +663,7 @@ def test_investigation_timeout_no_logger_returns_none() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
     sched._logger = None
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
-    result = sched._run_investigation("sess-001", datetime.now(UTC))
+    result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
     assert result is None
 
 
@@ -704,6 +706,7 @@ def _full_scheduler_with_feedback(**extra) -> Scheduler:
     bank = MagicMock()
     bank.start_run.return_value = 1
     bank.get_positions_due_for_feedback.return_value = []
+    bank.get_feedback_blocked_tickers.return_value = set()
     cfg = AlphorynConfig(
         tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
@@ -1011,3 +1014,146 @@ def test_run_holds_process_open_while_positions_remain() -> None:
     _run_with_no_wait(sched)
 
     assert stop_event.is_set()
+
+
+# ---------------------------------------------------------------------------
+# Feedback-blocking gates investigation — FR-005 / FR-014 (issue #124)
+# ---------------------------------------------------------------------------
+
+
+def _blocking_scheduler(blocked: set[str]) -> Scheduler:
+    sched = _full_scheduler_with_feedback()
+    sched._bank.get_feedback_blocked_tickers.return_value = blocked
+    return sched
+
+
+def _decision_for(*tickers: str) -> SessionDecision:
+    return SessionDecision(
+        session_id="run-1/session-0001",
+        decisions=[
+            AssetDecision(
+                ticker=t,
+                action="BUY",
+                strategy="MOMENTUM",
+                lot_size=5,
+                exit_target={"type": "trailing_stop", "trail_pct": 0.015},
+                reasoning="signal",
+            )
+            for t in tickers
+        ],
+    )
+
+
+def test_blocked_ticker_is_kept_out_of_the_investigation_call() -> None:
+    """FR-005: no Investigation Agent call is made for a blocked ticker."""
+    sched = _blocking_scheduler({"SPY"})
+    with patch.object(
+        sched, "_run_investigation", return_value=_decision_for("QQQ")
+    ) as mock_investigation:
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    assert mock_investigation.call_args.args[2] == ["QQQ"]
+
+
+def test_unblocked_tickers_are_all_investigated() -> None:
+    sched = _blocking_scheduler(set())
+    with patch.object(
+        sched, "_run_investigation", return_value=_decision_for("SPY", "QQQ")
+    ) as mock_investigation:
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    assert mock_investigation.call_args.args[2] == ["SPY", "QQQ"]
+
+
+def test_all_tickers_blocked_skips_the_investigation_entirely() -> None:
+    sched = _blocking_scheduler({"SPY", "QQQ"})
+    with patch.object(sched, "_run_investigation") as mock_investigation:
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    mock_investigation.assert_not_called()
+    sched._main_agent.decide.assert_not_called()
+
+
+def test_blocked_ticker_outcome_is_recorded_as_hold() -> None:
+    """FR-005: the blocked ticker's session outcome is still recorded, as Hold."""
+    sched = _blocking_scheduler({"SPY"})
+    with patch.object(sched, "_run_investigation", return_value=_decision_for("QQQ")):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    written = sched._bank.write_session.call_args.args[0]
+    recorded = json.loads(written.ticker_decisions)
+    assert recorded["SPY"] == {"strategy": None, "decision": "HOLD"}
+    assert recorded["QQQ"]["decision"] == "BUY"
+
+
+def test_blocked_ticker_is_not_sent_to_the_execution_agent_as_a_buy() -> None:
+    sched = _blocking_scheduler({"SPY"})
+    with patch.object(sched, "_run_investigation", return_value=_decision_for("QQQ")):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    executed = sched._execution_agent.execute.call_args.args[0]
+    spy = next(d for d in executed.decisions if d.ticker == "SPY")
+    assert spy.action == "HOLD"
+
+
+def test_blocked_ticker_emits_telemetry() -> None:
+    sched = _blocking_scheduler({"SPY"})
+    with patch.object(sched, "_run_investigation", return_value=_decision_for("QQQ")):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    blocked_events = [
+        c for c in sched._logger.emit.call_args_list if c.args[0] == "TICKER_BLOCKED"
+    ]
+    assert len(blocked_events) == 1
+    assert blocked_events[0].kwargs["etf"] == "SPY"
+
+
+def test_blocked_tickers_outside_the_config_are_ignored() -> None:
+    """A stale position on a ticker no longer configured must not affect the session."""
+    sched = _blocking_scheduler({"IWM"})
+    with patch.object(
+        sched, "_run_investigation", return_value=_decision_for("SPY", "QQQ")
+    ) as mock_investigation:
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    assert mock_investigation.call_args.args[2] == ["SPY", "QQQ"]
+    blocked_events = [
+        c for c in sched._logger.emit.call_args_list if c.args[0] == "TICKER_BLOCKED"
+    ]
+    assert blocked_events == []
+
+
+def test_blocked_tickers_without_logger_does_not_raise() -> None:
+    sched = _blocking_scheduler({"SPY"})
+    sched._logger = None
+    assert sched._blocked_tickers("run-1/session-0001") == {"SPY"}
+
+
+def test_merge_restores_configured_ticker_order() -> None:
+    sched = _blocking_scheduler({"SPY"})
+    merged = sched._merge_blocked_holds(_decision_for("QQQ"), {"SPY"})
+    assert [d.ticker for d in merged.decisions] == ["SPY", "QQQ"]
+
+
+def test_merge_holds_a_ticker_the_agent_silently_dropped() -> None:
+    sched = _blocking_scheduler(set())
+    merged = sched._merge_blocked_holds(_decision_for("SPY"), set())
+    qqq = next(d for d in merged.decisions if d.ticker == "QQQ")
+    assert qqq.action == "HOLD"
+    assert "No decision returned" in qqq.reasoning
+
+
+def test_merge_keeps_a_ticker_the_agent_invented() -> None:
+    sched = _blocking_scheduler(set())
+    merged = sched._merge_blocked_holds(_decision_for("SPY", "QQQ", "IWM"), set())
+    assert [d.ticker for d in merged.decisions] == ["SPY", "QQQ", "IWM"]
+
+
+def test_timed_out_investigation_is_not_merged() -> None:
+    """A budget timeout must still record SKIPPED_TIMEOUT, not a wall of Holds."""
+    sched = _blocking_scheduler({"SPY"})
+    with patch.object(sched, "_run_investigation", return_value=None):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    written = sched._bank.write_session.call_args.args[0]
+    assert written.status == "SKIPPED_TIMEOUT"

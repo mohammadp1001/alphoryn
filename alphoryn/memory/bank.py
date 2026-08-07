@@ -185,6 +185,31 @@ class MemoryBank:
     # Queries for scheduler / feedback trigger
     # ------------------------------------------------------------------
 
+    def get_feedback_blocked_tickers(self) -> set[str]:
+        """Return tickers that must not be investigated or bought this session.
+
+        Per FR-005 a ticker is feedback-blocked while it holds a position that is
+        still ``OPEN``, or that has closed but has no ``FeedbackEvaluation`` yet.
+        ``EVALUATED`` clears the block, and so does ``EVALUATION_FAILED`` —
+        contracts/agents.md §Retry policy unblocks the ticker after three failed
+        attempts rather than stranding it forever.
+        """
+        blocking_statuses = (
+            "OPEN",
+            "CLOSED_STOP_LOSS",
+            "CLOSED_PROFIT_TARGET",
+            "CLOSED_WINDOW_EXPIRY",
+        )
+        with DBSession(self._engine) as s:
+            candidates = (
+                s.query(Position).filter(Position.status.in_(blocking_statuses)).all()
+            )
+            return {
+                p.ticker
+                for p in candidates
+                if p.status == "OPEN" or p.feedback_evaluation is None
+            }
+
     def get_positions_due_for_feedback(self, now: datetime) -> list[Position]:
         """Return closed positions whose evaluation window has closed by *now*.
 
