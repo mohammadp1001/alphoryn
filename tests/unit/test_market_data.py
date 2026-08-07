@@ -392,3 +392,39 @@ def test_data_fetch_uses_only_the_most_recent_required_bars() -> None:
     # if the older bars had been included beyond the slice.
     assert signals.current_price == 200.0
     assert signals.sma_20 == (19 * 100.0 + 200.0) / 20
+
+
+# ---------------------------------------------------------------------------
+# get_price_at — the candle at a past timestamp (issue #129, FR-016)
+# ---------------------------------------------------------------------------
+
+
+def _captured_price_at_request(candle_timeframe: str = "1H") -> tuple[float, object]:
+    client = MarketDataClient(
+        api_key="k", secret_key="s", candle_timeframe=candle_timeframe
+    )
+    bars = [_make_bar(100.0), _make_bar(123.0)]
+    mock_response = MagicMock()
+    mock_response.__getitem__ = MagicMock(return_value=bars)
+    with patch("alphoryn.market_data.client.StockHistoricalDataClient") as mock_cls:
+        mock_cls.return_value.get_stock_bars.return_value = mock_response
+        price = client.get_price_at("SPY", datetime(2024, 1, 15, 19, 0, tzinfo=UTC))
+        return price, mock_cls.return_value.get_stock_bars.call_args.args[0]
+
+
+def test_get_price_at_returns_the_close_of_the_candle_at_the_timestamp() -> None:
+    price, req = _captured_price_at_request()
+    assert price == 123.0
+    # StockBarsRequest normalises the datetime to naive UTC.
+    assert req.end.replace(tzinfo=UTC) == datetime(2024, 1, 15, 19, 0, tzinfo=UTC)
+
+
+def test_get_price_at_never_looks_past_the_timestamp() -> None:
+    """The whole point of FR-016: not the latest price."""
+    _, req = _captured_price_at_request()
+    assert req.start < req.end
+
+
+def test_get_price_at_uses_the_configured_timeframe() -> None:
+    _, req = _captured_price_at_request("4H")
+    assert req.timeframe == TIMEFRAMES["4H"]

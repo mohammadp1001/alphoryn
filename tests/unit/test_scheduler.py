@@ -1384,3 +1384,26 @@ def test_blocked_tickers_contribute_no_memory_to_the_investigation() -> None:
 
     memory_arg = sched._main_agent.decide.call_args.args[3]
     assert [e["ticker"] for e in memory_arg] == ["QQQ"]
+
+
+# ---------------------------------------------------------------------------
+# Feedback input carries the evaluation timestamp (issue #129)
+# ---------------------------------------------------------------------------
+
+
+def test_feedback_input_carries_the_evaluation_window_deadline() -> None:
+    """FR-016: the feedback agent needs the timestamp to price the candle at."""
+    sched = _full_scheduler_with_feedback()
+    pos = _make_mock_position()
+    pos.evaluation_window_close_at = datetime(2024, 1, 15, 19, 0)
+    sched._bank.get_positions_due_for_feedback.return_value = [pos]
+    sched._bank.get_session.return_value = MagicMock(
+        html_report_path="reports/run-1/session-0001.html"
+    )
+
+    sched._run_feedback("run-1/session-0005")
+
+    feedback_input = sched._feedback_agent.evaluate.call_args.args[0]
+    assert feedback_input.evaluation_window_close_at == datetime(
+        2024, 1, 15, 19, 0, tzinfo=UTC
+    )
