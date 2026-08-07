@@ -155,7 +155,7 @@ def test_process_session_writes_session_record(tmp_path: Path) -> None:
 
     sched = _make_scheduler(bank, tmp_path=tmp_path, execution_agent=execution_agent, logger=logger)
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=run_id,
             session_id="run-1/session-0001",
@@ -179,7 +179,7 @@ def test_process_session_writes_memory_entries(tmp_path: Path) -> None:
 
     sched = _make_scheduler(bank, tmp_path=tmp_path, execution_agent=execution_agent, logger=logger)
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=run_id,
             session_id="run-1/session-0001",
@@ -200,7 +200,7 @@ def test_process_session_emits_session_start_and_end(tmp_path: Path) -> None:
 
     sched = _make_scheduler(bank, tmp_path=tmp_path, logger=logger)
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=run_id,
             session_id="run-1/session-0001",
@@ -260,7 +260,7 @@ def test_process_session_writes_report_path_to_db(tmp_path: Path) -> None:
         logger=logger,
     )
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=run_id,
             session_id="run-1/session-0001",
@@ -287,7 +287,7 @@ def test_process_session_report_generator_write_called_with_session_id(tmp_path:
         report_generator=report_generator,
     )
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=run_id,
             session_id="run-1/session-0001",
@@ -436,7 +436,7 @@ def test_execution_agent_receives_decision(tmp_path: Path) -> None:
         bank, tmp_path=tmp_path, execution_agent=execution_agent
     )
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=run_id,
             session_id="run-1/session-0001",

@@ -485,8 +485,48 @@ def test_run_does_not_count_closed_market_session() -> None:
     ):
         sched.run()
 
-    # Still processes exactly 1 session (session_count=1)
-    sched._bank.write_session.assert_called_once()
+    # Still processes exactly 1 *countable* session (session_count=1). The
+    # closed-market candle is persisted too (issue #136) but is not counted.
+    statuses = [c.args[0].status for c in sched._bank.write_session.call_args_list]
+    assert statuses == ["SKIPPED_MARKET_CLOSED", "COMPLETED"]
+
+
+def test_run_persists_a_session_row_for_a_closed_market_candle() -> None:
+    """Issue #136 / SC-003: no session ends silently."""
+    sched = _full_scheduler()
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+    call_count = [0]
+
+    def market_open_side_effect() -> bool:
+        call_count[0] += 1
+        return call_count[0] != 1
+
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close"),
+        patch.object(sched, "is_market_open", side_effect=market_open_side_effect),
+    ):
+        sched.run()
+
+    skipped = sched._bank.write_session.call_args_list[0].args[0]
+    assert skipped.status == "SKIPPED_MARKET_CLOSED"
+    assert skipped.id == "run-1/session-0001"
+    assert skipped.run_id == 1
+    assert skipped.html_report_path is None
+    assert skipped.ticker_decisions is None
+    # The countable session that follows takes the next ordinal, so IDs stay unique.
+    assert sched._bank.write_session.call_args_list[1].args[0].id == "run-1/session-0002"
+
+
+def test_process_session_writes_data_unavailable_status() -> None:
+    """Issue #136: SKIPPED_DATA_UNAVAILABLE is reachable, not just declared."""
+    sched = _full_scheduler()
+    with patch.object(
+        sched, "_run_investigation", return_value=(None, "SKIPPED_DATA_UNAVAILABLE")
+    ):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    assert sched._bank.write_session.call_args.args[0].status == "SKIPPED_DATA_UNAVAILABLE"
 
 
 # ---------------------------------------------------------------------------
@@ -569,14 +609,25 @@ def test_heartbeat_loop_exits_when_stop_event_set() -> None:
 def test_run_investigation_returns_decision_on_success() -> None:
     sched = _full_scheduler()
     result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
-    assert result == _FIXTURE_DECISION
+    assert result == (_FIXTURE_DECISION, None)
 
 
-def test_run_investigation_returns_none_on_timeout() -> None:
+def test_run_investigation_returns_timeout_status_on_timeout() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
     result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
-    assert result is None
+    assert result == (None, "SKIPPED_TIMEOUT")
+
+
+def test_run_investigation_returns_data_unavailable_when_the_agent_raises() -> None:
+    """Issue #136: a market-data failure skips the session, it does not crash the run."""
+    sched = _full_scheduler()
+    sched._main_agent.decide.side_effect = RuntimeError("alpaca down")
+    buf = StringIO()
+    with patch("sys.stderr", buf):
+        result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
+    assert result == (None, "SKIPPED_DATA_UNAVAILABLE")
+    assert "alpaca down" in buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -600,7 +651,7 @@ def test_process_session_with_none_decision_writes_skipped_session() -> None:
     sched._main_agent = None  # force decision = None via direct override
 
     # Manually patch _run_investigation to return None
-    with patch.object(sched, "_run_investigation", return_value=None):
+    with patch.object(sched, "_run_investigation", return_value=(None, "SKIPPED_TIMEOUT")):
         sched._process_session(
             run_id=1,
             session_id="run-1/session-0001",
@@ -617,7 +668,7 @@ def test_process_session_no_report_when_report_generator_is_none() -> None:
     sched = _full_scheduler()
     sched._report_generator = None
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=1,
             session_id="run-1/session-0001",
@@ -635,7 +686,7 @@ def test_process_session_with_report_generator_writes_path() -> None:
     mock_gen.write.return_value = "/reports/run-1/session-0001.html"
     sched._report_generator = mock_gen
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=1,
             session_id="run-1/session-0001",
@@ -651,7 +702,7 @@ def test_process_session_execution_agent_none_skips_execute() -> None:
     sched = _full_scheduler()
     sched._execution_agent = None
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=1,
             session_id="run-1/session-0001",
@@ -667,7 +718,7 @@ def test_process_session_no_logger_does_not_raise() -> None:
     sched = _full_scheduler()
     sched._logger = None
 
-    with patch.object(sched, "_run_investigation", return_value=_FIXTURE_DECISION):
+    with patch.object(sched, "_run_investigation", return_value=(_FIXTURE_DECISION, None)):
         sched._process_session(
             run_id=1,
             session_id="run-1/session-0001",
@@ -681,7 +732,7 @@ def test_investigation_timeout_no_logger_returns_none() -> None:
     sched._logger = None
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
     result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
-    assert result is None
+    assert result == (None, "SKIPPED_TIMEOUT")
 
 
 def test_execute_timeout_no_logger_does_not_raise() -> None:
@@ -841,7 +892,7 @@ def test_process_session_calls_run_feedback_before_investigation() -> None:
 
     def mock_investigation(*args, **kwargs):
         call_order.append("investigation")
-        return _FIXTURE_DECISION
+        return _FIXTURE_DECISION, None
 
     with (
         patch.object(sched, "_run_feedback", side_effect=mock_feedback),
@@ -887,7 +938,7 @@ def test_process_session_null_strategy_skips_memory_write() -> None:
         ],
     )
 
-    with patch.object(sched, "_run_investigation", return_value=null_strategy_decision):
+    with patch.object(sched, "_run_investigation", return_value=(null_strategy_decision, None)):
         sched._process_session(
             run_id=1,
             session_id="run-1/session-0001",
@@ -1065,7 +1116,7 @@ def test_blocked_ticker_is_kept_out_of_the_investigation_call() -> None:
     """FR-005: no Investigation Agent call is made for a blocked ticker."""
     sched = _blocking_scheduler({"SPY"})
     with patch.object(
-        sched, "_run_investigation", return_value=_decision_for("QQQ")
+        sched, "_run_investigation", return_value=(_decision_for("QQQ"), None)
     ) as mock_investigation:
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
@@ -1075,7 +1126,7 @@ def test_blocked_ticker_is_kept_out_of_the_investigation_call() -> None:
 def test_unblocked_tickers_are_all_investigated() -> None:
     sched = _blocking_scheduler(set())
     with patch.object(
-        sched, "_run_investigation", return_value=_decision_for("SPY", "QQQ")
+        sched, "_run_investigation", return_value=(_decision_for("SPY", "QQQ"), None)
     ) as mock_investigation:
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
@@ -1084,7 +1135,9 @@ def test_unblocked_tickers_are_all_investigated() -> None:
 
 def test_all_tickers_blocked_skips_the_investigation_entirely() -> None:
     sched = _blocking_scheduler({"SPY", "QQQ"})
-    with patch.object(sched, "_run_investigation") as mock_investigation:
+    with patch.object(
+        sched, "_run_investigation", return_value=(None, "SKIPPED_TIMEOUT")
+    ) as mock_investigation:
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     mock_investigation.assert_not_called()
@@ -1094,7 +1147,7 @@ def test_all_tickers_blocked_skips_the_investigation_entirely() -> None:
 def test_blocked_ticker_outcome_is_recorded_as_hold() -> None:
     """FR-005: the blocked ticker's session outcome is still recorded, as Hold."""
     sched = _blocking_scheduler({"SPY"})
-    with patch.object(sched, "_run_investigation", return_value=_decision_for("QQQ")):
+    with patch.object(sched, "_run_investigation", return_value=(_decision_for("QQQ"), None)):
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     written = sched._bank.write_session.call_args.args[0]
@@ -1105,7 +1158,7 @@ def test_blocked_ticker_outcome_is_recorded_as_hold() -> None:
 
 def test_blocked_ticker_is_not_sent_to_the_execution_agent_as_a_buy() -> None:
     sched = _blocking_scheduler({"SPY"})
-    with patch.object(sched, "_run_investigation", return_value=_decision_for("QQQ")):
+    with patch.object(sched, "_run_investigation", return_value=(_decision_for("QQQ"), None)):
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     executed = sched._execution_agent.execute.call_args.args[0]
@@ -1115,7 +1168,7 @@ def test_blocked_ticker_is_not_sent_to_the_execution_agent_as_a_buy() -> None:
 
 def test_blocked_ticker_emits_telemetry() -> None:
     sched = _blocking_scheduler({"SPY"})
-    with patch.object(sched, "_run_investigation", return_value=_decision_for("QQQ")):
+    with patch.object(sched, "_run_investigation", return_value=(_decision_for("QQQ"), None)):
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     blocked_events = [
@@ -1129,7 +1182,7 @@ def test_blocked_tickers_outside_the_config_are_ignored() -> None:
     """A stale position on a ticker no longer configured must not affect the session."""
     sched = _blocking_scheduler({"IWM"})
     with patch.object(
-        sched, "_run_investigation", return_value=_decision_for("SPY", "QQQ")
+        sched, "_run_investigation", return_value=(_decision_for("SPY", "QQQ"), None)
     ) as mock_investigation:
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
@@ -1169,7 +1222,7 @@ def test_merge_keeps_a_ticker_the_agent_invented() -> None:
 def test_timed_out_investigation_is_not_merged() -> None:
     """A budget timeout must still record SKIPPED_TIMEOUT, not a wall of Holds."""
     sched = _blocking_scheduler({"SPY"})
-    with patch.object(sched, "_run_investigation", return_value=None):
+    with patch.object(sched, "_run_investigation", return_value=(None, "SKIPPED_TIMEOUT")):
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     written = sched._bank.write_session.call_args.args[0]
