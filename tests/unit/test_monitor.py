@@ -345,7 +345,7 @@ def test_alpaca_failure_does_not_call_update_position_close() -> None:
     bank.update_position_close.assert_not_called()
 
 
-def test_alpaca_failure_does_not_emit_telemetry() -> None:
+def test_alpaca_failure_emits_monitor_error() -> None:
     monitor, bank, market_data, logger = _make_monitor()
     pos = _make_position(stop_loss_price=440.0)
     bank.load_open_positions.return_value = [pos]
@@ -357,7 +357,9 @@ def test_alpaca_failure_does_not_emit_telemetry() -> None:
         mock_tc.close_position.side_effect = RuntimeError("API error")
         monitor._check_positions()
 
-    logger.emit.assert_not_called()
+    logger.emit.assert_called_once()
+    assert logger.emit.call_args.args[0] == "MONITOR_ERROR"
+    bank.update_position_close.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -495,3 +497,57 @@ def test_window_deadline_read_as_naive_is_treated_as_utc() -> None:
         monitor._check_positions()
 
     bank.update_position_close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Exception resilience & MONITOR_ERROR telemetry
+# ---------------------------------------------------------------------------
+
+
+def test_check_position_exception_emits_monitor_error_and_does_not_crash() -> None:
+    monitor, bank, market_data, logger = _make_monitor()
+    pos = _make_position()
+    bank.load_open_positions.return_value = [pos]
+    market_data.get_latest_price.side_effect = RuntimeError("API timeout")
+
+    monitor._check_positions()
+
+    logger.emit.assert_called_once()
+    call_args = logger.emit.call_args
+    assert call_args.args[0] == "MONITOR_ERROR"
+    assert call_args.args[1] == "monitor"
+    assert "API timeout" in call_args.args[2]["error"]
+    bank.update_position_close.assert_not_called()
+
+
+def test_close_position_exception_emits_monitor_error() -> None:
+    monitor, bank, market_data, logger = _make_monitor()
+    pos = _make_position(stop_loss_price=440.0)
+    bank.load_open_positions.return_value = [pos]
+    market_data.get_latest_price.return_value = 439.0
+
+    mock_client = MagicMock()
+    mock_client.close_position.side_effect = RuntimeError("Connection refused")
+
+    with patch("alphoryn.monitor.monitor.TradingClient", return_value=mock_client):
+        monitor._check_positions()
+
+    logger.emit.assert_called_once()
+    call_args = logger.emit.call_args
+    assert call_args.args[0] == "MONITOR_ERROR"
+    assert "Connection refused" in call_args.args[2]["error"]
+    bank.update_position_close.assert_not_called()
+
+
+def test_load_open_positions_exception_emits_monitor_error() -> None:
+    monitor, bank, _, logger = _make_monitor()
+    bank.load_open_positions.side_effect = RuntimeError("DB error")
+
+    monitor._check_positions()
+
+    logger.emit.assert_called_once()
+    call_args = logger.emit.call_args
+    assert call_args.args[0] == "MONITOR_ERROR"
+    assert "Failed to load open positions: DB error" in call_args.args[2]["error"]
+
+
