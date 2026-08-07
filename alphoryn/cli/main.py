@@ -149,7 +149,7 @@ def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:
 def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
     """Run the scheduler. Separate function so tests can patch it."""
     logger = TelemetryLogger()
-    market_data = MarketDataClient()
+    market_data = MarketDataClient(candle_timeframe=cfg.candle_timeframe)
     monitor_stop_event = threading.Event()
     monitor = PositionMonitor(
         bank=bank,
