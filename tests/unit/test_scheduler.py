@@ -216,10 +216,27 @@ def test_is_market_open_false_when_closed() -> None:
         assert sched.is_market_open() is False
 
 
-def test_is_market_open_fallback_true_on_api_error() -> None:
+def test_is_market_open_holds_safe_on_api_error() -> None:
+    """Issue #137: an unreachable clock must hold, not trade blind."""
     sched = _scheduler()
-    with patch.object(sched, "get_market_clock", side_effect=RuntimeError("no conn")):
-        assert sched.is_market_open() is True
+    buf = StringIO()
+    with (
+        patch.object(sched, "get_market_clock", side_effect=RuntimeError("no conn")),
+        patch("sys.stderr", buf),
+    ):
+        assert sched.is_market_open() is False
+    assert "WARN" in buf.getvalue()
+    assert "no conn" in buf.getvalue()
+
+
+def test_is_market_open_holds_safe_when_clock_has_no_is_open() -> None:
+    """Issue #137: a malformed clock object must not read as open."""
+    sched = _scheduler()
+    clock = object()  # no is_open attribute
+    buf = StringIO()
+    with patch.object(sched, "get_market_clock", return_value=clock), patch("sys.stderr", buf):
+        assert sched.is_market_open() is False
+    assert "WARN" in buf.getvalue()
 
 
 def test_is_market_open_true_when_extended_hours_set() -> None:
