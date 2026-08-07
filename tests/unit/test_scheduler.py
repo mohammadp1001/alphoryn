@@ -165,37 +165,6 @@ def test_get_market_clock_calls_alpaca_trading_client() -> None:
 
 
 # ---------------------------------------------------------------------------
-# next_market_open_close
-# ---------------------------------------------------------------------------
-
-
-def test_next_market_open_close_success() -> None:
-    sched = _scheduler()
-    mock_clock = MagicMock()
-    t_open = datetime(2024, 1, 15, 14, 30, tzinfo=UTC)
-    t_close = datetime(2024, 1, 15, 21, 0, tzinfo=UTC)
-    mock_clock.next_open = t_open
-    mock_clock.next_close = t_close
-
-    with patch.object(sched, "get_market_clock", return_value=mock_clock):
-        nxt_open, nxt_close = sched.next_market_open_close()
-
-    assert nxt_open == t_open
-    assert nxt_close == t_close
-
-
-def test_next_market_open_close_api_failure_returns_none_none() -> None:
-    sched = _scheduler()
-    with patch.object(sched, "get_market_clock", side_effect=RuntimeError("timeout")):
-        buf = StringIO()
-        with patch("sys.stderr", buf):
-            nxt_open, nxt_close = sched.next_market_open_close()
-    assert nxt_open is None
-    assert nxt_close is None
-    assert "WARN" in buf.getvalue()
-
-
-# ---------------------------------------------------------------------------
 # is_market_open
 # ---------------------------------------------------------------------------
 

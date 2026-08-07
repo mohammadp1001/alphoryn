@@ -131,26 +131,6 @@ class Scheduler:
     # Market-open awareness
     # ------------------------------------------------------------------
 
-    def next_market_open_close(self) -> tuple[datetime | None, datetime | None]:
-        """Return (next_open, next_close) from Alpaca, or (None, None) on failure.
-
-        Never raises — if the Alpaca API call fails the scheduler proceeds
-        without a market-open guard (Principle IV: fail loud, hold safe —
-        the warning is emitted to stderr).
-        """
-        try:
-            clock = self.get_market_clock()
-            next_open = getattr(clock, "next_open", None)
-            next_close = getattr(clock, "next_close", None)
-            return next_open, next_close
-        except Exception as exc:
-            typer.echo(
-                f"WARN: Could not fetch market clock from Alpaca: {exc}. "
-                "Proceeding without market-open guard.",
-                err=True,
-            )
-            return None, None
-
     def is_market_open(self) -> bool:
         """Return True if the US equity market is currently open.
 
