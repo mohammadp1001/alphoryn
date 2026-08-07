@@ -50,9 +50,7 @@ A single unified template renders the whole session report:
 `templates/reports/session.html.j2`. It lists all tickers' decisions in a table (`ticker_details`),
 renders one Investment Thesis section per ticker, and renders a single Signal Snapshot and
 Position section (see Known Gaps — these are currently always empty in practice since the
-scheduler never populates `signals`/`position`). Two other templates exist on disk
-(`mean_reversion.html.j2`, `momentum.html.j2`) but are not referenced by `reports/generator.py`
-— they appear to be leftover from an earlier per-strategy-template design and are unused.
+scheduler never populates `signals`/`position`).
 
 ## Thesis extraction (feedback agent)
 

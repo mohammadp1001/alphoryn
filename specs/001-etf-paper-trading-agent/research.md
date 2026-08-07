@@ -122,9 +122,10 @@ SQLAlchemy provides ORM and migration path. Single-process — no concurrency co
 
 ## HTML Report Generation
 
-**Decision**: Jinja2 with per-strategy templates in `templates/reports/`
+**Decision**: Jinja2 with a single unified session template in `templates/reports/`
 
-**Template files**: `mean_reversion.html.j2`, `momentum.html.j2` — **TBD; see Open Items**.
+**Template file**: `session.html.j2` - renders every ticker's decision in one report.
+(An earlier per-strategy-template design was dropped; those templates are deleted.)
 
 ---
 
