@@ -9,6 +9,7 @@ Commands:
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Annotated
 
@@ -24,6 +25,7 @@ from alphoryn.market_data.client import MarketDataClient
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.memory.schema import Position, Run
 from alphoryn.memory.schema import Session as SessionModel
+from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.scheduler.scheduler import Scheduler
 from alphoryn.secrets.client import SecretsError, load_alpaca_credentials
@@ -145,6 +147,14 @@ def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
     """Run the scheduler. Separate function so tests can patch it."""
     logger = TelemetryLogger()
     market_data = MarketDataClient()
+    monitor_stop_event = threading.Event()
+    monitor = PositionMonitor(
+        bank=bank,
+        market_data=market_data,
+        logger=logger,
+        current_session_ordinal=1,
+        stop_event=monitor_stop_event,
+    )
     scheduler = Scheduler(
         cfg,
         bank,
@@ -153,6 +163,8 @@ def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
         feedback_agent=FeedbackAgent(market_data, bank, logger),
         report_generator=ReportGenerator(),
         logger=logger,
+        monitor=monitor,
+        monitor_stop_event=monitor_stop_event,
     )
     scheduler.run()
 

@@ -878,3 +878,136 @@ def test_process_session_null_strategy_skips_memory_write() -> None:
     written_entry = calls[0].args[0]
     assert written_entry.ticker == "QQQ"
     assert written_entry.strategy == "MOMENTUM"
+
+
+# ---------------------------------------------------------------------------
+# Position monitor lifecycle (issue #120)
+# ---------------------------------------------------------------------------
+
+
+def _monitored_scheduler(**extra) -> tuple[Scheduler, MagicMock, threading.Event]:
+    """Build a full scheduler wired to a mock monitor with nothing left open."""
+    monitor = MagicMock()
+    stop_event = threading.Event()
+    sched = _full_scheduler(monitor=monitor, monitor_stop_event=stop_event, **extra)
+    sched._bank.load_open_positions.return_value = []
+    return sched, monitor, stop_event
+
+
+def test_run_starts_monitor_before_first_session() -> None:
+    sched, monitor, _ = _monitored_scheduler()
+    _run_with_no_wait(sched)
+    monitor.start.assert_called_once()
+
+
+def test_run_seeds_monitor_with_first_session_ordinal() -> None:
+    sched, monitor, _ = _monitored_scheduler()
+    _run_with_no_wait(sched)
+    assert monitor.set_session_ordinal.call_args_list[0].args == (1,)
+
+
+def test_run_publishes_session_ordinal_each_iteration() -> None:
+    sched, monitor, _ = _monitored_scheduler()
+    _run_with_no_wait(sched)
+    # Seeded at _start_monitor, then re-published at the top of the loop body.
+    assert monitor.set_session_ordinal.call_args_list[1].args == (1,)
+
+
+def test_run_stops_monitor_when_nothing_is_open() -> None:
+    sched, monitor, stop_event = _monitored_scheduler()
+    _run_with_no_wait(sched)
+    assert stop_event.is_set()
+    monitor.join.assert_called_once()
+
+
+def test_run_ends_run_before_stopping_monitor() -> None:
+    sched, _monitor, _ = _monitored_scheduler()
+    _run_with_no_wait(sched)
+    sched._bank.end_run.assert_called_once_with(1)
+
+
+def test_start_monitor_emits_telemetry() -> None:
+    sched, _monitor, _ = _monitored_scheduler()
+    sched._start_monitor(1)
+    events = [c.args[0] for c in sched._logger.emit.call_args_list]
+    assert "MONITOR_STARTED" in events
+
+
+def test_start_monitor_without_logger_does_not_raise() -> None:
+    sched, monitor, _ = _monitored_scheduler()
+    sched._logger = None
+    sched._start_monitor(3)
+    monitor.start.assert_called_once()
+    monitor.set_session_ordinal.assert_called_once_with(3)
+
+
+def test_start_monitor_is_noop_without_monitor() -> None:
+    sched = _full_scheduler()
+    sched._start_monitor(1)  # must not raise
+
+
+def test_stop_monitor_emits_telemetry() -> None:
+    sched, _monitor, _ = _monitored_scheduler()
+    sched._stop_monitor()
+    events = [c.args[0] for c in sched._logger.emit.call_args_list]
+    assert "MONITOR_STOPPED" in events
+
+
+def test_stop_monitor_without_logger_does_not_raise() -> None:
+    sched, monitor, stop_event = _monitored_scheduler()
+    sched._logger = None
+    sched._stop_monitor()
+    assert stop_event.is_set()
+    monitor.join.assert_called_once()
+
+
+def test_stop_monitor_without_stop_event_still_joins() -> None:
+    sched, monitor, _ = _monitored_scheduler()
+    sched._monitor_stop_event = None
+    sched._stop_monitor()
+    monitor.join.assert_called_once()
+
+
+def test_stop_monitor_is_noop_without_monitor() -> None:
+    sched = _full_scheduler()
+    sched._stop_monitor()  # must not raise
+
+
+def test_drain_is_noop_without_monitor() -> None:
+    sched = _full_scheduler()
+    assert sched._drain_open_positions(5) == 5
+
+
+def test_drain_returns_immediately_when_nothing_open() -> None:
+    sched, monitor, _ = _monitored_scheduler()
+    assert sched._drain_open_positions(5) == 5
+    monitor.set_session_ordinal.assert_not_called()
+
+
+def test_drain_advances_ordinal_until_positions_close() -> None:
+    sched, monitor, _ = _monitored_scheduler()
+    pos = MagicMock()
+    sched._bank.load_open_positions.side_effect = [[pos], [pos], [pos], []]
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close") as mock_wait,
+    ):
+        final_ordinal = sched._drain_open_positions(5)
+
+    assert final_ordinal == 7
+    assert mock_wait.call_count == 2
+    assert [c.args[0] for c in monitor.set_session_ordinal.call_args_list] == [5, 6]
+
+
+def test_run_holds_process_open_while_positions_remain() -> None:
+    sched, monitor, stop_event = _monitored_scheduler()
+    pos = MagicMock()
+    # Session loop never queries open positions; only the drain does.
+    sched._bank.load_open_positions.side_effect = [[pos], [pos], []]
+
+    _run_with_no_wait(sched)
+
+    monitor.set_session_ordinal.assert_any_call(2)
+    assert stop_event.is_set()
