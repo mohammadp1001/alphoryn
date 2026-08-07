@@ -47,6 +47,7 @@ class FeedbackInput:
     entry_price: float
     exit_price: float
     exit_reason: str
+    evaluation_window_close_at: datetime
 
 
 class FeedbackAgentError(Exception):
@@ -86,17 +87,21 @@ class FeedbackAgent:
         EVALUATION_FAILED status and unblocks the ticker.
         """
         thesis = self._extract_thesis(feedback_input.html_report_path)
-        current_price = self._market_data.get_latest_price(feedback_input.ticker)
+        # FR-016: the price at the evaluation timestamp, not the latest one.
+        # Feedback can run one or more sessions after the window closed.
+        evaluation_price = self._market_data.get_price_at(
+            feedback_input.ticker, feedback_input.evaluation_window_close_at
+        )
 
         last_exc: Exception | None = None
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
-                raw_json = self._call_agent(feedback_input, thesis, current_price, attempt)
+                raw_json = self._call_agent(feedback_input, thesis, evaluation_price, attempt)
                 result = self._parse_result(raw_json)
                 self._write_success(
                     feedback_input,
                     current_session_id,
-                    current_price,
+                    evaluation_price,
                     thesis,
                     result,
                     attempt,
@@ -108,7 +113,7 @@ class FeedbackAgent:
                     continue
 
         # All attempts exhausted
-        self._write_failure(feedback_input, current_session_id, current_price, thesis)
+        self._write_failure(feedback_input, current_session_id, evaluation_price, thesis)
         self._logger.emit(
             "EVALUATION_FAILED",
             "feedback_agent",
@@ -143,11 +148,11 @@ class FeedbackAgent:
         self,
         feedback_input: FeedbackInput,
         thesis: str,
-        current_price: float,
+        evaluation_price: float,
         attempt: int,
     ) -> str:
         """Invoke the LLM and return the raw JSON response string."""
-        prompt = self._build_prompt(feedback_input, thesis, current_price)
+        prompt = self._build_prompt(feedback_input, thesis, evaluation_price)
         session_id = f"feedback-{feedback_input.position_id}-attempt-{attempt}"
         runner = InMemoryRunner(agent=self._agent, app_name="alphoryn_feedback")
         runner.auto_create_session = True
@@ -180,7 +185,7 @@ class FeedbackAgent:
     def _build_prompt(
         feedback_input: FeedbackInput,
         thesis: str,
-        current_price: float,
+        evaluation_price: float,
     ) -> str:
         pnl = _pnl_pct(feedback_input.entry_price, feedback_input.exit_price)
         return (
@@ -193,7 +198,8 @@ class FeedbackAgent:
             f"  Exit price:  {feedback_input.exit_price:.2f}\n"
             f"  Exit reason: {feedback_input.exit_reason}\n"
             f"  P&L: {pnl:.2f}%\n\n"
-            f"CURRENT CANDLE CLOSE PRICE: {current_price:.2f}\n\n"
+            f"EVALUATION CANDLE CLOSE PRICE: {evaluation_price:.2f}"
+            f"  (at {feedback_input.evaluation_window_close_at.isoformat()})\n\n"
             "Produce your JSON evaluation now."
         )
 
@@ -224,7 +230,7 @@ class FeedbackAgent:
         self,
         feedback_input: FeedbackInput,
         current_session_id: str,
-        current_price: float,
+        evaluation_price: float,
         thesis: str,
         result: dict,
         attempt: int,
@@ -233,7 +239,7 @@ class FeedbackAgent:
             position_id=feedback_input.position_id,
             evaluated_at=datetime.now(UTC),
             evaluation_session_id=current_session_id,
-            candle_close_price=current_price,
+            candle_close_price=evaluation_price,
             thesis_summary=result["thesis_summary"],
             outcome_judgment=result["outcome_judgment"],
             reasoning=result["reasoning"],
@@ -262,14 +268,14 @@ class FeedbackAgent:
         self,
         feedback_input: FeedbackInput,
         current_session_id: str,
-        current_price: float,
+        evaluation_price: float,
         thesis: str,
     ) -> None:
         evaluation = FeedbackEvaluation(
             position_id=feedback_input.position_id,
             evaluated_at=datetime.now(UTC),
             evaluation_session_id=current_session_id,
-            candle_close_price=current_price,
+            candle_close_price=evaluation_price,
             thesis_summary=thesis[:500] if thesis else "unavailable",
             outcome_judgment="NEUTRAL",
             reasoning="Evaluation failed after 3 attempts; judgment defaulted to NEUTRAL.",

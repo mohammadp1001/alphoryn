@@ -5,6 +5,7 @@ InMemoryRunner is patched at the class level with synthetic events.
 """
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -34,6 +35,7 @@ _INPUT = FeedbackInput(
     entry_price=450.0,
     exit_price=458.0,
     exit_reason="PROFIT_TARGET",
+    evaluation_window_close_at=datetime(2024, 1, 15, 19, 0, tzinfo=UTC),
 )
 
 _RESULT_DICT = {
@@ -57,7 +59,7 @@ def _make_event(*, is_final: bool = False, text: str | None = None) -> MagicMock
 
 def _make_agent() -> tuple[FeedbackAgent, MagicMock, MagicMock, MagicMock]:
     market_data = MagicMock()
-    market_data.get_latest_price.return_value = 460.0
+    market_data.get_price_at.return_value = 460.0
     bank = MagicMock()
     logger = MagicMock()
     with patch("alphoryn.agents.feedback_agent.LlmAgent"):
@@ -272,10 +274,14 @@ def test_evaluate_populates_thesis_summary() -> None:
     assert evaluation_arg.thesis_summary == _RESULT_DICT["thesis_summary"]
 
 
-def test_evaluate_calls_get_latest_price() -> None:
+def test_evaluate_queries_the_price_at_the_evaluation_timestamp() -> None:
+    """FR-016 / issue #129: on main this called get_latest_price instead."""
     agent, market_data, _, _ = _make_agent()
     _run_evaluate(agent)
-    market_data.get_latest_price.assert_called_once_with("SPY")
+    market_data.get_price_at.assert_called_once_with(
+        "SPY", datetime(2024, 1, 15, 19, 0, tzinfo=UTC)
+    )
+    market_data.get_latest_price.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

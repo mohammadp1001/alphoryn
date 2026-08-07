@@ -120,7 +120,7 @@ def _seed_db(bank: MemoryBank, html_report_path: str = "") -> tuple[int, int]:
 def _make_feedback_agent(bank: MemoryBank) -> tuple[FeedbackAgent, MagicMock, MagicMock]:
     """Return (agent, market_data_mock, logger_mock) with LlmAgent patched."""
     market_data = MagicMock()
-    market_data.get_latest_price.return_value = 462.0
+    market_data.get_price_at.return_value = 462.0
     logger = MagicMock()
     with patch("alphoryn.agents.feedback_agent.LlmAgent"):
         agent = FeedbackAgent(market_data, bank, logger)
@@ -149,6 +149,7 @@ def _make_feedback_input(position_id: int, html_report_path: str = "") -> Feedba
         entry_price=450.0,
         exit_price=460.0,
         exit_reason="PROFIT_TARGET",
+        evaluation_window_close_at=datetime(2024, 1, 15, 19, 0, tzinfo=UTC),
     )
 
 

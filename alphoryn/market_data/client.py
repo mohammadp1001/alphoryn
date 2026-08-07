@@ -1,7 +1,8 @@
 """Market data client for Alphoryn.
 
-Provides build_snapshot (ADK tool) and get_latest_price for the stop-loss
-monitor. All technical signal computation is internal (_data_fetch).
+Provides build_snapshot (ADK tool), get_price_at for the feedback agent, and
+get_latest_price for the stop-loss monitor. All technical signal computation
+is internal (_data_fetch).
 """
 
 import os
@@ -243,6 +244,30 @@ class MarketDataClient:
             price_vs_ema_20_pct=price_vs_ema_20_pct,
             price_vs_sma_20_pct=price_vs_sma_20_pct,
         )
+
+    def get_price_at(self, ticker: str, timestamp: datetime) -> float:
+        """Return the close of the configured-timeframe candle covering *timestamp*.
+
+        FR-016: the feedback agent judges the thesis against the price at the
+        evaluation timestamp, which is not the latest price - feedback can run
+        one or more sessions after the window deadline, because a market-closed
+        session defers it.
+
+        Falls back to the most recent candle at or before *timestamp*; the
+        window may close outside market hours, when no candle covers it.
+        """
+        client = StockHistoricalDataClient(
+            api_key=self._api_key, secret_key=self._secret_key
+        )
+        req = StockBarsRequest(
+            symbol_or_symbols=ticker,
+            timeframe=TIMEFRAMES[self._candle_timeframe],
+            start=timestamp - self._lookback(),
+            end=timestamp,
+            feed=DataFeed.IEX,
+        )
+        bars = client.get_stock_bars(req)[ticker]
+        return float(bars[-1].close)
 
     def get_latest_price(self, ticker: str) -> float:
         """Return the latest 1-min bar close price for the stop-loss monitor."""

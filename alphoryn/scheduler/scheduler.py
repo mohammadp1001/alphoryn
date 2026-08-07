@@ -23,7 +23,7 @@ from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.models import TIMEFRAME_SECONDS, AlphorynConfig
 from alphoryn.execution.agent import AssetDecision, ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
-from alphoryn.memory.schema import MemoryEntry, Session
+from alphoryn.memory.schema import MemoryEntry, Session, from_db_utc
 from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.telemetry.logger import TelemetryLogger
@@ -363,6 +363,7 @@ class Scheduler:
                 entry_price=pos.entry_price,
                 exit_price=pos.exit_price or pos.entry_price,
                 exit_reason=pos.exit_reason or "UNKNOWN",
+                evaluation_window_close_at=from_db_utc(pos.evaluation_window_close_at),
             )
             self._feedback_agent.evaluate(feedback_input, session_id)
 
