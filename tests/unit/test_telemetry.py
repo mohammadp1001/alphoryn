@@ -11,8 +11,8 @@ from alphoryn.telemetry.logger import EVENT_TYPES, TelemetryLogger
 # ---------------------------------------------------------------------------
 
 
-def test_event_types_contains_all_17() -> None:
-    assert len(EVENT_TYPES) == 17
+def test_event_types_contains_all_18() -> None:
+    assert len(EVENT_TYPES) == 18
 
 
 def test_event_types_includes_expected_values() -> None:
@@ -34,8 +34,30 @@ def test_event_types_includes_expected_values() -> None:
         "TICKER_BLOCKED",
         "MONITOR_STARTED",
         "MONITOR_STOPPED",
+        "EVALUATION_FAILED",
     }
     assert EVENT_TYPES == expected
+
+
+def test_every_event_type_emitted_in_production_is_declared() -> None:
+    """Issue #132: EVALUATION_FAILED was emitted for releases without being declared."""
+    import re
+    from pathlib import Path
+
+    emitted: set[str] = set()
+    for path in Path("alphoryn").rglob("*.py"):
+        emitted |= set(re.findall(r'\.emit\(\s*"([A-Z_]+)"', path.read_text(encoding="utf-8")))
+    assert emitted <= EVENT_TYPES, f"undeclared event types: {sorted(emitted - EVENT_TYPES)}"
+
+
+def test_emit_warns_on_an_undeclared_event_type_but_still_emits() -> None:
+    """Drift must be visible; Principle IV says it must never block execution."""
+    logger, cloud = _make_logger_with_cloud()
+    with patch("alphoryn.telemetry.logger._logger") as mock_log:
+        logger.emit("NOT_A_REAL_EVENT", "test", {})
+    mock_log.warning.assert_called_once()
+    assert "NOT_A_REAL_EVENT" in str(mock_log.warning.call_args)
+    cloud.log_struct.assert_called_once()  # emitted anyway
 
 
 # ---------------------------------------------------------------------------

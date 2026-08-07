@@ -536,3 +536,105 @@ def test_buy_always_records_direction_buy(tmp_path) -> None:
     _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
     assert bank.load_open_positions()[0].direction == "BUY"
     bank._engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Telemetry — every order path is observable (issue #132, FR-017 / SC-004)
+# ---------------------------------------------------------------------------
+
+
+def _emitted(logger: MagicMock) -> list[tuple[str, dict]]:
+    """Return (event_type, payload) for every emit() call on the stub logger."""
+    return [(c.args[0], c.args[2]) for c in logger.emit.call_args_list]
+
+
+def test_successful_buy_emits_budget_check_and_order_placed(tmp_path) -> None:
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    logger = MagicMock()
+    _run(ExecutionAgent(bank, "1H", logger), _decision(_buy("SPY", lot=5)))
+
+    events = dict(_emitted(logger))
+    assert events["BUDGET_CHECK"]["sufficient"] is True
+    assert events["BUDGET_CHECK"]["required"] == 450.0 * 5
+    assert events["ORDER_PLACED"] == {
+        "side": "BUY",
+        "qty": 5,
+        "price": 450.0,
+        "strategy": "MOMENTUM",
+    }
+    assert logger.emit.call_args.kwargs["etf"] == "SPY"
+    assert logger.emit.call_args.kwargs["session_id"] == "run-1/session-abc"
+    bank._engine.dispose()
+
+
+def test_insufficient_budget_emits_order_failed(tmp_path) -> None:
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    logger = MagicMock()
+    mock_alpaca = MagicMock()
+    mock_alpaca.get_account.return_value.buying_power = "10"
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {"SPY": MagicMock(ask_price=450.0)}
+    with (
+        patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca),
+        patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data),
+    ):
+        ExecutionAgent(bank, "1H", logger).execute(_decision(_buy("SPY", lot=5)))
+
+    events = dict(_emitted(logger))
+    assert events["BUDGET_CHECK"]["sufficient"] is False
+    assert events["ORDER_FAILED"]["reason"] == "INSUFFICIENT_BUDGET"
+    mock_alpaca.submit_order.assert_not_called()
+    bank._engine.dispose()
+
+
+def test_feedback_blocked_buy_emits_order_failed(tmp_path) -> None:
+    bank = _bank_with_position(tmp_path, status="CLOSED_PROFIT_TARGET")
+    logger = MagicMock()
+    _run(ExecutionAgent(bank, "1H", logger), _decision(_buy("SPY", lot=5)))
+
+    events = dict(_emitted(logger))
+    assert events["ORDER_FAILED"]["reason"] == "FEEDBACK_BLOCKED"
+    assert "BUDGET_CHECK" not in events  # refused before the account is queried
+    bank._engine.dispose()
+
+
+def test_sell_with_no_open_position_emits_order_failed(tmp_path) -> None:
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    logger = MagicMock()
+    _run(ExecutionAgent(bank, "1H", logger), _decision(_sell("SPY", lot=5)))
+
+    events = dict(_emitted(logger))
+    assert events["ORDER_FAILED"] == {"side": "SELL", "reason": "NO_OPEN_POSITION"}
+    bank._engine.dispose()
+
+
+def test_sell_emits_order_placed_for_the_full_position(tmp_path) -> None:
+    bank = _bank_with_position(tmp_path, status="OPEN")  # lot_size 5.0
+    logger = MagicMock()
+    _run(ExecutionAgent(bank, "1H", logger), _decision(_sell("SPY", lot=2)))
+
+    events = dict(_emitted(logger))
+    assert events["ORDER_PLACED"]["side"] == "SELL"
+    assert events["ORDER_PLACED"]["qty"] == 5  # the position, not the decision lot
+    assert events["ORDER_PLACED"]["price"] == 450.0
+    bank._engine.dispose()
+
+
+def test_hold_emits_nothing(tmp_path) -> None:
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    logger = MagicMock()
+    _run(ExecutionAgent(bank, "1H", logger), _decision(_hold("SPY")))
+    logger.emit.assert_not_called()
+    bank._engine.dispose()
+
+
+def test_execution_without_a_logger_still_executes(tmp_path) -> None:
+    """The logger is optional; its absence must never change behaviour."""
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    mock_alpaca = _run(ExecutionAgent(bank, "1H"), _decision(_buy("SPY", lot=5)))
+    mock_alpaca.submit_order.assert_called_once()
+    bank._engine.dispose()
