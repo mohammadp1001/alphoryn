@@ -27,6 +27,7 @@ EVENT_TYPES = frozenset(
         "TICKER_BLOCKED",
         "MONITOR_STARTED",
         "MONITOR_STOPPED",
+        "EVALUATION_FAILED",
     }
 )
 
@@ -69,6 +70,11 @@ class TelemetryLogger:
                         stability — renaming would break existing log queries).
             latency_ms: Duration in milliseconds where applicable.
         """
+        if event_type not in EVENT_TYPES:
+            # Warn, never block (Principle IV). Undeclared event types are drift:
+            # EVALUATION_FAILED, MONITOR_STARTED and MONITOR_STOPPED were each
+            # emitted for several releases without ever being declared here.
+            _logger.warning("Emitting undeclared event type %r; add it to EVENT_TYPES", event_type)
         event: dict[str, Any] = {
             "event_type": event_type,
             "session_id": session_id,

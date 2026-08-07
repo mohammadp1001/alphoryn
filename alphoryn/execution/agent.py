@@ -22,6 +22,7 @@ from alpaca.trading.requests import MarketOrderRequest
 from alphoryn.config.models import TIMEFRAME_SECONDS
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import Position, to_db_utc
+from alphoryn.telemetry.logger import TelemetryLogger
 
 # Sessions from entry until the feedback agent evaluates the trade, per
 # strategies/mean_reversion.md §Evaluation Window and strategies/momentum.md.
@@ -63,9 +64,35 @@ class ExecutionAgent:
 
     model = None  # Principle I: no LLM model
 
-    def __init__(self, bank: MemoryBank, candle_timeframe: str = "1H") -> None:
+    def __init__(
+        self,
+        bank: MemoryBank,
+        candle_timeframe: str = "1H",
+        logger: "TelemetryLogger | None" = None,
+    ) -> None:
         self._bank = bank
         self._candle_seconds = TIMEFRAME_SECONDS[candle_timeframe]
+        self._logger = logger
+
+    def _emit(
+        self,
+        event_type: str,
+        payload: dict,
+        *,
+        ticker: str,
+        session_id: str,
+    ) -> None:
+        """Emit an execution event, if a logger is wired in.
+
+        Every order path - placed or refused - goes through here. A run that
+        silently places no orders must be distinguishable from one where the
+        agent decided to Hold (FR-017, SC-004).
+        """
+        if self._logger is None:
+            return
+        self._logger.emit(
+            event_type, "execution_agent", payload, session_id=session_id, etf=ticker
+        )
 
     def _evaluation_window_close_at(self, strategy: str | None, entry_time: datetime) -> datetime:
         """Return the absolute UTC deadline at which this position's window closes.
@@ -113,11 +140,11 @@ class ExecutionAgent:
         if asset_decision.action == "HOLD":
             return
         if asset_decision.action == "SELL":
-            self._close_position(asset_decision)
+            self._close_position(asset_decision, session_id)
             return
         self._open_position(asset_decision, session_id)
 
-    def _close_position(self, asset_decision: AssetDecision) -> None:
+    def _close_position(self, asset_decision: AssetDecision, session_id: str) -> None:
         """Close the open position on this ticker (data-model.md: Sell closes a Buy).
 
         A Sell is only ever an instruction to unwind. With no open position there
@@ -129,16 +156,29 @@ class ExecutionAgent:
             None,
         )
         if open_position is None:
-            return  # ORDER_FAILED — nothing to close; never open a short
+            self._emit(
+                "ORDER_FAILED",
+                {"side": "SELL", "reason": "NO_OPEN_POSITION"},
+                ticker=asset_decision.ticker,
+                session_id=session_id,
+            )
+            return  # nothing to close; never open a short
 
         exit_price = self._latest_ask(asset_decision.ticker)
+        qty = int(open_position.lot_size)  # close the whole position
         self._trading_client().submit_order(
             MarketOrderRequest(
                 symbol=asset_decision.ticker,
-                qty=int(open_position.lot_size),  # close the whole position
+                qty=qty,
                 side=OrderSide.SELL,
                 time_in_force=TimeInForce.DAY,
             )
+        )
+        self._emit(
+            "ORDER_PLACED",
+            {"side": "SELL", "qty": qty, "price": exit_price, "position_id": open_position.id},
+            ticker=asset_decision.ticker,
+            session_id=session_id,
         )
         self._bank.update_position_close(
             open_position.id,
@@ -153,6 +193,12 @@ class ExecutionAgent:
         # Second gate only — the scheduler already keeps blocked tickers out of
         # the investigation (FR-005) — so this protects direct callers.
         if asset_decision.ticker in self._bank.get_feedback_blocked_tickers():
+            self._emit(
+                "ORDER_FAILED",
+                {"side": "BUY", "reason": "FEEDBACK_BLOCKED"},
+                ticker=asset_decision.ticker,
+                session_id=session_id,
+            )
             return  # position-blocked → treat as HOLD
 
         client = self._trading_client()
@@ -164,8 +210,31 @@ class ExecutionAgent:
         ask_price = self._latest_ask(asset_decision.ticker)
         lot = asset_decision.lot_size or 1
         required = ask_price * lot
+        self._emit(
+            "BUDGET_CHECK",
+            {
+                "buying_power": buying_power,
+                "required": required,
+                "lot_size": lot,
+                "price": ask_price,
+                "sufficient": buying_power >= required,
+            },
+            ticker=asset_decision.ticker,
+            session_id=session_id,
+        )
         if buying_power < required:
-            return  # ORDER_FAILED — insufficient budget
+            self._emit(
+                "ORDER_FAILED",
+                {
+                    "side": "BUY",
+                    "reason": "INSUFFICIENT_BUDGET",
+                    "buying_power": buying_power,
+                    "required": required,
+                },
+                ticker=asset_decision.ticker,
+                session_id=session_id,
+            )
+            return
 
         client.submit_order(
             MarketOrderRequest(
@@ -174,6 +243,12 @@ class ExecutionAgent:
                 side=OrderSide.BUY,
                 time_in_force=TimeInForce.DAY,
             )
+        )
+        self._emit(
+            "ORDER_PLACED",
+            {"side": "BUY", "qty": lot, "price": ask_price, "strategy": asset_decision.strategy},
+            ticker=asset_decision.ticker,
+            session_id=session_id,
         )
 
         # Write OPEN Position record to memory bank
