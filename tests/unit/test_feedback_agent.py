@@ -89,29 +89,49 @@ def _run_evaluate(agent: FeedbackAgent, *, result_dict: dict | None = None) -> N
 def test_extract_thesis_finds_investment_thesis_section(tmp_path: Path) -> None:
     html = (
         "<html><body>"
-        '<section id="investment-thesis"><p>ADX was low, price oversold.</p></section>'
+        '<section id="investment-thesis-SPY"><p>ADX was low, price oversold.</p></section>'
         "</body></html>"
     )
     path = tmp_path / "report.html"
     path.write_text(html, encoding="utf-8")
-    result = _extract_thesis(str(path))
+    result = _extract_thesis(str(path), "SPY")
     assert "ADX was low" in result
     assert "<p>" not in result  # HTML tags stripped
+
+
+def test_extract_thesis_picks_the_section_for_the_evaluated_ticker(tmp_path: Path) -> None:
+    """Issue #134: on main this matched the first section whatever the ticker."""
+    html = (
+        '<section id="investment-thesis-SPY">SPY thesis.</section>'
+        '<section id="investment-thesis-QQQ">QQQ thesis.</section>'
+    )
+    path = tmp_path / "report.html"
+    path.write_text(html, encoding="utf-8")
+    assert _extract_thesis(str(path), "QQQ") == "QQQ thesis."
+    assert _extract_thesis(str(path), "SPY") == "SPY thesis."
+
+
+def test_extract_thesis_falls_back_to_the_unscoped_id_for_old_reports(tmp_path: Path) -> None:
+    """Reports written before #134 are still reachable from the memory bank."""
+    html = '<section id="investment-thesis">Legacy thesis.</section>'
+    path = tmp_path / "report.html"
+    path.write_text(html, encoding="utf-8")
+    assert _extract_thesis(str(path), "SPY") == "Legacy thesis."
 
 
 def test_extract_thesis_falls_back_to_full_html_when_section_missing(tmp_path: Path) -> None:
     html = "<html><body><p>No thesis section here.</p></body></html>"
     path = tmp_path / "report.html"
     path.write_text(html, encoding="utf-8")
-    result = _extract_thesis(str(path))
+    result = _extract_thesis(str(path), "SPY")
     assert "No thesis section here" in result
 
 
 def test_extract_thesis_handles_single_quotes_in_id(tmp_path: Path) -> None:
-    html = "<section id='investment-thesis'>Single quote ID thesis.</section>"
+    html = "<section id='investment-thesis-SPY'>Single quote ID thesis.</section>"
     path = tmp_path / "report.html"
     path.write_text(html, encoding="utf-8")
-    result = _extract_thesis(str(path))
+    result = _extract_thesis(str(path), "SPY")
     assert "Single quote ID thesis" in result
 
 

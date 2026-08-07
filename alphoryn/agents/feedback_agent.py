@@ -86,7 +86,9 @@ class FeedbackAgent:
         Retries up to 3 times on LLM failure. On 3rd failure, writes
         EVALUATION_FAILED status and unblocks the ticker.
         """
-        thesis = self._extract_thesis(feedback_input.html_report_path)
+        thesis = self._extract_thesis(
+            feedback_input.html_report_path, feedback_input.ticker
+        )
         # FR-016: the price at the evaluation timestamp, not the latest one.
         # Feedback can run one or more sessions after the window closed.
         evaluation_price = self._market_data.get_price_at(
@@ -130,18 +132,27 @@ class FeedbackAgent:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract_thesis(html_report_path: str) -> str:
-        """Read the HTML report and extract the investment-thesis section text."""
+    def _extract_thesis(html_report_path: str, ticker: str) -> str:
+        """Read the HTML report and extract *ticker*'s investment-thesis section.
+
+        The report carries one thesis section per ticker. Matching the first one
+        judged another ticker's thesis in any multi-ticker session (issue #134),
+        so the section is looked up by its ticker-scoped id.
+
+        Reports written before that change used one unscoped id for every
+        ticker. They are still reachable from the memory bank, so the unscoped
+        id is tried as a fallback before handing over the whole document.
+        """
         with open(html_report_path, encoding="utf-8") as f:
             html = f.read()
-        match = re.search(
-            r'<section[^>]+id=["\']investment-thesis["\'][^>]*>(.*?)</section>',
-            html,
-            re.DOTALL | re.IGNORECASE,
-        )
-        if match:
-            raw = match.group(1)
-            return re.sub(r"<[^>]+>", "", raw).strip()
+        for section_id in (f"investment-thesis-{re.escape(ticker)}", "investment-thesis"):
+            match = re.search(
+                rf'<section[^>]+id=["\']{section_id}["\'][^>]*>(.*?)</section>',
+                html,
+                re.DOTALL | re.IGNORECASE,
+            )
+            if match:
+                return re.sub(r"<[^>]+>", "", match.group(1)).strip()
         return html
 
     def _call_agent(
