@@ -57,10 +57,10 @@ investigation, the scheduler queries the memory bank for positions due for evalu
 
 **Trigger condition** (checked by `scheduler/scheduler.py` at each session start):
 ```python
-# Positions whose evaluation window has arrived and are closed but not yet evaluated
+# Positions whose evaluation window has closed and are closed but not yet evaluated
 positions_due = memory_bank.query(
     status IN ('CLOSED_STOP_LOSS', 'CLOSED_PROFIT_TARGET', 'CLOSED_WINDOW_EXPIRY'),
-    evaluation_window_session == current_session_ordinal,
+    evaluation_window_close_at <= now,
     # No FeedbackEvaluation record exists yet
 )
 ```
@@ -120,15 +120,13 @@ There is no inter-thread signaling — the monitor writes, the scheduler reads.
   to the `Scheduler`, which owns the thread lifecycle
 - Started as `threading.Thread` by `scheduler/scheduler.py` at run startup, after candle
   alignment and before the first session
-- The scheduler publishes the current session ordinal to the monitor
-  (`PositionMonitor.set_session_ordinal`) on every session boundary; the monitor's
-  window-expiry check reads that value, so without this the ordinal stays frozen at its
-  constructor value and window expiry can never fire
+- The monitor needs nothing published to it during a run: each position carries its own
+  absolute `evaluation_window_close_at` deadline, so window expiry is driven by the wall
+  clock rather than by run-scoped session numbering
 - Stopped via the `threading.Event` stop signal when the run ends normally or on hard abort
 - If the run ends with positions still `OPEN`, the monitor thread is NOT stopped - the
-  scheduler keeps advancing the session ordinal on candle boundaries until all open
-  positions are closed (stop-loss, profit target, or window expiry). The CLI process must
-  remain alive while positions are open.
+  scheduler waits candle by candle until all open positions are closed (stop-loss, profit
+  target, or window expiry). The CLI process must remain alive while positions are open.
 - The stop signal is set only when no positions remain in `OPEN` status
 
 ---

@@ -9,7 +9,7 @@ Uses a real SQLite MemoryBank with Alpaca API calls stubbed. Validates:
 
 import json
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -55,7 +55,7 @@ def _open_position(
     strategy: str = "MEAN_REVERSION",
     stop_loss_price: float = 430.0,
     exit_target: dict | None = None,
-    evaluation_window_session: int = 10,
+    window_close_at: datetime | None = None,
     trailing_stop_high_watermark: float | None = None,
 ) -> int:
     if exit_target is None:
@@ -70,7 +70,11 @@ def _open_position(
         lot_size=5.0,
         stop_loss_price=stop_loss_price,
         exit_target=json.dumps(exit_target),
-        evaluation_window_session=evaluation_window_session,
+        evaluation_window_close_at=(
+            window_close_at
+            if window_close_at is not None
+            else datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1)
+        ),
         trailing_stop_high_watermark=trailing_stop_high_watermark,
         status="OPEN",
     )
@@ -81,7 +85,6 @@ def _make_monitor(
     bank: MemoryBank,
     *,
     current_price: float,
-    current_session_ordinal: int = 1,
 ) -> tuple[PositionMonitor, MagicMock]:
     market_data = MagicMock()
     market_data.get_latest_price.return_value = current_price
@@ -92,7 +95,6 @@ def _make_monitor(
         bank=bank,
         market_data=market_data,
         logger=logger,
-        current_session_ordinal=current_session_ordinal,
         stop_event=threading.Event(),
     )
     return monitor, market_data
@@ -167,7 +169,7 @@ def test_buy_blocked_by_open_position(tmp_path: Path) -> None:
             ),
         ],
     )
-    agent = ExecutionAgent(bank)
+    agent = ExecutionAgent(bank, "1H")
 
     with patch("alphoryn.execution.agent.TradingClient") as mock_tc_cls:
         agent.execute(decision)
@@ -200,7 +202,7 @@ def test_buy_on_different_ticker_not_blocked(tmp_path: Path) -> None:
             ),
         ],
     )
-    agent = ExecutionAgent(bank)
+    agent = ExecutionAgent(bank, "1H")
 
     mock_data = MagicMock()
     mock_data.get_stock_latest_quote.return_value = {"QQQ": MagicMock(ask_price=400.0)}
@@ -280,11 +282,11 @@ def test_window_expiry_closes_position_in_db(tmp_path: Path) -> None:
         session_id,
         stop_loss_price=430.0,
         exit_target={"type": "price_level", "value": 490.0},
-        evaluation_window_session=5,
+        window_close_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1),
     )
 
-    # current = 5 (matches evaluation_window_session); price between stop and target
-    monitor, _ = _make_monitor(bank, current_price=455.0, current_session_ordinal=5)
+    # Window deadline already passed; price sits between stop and target
+    monitor, _ = _make_monitor(bank, current_price=455.0)
 
     with patch("alphoryn.monitor.monitor.TradingClient"):
         monitor._check_positions()

@@ -14,7 +14,7 @@ from alpaca.trading.client import TradingClient
 
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.memory.bank import MemoryBank
-from alphoryn.memory.schema import Position
+from alphoryn.memory.schema import Position, from_db_utc
 from alphoryn.telemetry.logger import TelemetryLogger
 
 
@@ -32,7 +32,6 @@ class PositionMonitor(threading.Thread):
         bank: MemoryBank,
         market_data: MarketDataClient,
         logger: TelemetryLogger,
-        current_session_ordinal: int,
         stop_event: threading.Event,
         *,
         poll_interval: float = 30.0,
@@ -41,19 +40,8 @@ class PositionMonitor(threading.Thread):
         self._bank = bank
         self._market_data = market_data
         self._logger = logger
-        self._current_session_ordinal = current_session_ordinal
         self._stop_event = stop_event
         self._poll_interval = poll_interval
-
-    def set_session_ordinal(self, ordinal: int) -> None:
-        """Publish the scheduler's current session ordinal.
-
-        The window-expiry check compares this against
-        ``Position.evaluation_window_session``, so the scheduler must call this
-        on every session boundary - otherwise the ordinal stays frozen at the
-        value passed to ``__init__`` and window expiry can never fire.
-        """
-        self._current_session_ordinal = ordinal
 
     def run(self) -> None:
         """Poll positions until the stop event is set."""
@@ -106,7 +94,7 @@ class PositionMonitor(threading.Thread):
                 )
                 return
 
-        if self._current_session_ordinal == pos.evaluation_window_session:
+        if datetime.now(UTC) >= from_db_utc(pos.evaluation_window_close_at):
             self._close_position(
                 pos,
                 current_price,

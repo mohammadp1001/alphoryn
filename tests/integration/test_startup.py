@@ -122,7 +122,7 @@ def test_startup_reads_preexisting_open_position_from_real_db(tmp_path: Path) ->
                 lot_size=10.0,
                 stop_loss_price=441.0,
                 exit_target='{"type":"trailing_stop","trail_pct":0.015}',
-                evaluation_window_session=5,
+                evaluation_window_close_at=datetime(2024, 1, 15, 19, 0),
                 status="OPEN",
             )
         )

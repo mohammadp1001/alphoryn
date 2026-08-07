@@ -4,7 +4,7 @@ Uses an in-memory SQLite database (:memory:) so no filesystem access is
 needed and every test starts from a clean state.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -20,7 +20,9 @@ from alphoryn.memory.schema import (
     Run,
     Session,
     create_tables,
+    from_db_utc,
     get_engine,
+    to_db_utc,
 )
 
 # ---------------------------------------------------------------------------
@@ -28,6 +30,8 @@ from alphoryn.memory.schema import (
 # ---------------------------------------------------------------------------
 
 _NOW = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
+_WINDOW_CLOSED = _NOW - timedelta(hours=4)   # deadline already passed
+_WINDOW_OPEN = _NOW + timedelta(hours=4)     # deadline still in the future
 
 
 def _in_memory_bank() -> MemoryBank:
@@ -67,7 +71,7 @@ def _sample_position(session_id: str, status: str = "OPEN", ticker: str = "SPY")
         lot_size=10.0,
         stop_loss_price=441.00,
         exit_target='{"type": "fixed", "target_price": 460.00}',
-        evaluation_window_session=5,
+        evaluation_window_close_at=_WINDOW_CLOSED,
         status=status,
     )
 
@@ -453,19 +457,51 @@ def test_get_positions_due_for_feedback_returns_closed_at_window() -> None:
         s.commit()
 
     pos1 = _sample_position(f"run-{run_id}/session-0001", status="CLOSED_PROFIT_TARGET")
-    pos1.evaluation_window_session = 5
+    pos1.evaluation_window_close_at = _WINDOW_CLOSED
     pos2 = _sample_position(f"run-{run_id}/session-0001", status="CLOSED_STOP_LOSS")
-    pos2.evaluation_window_session = 10  # different window
+    pos2.evaluation_window_close_at = _WINDOW_OPEN  # window has not closed yet
     pos3 = _sample_position(f"run-{run_id}/session-0001", status="OPEN")
-    pos3.evaluation_window_session = 5  # OPEN, should not appear
+    pos3.evaluation_window_close_at = _WINDOW_CLOSED  # OPEN, should not appear
 
     bank.write_position(pos1)
     bank.write_position(pos2)
     bank.write_position(pos3)
 
-    due = bank.get_positions_due_for_feedback(current_session_ordinal=5)
+    due = bank.get_positions_due_for_feedback(_NOW)
     assert len(due) == 1
     assert due[0].status == "CLOSED_PROFIT_TARGET"
+
+
+def test_get_positions_due_for_feedback_includes_windows_closed_long_ago() -> None:
+    """Regression for #122: a window that elapsed during a skipped session still fires."""
+    bank = _in_memory_bank()
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
+    with DBSession(bank._engine) as s:
+        s.add(_sample_session(run_id))
+        s.commit()
+
+    stale = _sample_position(f"run-{run_id}/session-0001", status="CLOSED_STOP_LOSS")
+    stale.evaluation_window_close_at = _NOW - timedelta(days=9)
+    bank.write_position(stale)
+
+    due = bank.get_positions_due_for_feedback(_NOW)
+    assert len(due) == 1
+
+
+def test_get_positions_due_for_feedback_accepts_aware_now() -> None:
+    """An aware UTC 'now' must compare correctly against naive stored deadlines."""
+    bank = _in_memory_bank()
+    run_id = bank.start_run('{"tickers":["SPY","QQQ"]}', 24)
+    with DBSession(bank._engine) as s:
+        s.add(_sample_session(run_id))
+        s.commit()
+
+    pos = _sample_position(f"run-{run_id}/session-0001", status="CLOSED_WINDOW_EXPIRY")
+    pos.evaluation_window_close_at = _WINDOW_CLOSED
+    bank.write_position(pos)
+
+    assert _NOW.tzinfo is not None
+    assert len(bank.get_positions_due_for_feedback(_NOW)) == 1
 
 
 def test_get_positions_due_for_feedback_excludes_already_evaluated() -> None:
@@ -477,7 +513,7 @@ def test_get_positions_due_for_feedback_excludes_already_evaluated() -> None:
         s.commit()
 
     pos = _sample_position(f"run-{run_id}/session-0001", status="CLOSED_PROFIT_TARGET")
-    pos.evaluation_window_session = 5
+    pos.evaluation_window_close_at = _WINDOW_CLOSED
     pos_id = bank.write_position(pos)
 
     evaluation = FeedbackEvaluation(
@@ -490,9 +526,9 @@ def test_get_positions_due_for_feedback_excludes_already_evaluated() -> None:
     )
     bank.write_feedback_evaluation(evaluation, "EVALUATED")
 
-    # Now status is EVALUATED but evaluation_window_session was 5
-    # The EVALUATED status is not in the closed_statuses filter → no results
-    due = bank.get_positions_due_for_feedback(current_session_ordinal=5)
+    # Status is now EVALUATED even though the window has closed.
+    # EVALUATED is not in the closed_statuses filter → no results
+    due = bank.get_positions_due_for_feedback(_NOW)
     assert due == []
 
 
@@ -593,3 +629,34 @@ def test_feedback_evaluation_attempt_count_default_is_one() -> None:
             FeedbackEvaluation.position_id == pos_id
         ).one()
         assert result.attempt_count == 1
+
+
+# ---------------------------------------------------------------------------
+# UTC helpers — SQLite DATETIME columns hold naive UTC (issue #122)
+# ---------------------------------------------------------------------------
+
+
+def test_to_db_utc_strips_offset_from_aware_value() -> None:
+    aware = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
+    assert to_db_utc(aware) == datetime(2024, 6, 1, 12, 0, 0)
+    assert to_db_utc(aware).tzinfo is None
+
+
+def test_to_db_utc_converts_non_utc_offset_before_stripping() -> None:
+    berlin = datetime(2024, 6, 1, 14, 0, 0, tzinfo=timezone(timedelta(hours=2)))
+    assert to_db_utc(berlin) == datetime(2024, 6, 1, 12, 0, 0)
+
+
+def test_to_db_utc_passes_naive_value_through() -> None:
+    naive = datetime(2024, 6, 1, 12, 0, 0)
+    assert to_db_utc(naive) is naive
+
+
+def test_from_db_utc_attaches_utc_to_naive_value() -> None:
+    naive = datetime(2024, 6, 1, 12, 0, 0)
+    assert from_db_utc(naive) == datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
+
+
+def test_from_db_utc_normalises_aware_value_to_utc() -> None:
+    berlin = datetime(2024, 6, 1, 14, 0, 0, tzinfo=timezone(timedelta(hours=2)))
+    assert from_db_utc(berlin) == datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)

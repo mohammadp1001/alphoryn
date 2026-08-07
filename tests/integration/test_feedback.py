@@ -36,7 +36,7 @@ from alphoryn.memory.schema import (
 _NOW = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
 _ENTRY_SESSION_ID = "run-1/session-0001"
 _EVAL_SESSION_ID = "run-1/session-0005"
-_EVALUATION_WINDOW = 5
+_EVALUATION_WINDOW_CLOSE_AT = datetime(2024, 6, 1, 16, 0, 0)
 
 _RESULT_DICT = {
     "outcome_judgment": "CORRECT",
@@ -103,7 +103,7 @@ def _seed_db(bank: MemoryBank, html_report_path: str = "") -> tuple[int, int]:
             lot_size=5.0,
             stop_loss_price=441.0,
             exit_target='{"type": "price_level", "value": 460.0}',
-            evaluation_window_session=_EVALUATION_WINDOW,
+            evaluation_window_close_at=_EVALUATION_WINDOW_CLOSE_AT,
             status="CLOSED_PROFIT_TARGET",
             exit_price=460.0,
             exit_time=_NOW,

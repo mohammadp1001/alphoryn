@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from alphoryn.config.models import AlphorynConfig
 from alphoryn.execution.agent import AssetDecision, SessionDecision
+from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.scheduler.scheduler import Scheduler
 
 # ---------------------------------------------------------------------------
@@ -739,15 +740,17 @@ def test_run_feedback_no_feedback_agent_returns_early() -> None:
     sched = _full_scheduler()
     sched._feedback_agent = None
     sched._bank.get_positions_due_for_feedback.return_value = [_make_mock_position()]
-    sched._run_feedback("run-1/session-0002", 2)
+    sched._run_feedback("run-1/session-0002")
     sched._bank.get_positions_due_for_feedback.assert_not_called()
 
 
 def test_run_feedback_queries_bank_for_due_positions() -> None:
     sched = _full_scheduler_with_feedback()
     sched._bank.get_positions_due_for_feedback.return_value = []
-    sched._run_feedback("run-1/session-0002", 2)
-    sched._bank.get_positions_due_for_feedback.assert_called_once_with(2)
+    sched._run_feedback("run-1/session-0002")
+    assert sched._bank.get_positions_due_for_feedback.call_count == 1
+    (now_arg,) = sched._bank.get_positions_due_for_feedback.call_args.args
+    assert now_arg.tzinfo is not None  # aware UTC, not a session ordinal
 
 
 def test_run_feedback_invokes_feedback_agent_per_position() -> None:
@@ -759,7 +762,7 @@ def test_run_feedback_invokes_feedback_agent_per_position() -> None:
     sched._bank.get_positions_due_for_feedback.return_value = [pos1, pos2]
     sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
 
-    sched._run_feedback("run-1/session-0002", 2)
+    sched._run_feedback("run-1/session-0002")
 
     assert sched._feedback_agent.evaluate.call_count == 2
 
@@ -770,7 +773,7 @@ def test_run_feedback_passes_correct_session_id_to_evaluate() -> None:
     sched._bank.get_positions_due_for_feedback.return_value = [pos]
     sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
 
-    sched._run_feedback("run-1/session-0002", 2)
+    sched._run_feedback("run-1/session-0002")
 
     call_kwargs = sched._feedback_agent.evaluate.call_args
     assert call_kwargs.args[1] == "run-1/session-0002"
@@ -779,7 +782,7 @@ def test_run_feedback_passes_correct_session_id_to_evaluate() -> None:
 def test_run_feedback_no_positions_does_nothing() -> None:
     sched = _full_scheduler_with_feedback()
     sched._bank.get_positions_due_for_feedback.return_value = []
-    sched._run_feedback("run-1/session-0002", 2)
+    sched._run_feedback("run-1/session-0002")
     sched._feedback_agent.evaluate.assert_not_called()
 
 
@@ -790,7 +793,7 @@ def test_run_feedback_uses_html_report_path_from_session() -> None:
     mock_session = MagicMock(html_report_path="/reports/run-1/session.html")
     sched._bank.get_session.return_value = mock_session
 
-    sched._run_feedback("run-1/session-0002", 2)
+    sched._run_feedback("run-1/session-0002")
 
     fi = sched._feedback_agent.evaluate.call_args.args[0]
     assert fi.html_report_path == "/reports/run-1/session.html"
@@ -802,7 +805,7 @@ def test_run_feedback_no_entry_session_uses_empty_string_for_path() -> None:
     sched._bank.get_positions_due_for_feedback.return_value = [pos]
     sched._bank.get_session.return_value = None  # session not found
 
-    sched._run_feedback("run-1/session-0002", 2)
+    sched._run_feedback("run-1/session-0002")
 
     fi = sched._feedback_agent.evaluate.call_args.args[0]
     assert fi.html_report_path == ""
@@ -886,8 +889,13 @@ def test_process_session_null_strategy_skips_memory_write() -> None:
 
 
 def _monitored_scheduler(**extra) -> tuple[Scheduler, MagicMock, threading.Event]:
-    """Build a full scheduler wired to a mock monitor with nothing left open."""
-    monitor = MagicMock()
+    """Build a full scheduler wired to a mock monitor with nothing left open.
+
+    The mock is spec'd against PositionMonitor, so any attempt by the scheduler
+    to call a method the monitor does not have — set_session_ordinal, removed in
+    #122 — raises AttributeError rather than silently passing.
+    """
+    monitor = MagicMock(spec=PositionMonitor)
     stop_event = threading.Event()
     sched = _full_scheduler(monitor=monitor, monitor_stop_event=stop_event, **extra)
     sched._bank.load_open_positions.return_value = []
@@ -900,17 +908,9 @@ def test_run_starts_monitor_before_first_session() -> None:
     monitor.start.assert_called_once()
 
 
-def test_run_seeds_monitor_with_first_session_ordinal() -> None:
-    sched, monitor, _ = _monitored_scheduler()
-    _run_with_no_wait(sched)
-    assert monitor.set_session_ordinal.call_args_list[0].args == (1,)
-
-
-def test_run_publishes_session_ordinal_each_iteration() -> None:
-    sched, monitor, _ = _monitored_scheduler()
-    _run_with_no_wait(sched)
-    # Seeded at _start_monitor, then re-published at the top of the loop body.
-    assert monitor.set_session_ordinal.call_args_list[1].args == (1,)
+def test_monitor_has_no_session_ordinal_api() -> None:
+    """Window expiry is driven by each position's own deadline (issue #122)."""
+    assert not hasattr(PositionMonitor, "set_session_ordinal")
 
 
 def test_run_stops_monitor_when_nothing_is_open() -> None:
@@ -928,7 +928,7 @@ def test_run_ends_run_before_stopping_monitor() -> None:
 
 def test_start_monitor_emits_telemetry() -> None:
     sched, _monitor, _ = _monitored_scheduler()
-    sched._start_monitor(1)
+    sched._start_monitor()
     events = [c.args[0] for c in sched._logger.emit.call_args_list]
     assert "MONITOR_STARTED" in events
 
@@ -936,14 +936,13 @@ def test_start_monitor_emits_telemetry() -> None:
 def test_start_monitor_without_logger_does_not_raise() -> None:
     sched, monitor, _ = _monitored_scheduler()
     sched._logger = None
-    sched._start_monitor(3)
+    sched._start_monitor()
     monitor.start.assert_called_once()
-    monitor.set_session_ordinal.assert_called_once_with(3)
 
 
 def test_start_monitor_is_noop_without_monitor() -> None:
     sched = _full_scheduler()
-    sched._start_monitor(1)  # must not raise
+    sched._start_monitor()  # must not raise
 
 
 def test_stop_monitor_emits_telemetry() -> None:
@@ -975,17 +974,21 @@ def test_stop_monitor_is_noop_without_monitor() -> None:
 
 def test_drain_is_noop_without_monitor() -> None:
     sched = _full_scheduler()
-    assert sched._drain_open_positions(5) == 5
+    sched._bank.load_open_positions.return_value = [MagicMock()]
+    with patch.object(sched, "wait_for_candle_close") as mock_wait:
+        sched._drain_open_positions()
+    mock_wait.assert_not_called()
 
 
 def test_drain_returns_immediately_when_nothing_open() -> None:
-    sched, monitor, _ = _monitored_scheduler()
-    assert sched._drain_open_positions(5) == 5
-    monitor.set_session_ordinal.assert_not_called()
+    sched, _monitor, _ = _monitored_scheduler()
+    with patch.object(sched, "wait_for_candle_close") as mock_wait:
+        sched._drain_open_positions()
+    mock_wait.assert_not_called()
 
 
-def test_drain_advances_ordinal_until_positions_close() -> None:
-    sched, monitor, _ = _monitored_scheduler()
+def test_drain_waits_candle_by_candle_until_positions_close() -> None:
+    sched, _monitor, _ = _monitored_scheduler()
     pos = MagicMock()
     sched._bank.load_open_positions.side_effect = [[pos], [pos], [pos], []]
     mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
@@ -994,20 +997,17 @@ def test_drain_advances_ordinal_until_positions_close() -> None:
         patch.object(sched, "compute_next_candle_close", return_value=mock_target),
         patch.object(sched, "wait_for_candle_close") as mock_wait,
     ):
-        final_ordinal = sched._drain_open_positions(5)
+        sched._drain_open_positions()
 
-    assert final_ordinal == 7
     assert mock_wait.call_count == 2
-    assert [c.args[0] for c in monitor.set_session_ordinal.call_args_list] == [5, 6]
 
 
 def test_run_holds_process_open_while_positions_remain() -> None:
-    sched, monitor, stop_event = _monitored_scheduler()
+    sched, _monitor, stop_event = _monitored_scheduler()
     pos = MagicMock()
     # Session loop never queries open positions; only the drain does.
     sched._bank.load_open_positions.side_effect = [[pos], [pos], []]
 
     _run_with_no_wait(sched)
 
-    monitor.set_session_ordinal.assert_any_call(2)
     assert stop_event.is_set()

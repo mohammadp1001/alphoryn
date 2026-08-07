@@ -79,7 +79,7 @@ The monitor closes the position with `exit_reason = STOP_LOSS` if
 |---|---|---|
 | Profit target | `current_price >= exit_target["value"]` | `PROFIT_TARGET` |
 | Stop loss | `current_price <= stop_loss_price` | `STOP_LOSS` |
-| Window expiry | Session ordinal reaches `evaluation_window_session` | `WINDOW_EXPIRY` |
+| Window expiry | Wall clock reaches `evaluation_window_close_at` | `WINDOW_EXPIRY` |
 
 ---
 
@@ -87,7 +87,7 @@ The monitor closes the position with `exit_reason = STOP_LOSS` if
 
 **4 sessions after the position closes.**
 
-`evaluation_window_session = entry_session_ordinal + 4`
+`evaluation_window_close_at = entry_time + 4 x candle_timeframe`
 
 The feedback agent evaluates whether the price reverted to SMA_20 within 4 sessions of
 the trade. This is a long enough window for reversion to complete without waiting for

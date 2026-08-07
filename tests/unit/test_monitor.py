@@ -6,6 +6,7 @@ PositionMonitor.model == None (Principle I).
 
 import json
 import threading
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from alphoryn.memory.schema import Position
@@ -15,6 +16,10 @@ from alphoryn.monitor.monitor import PositionMonitor
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Window deadlines are naive UTC, matching how SQLite DATETIME reads back.
+_PAST = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+_FUTURE = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=24)
+
 
 def _make_position(
     *,
@@ -23,7 +28,7 @@ def _make_position(
     stop_loss_price: float = 440.0,
     exit_target: dict | None = None,
     strategy: str = "MEAN_REVERSION",
-    evaluation_window_session: int = 10,
+    window_close_at: datetime | None = None,
     session_id: str = "run-1/session-001",
     trailing_stop_high_watermark: float | None = None,
 ) -> Position:
@@ -35,7 +40,9 @@ def _make_position(
     pos.stop_loss_price = stop_loss_price
     pos.exit_target = json.dumps(exit_target)
     pos.strategy = strategy
-    pos.evaluation_window_session = evaluation_window_session
+    pos.evaluation_window_close_at = (
+        window_close_at if window_close_at is not None else _FUTURE
+    )
     pos.status = "OPEN"
     pos.session_id = session_id
     pos.trailing_stop_high_watermark = trailing_stop_high_watermark
@@ -47,7 +54,6 @@ def _make_position(
 
 def _make_monitor(
     *,
-    current_session_ordinal: int = 1,
     stop_event: threading.Event | None = None,
     poll_interval: float = 30.0,
 ) -> tuple[PositionMonitor, MagicMock, MagicMock, MagicMock]:
@@ -60,7 +66,6 @@ def _make_monitor(
         bank=bank,
         market_data=market_data,
         logger=logger,
-        current_session_ordinal=current_session_ordinal,
         stop_event=stop_event,
         poll_interval=poll_interval,
     )
@@ -196,12 +201,12 @@ def test_price_level_target_emits_profit_target_triggered() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_window_expiry_closes_position_on_matching_ordinal() -> None:
-    monitor, bank, market_data, _ = _make_monitor(current_session_ordinal=5)
+def test_window_expiry_closes_position_once_deadline_passed() -> None:
+    monitor, bank, market_data, _ = _make_monitor()
     pos = _make_position(
         stop_loss_price=430.0,
         exit_target={"type": "price_level", "value": 480.0},
-        evaluation_window_session=5,
+        window_close_at=_PAST,
     )
     bank.load_open_positions.return_value = [pos]
     market_data.get_latest_price.return_value = 450.0  # between stop and target
@@ -214,11 +219,11 @@ def test_window_expiry_closes_position_on_matching_ordinal() -> None:
 
 
 def test_window_expiry_emits_window_expiry_triggered() -> None:
-    monitor, bank, market_data, logger = _make_monitor(current_session_ordinal=5)
+    monitor, bank, market_data, logger = _make_monitor()
     pos = _make_position(
         stop_loss_price=430.0,
         exit_target={"type": "price_level", "value": 480.0},
-        evaluation_window_session=5,
+        window_close_at=_PAST,
     )
     bank.load_open_positions.return_value = [pos]
     market_data.get_latest_price.return_value = 450.0
@@ -230,12 +235,12 @@ def test_window_expiry_emits_window_expiry_triggered() -> None:
     assert "WINDOW_EXPIRY_TRIGGERED" in emitted_types
 
 
-def test_window_ordinal_not_matched_does_not_close() -> None:
-    monitor, bank, market_data, _ = _make_monitor(current_session_ordinal=3)
+def test_window_deadline_not_reached_does_not_close() -> None:
+    monitor, bank, market_data, _ = _make_monitor()
     pos = _make_position(
         stop_loss_price=430.0,
         exit_target={"type": "price_level", "value": 480.0},
-        evaluation_window_session=5,
+        window_close_at=_FUTURE,
     )
     bank.load_open_positions.return_value = [pos]
     market_data.get_latest_price.return_value = 450.0
@@ -371,11 +376,11 @@ def test_no_open_positions_does_nothing() -> None:
 
 
 def test_price_between_stop_and_target_no_close() -> None:
-    monitor, bank, market_data, _ = _make_monitor(current_session_ordinal=1)
+    monitor, bank, market_data, _ = _make_monitor()
     pos = _make_position(
         stop_loss_price=430.0,
         exit_target={"type": "price_level", "value": 480.0},
-        evaluation_window_session=10,
+        window_close_at=_FUTURE,
     )
     bank.load_open_positions.return_value = [pos]
     market_data.get_latest_price.return_value = 455.0  # between stop and target
@@ -387,11 +392,11 @@ def test_price_between_stop_and_target_no_close() -> None:
 
 
 def test_unknown_exit_target_type_falls_through_to_window_check() -> None:
-    monitor, bank, market_data, _ = _make_monitor(current_session_ordinal=1)
+    monitor, bank, market_data, _ = _make_monitor()
     pos = _make_position(
         stop_loss_price=430.0,
         exit_target={"type": "unknown_type", "value": 999.0},
-        evaluation_window_session=10,
+        window_close_at=_FUTURE,
     )
     bank.load_open_positions.return_value = [pos]
     market_data.get_latest_price.return_value = 450.0
@@ -453,23 +458,40 @@ def test_monitor_is_daemon_thread() -> None:
 
 
 # ---------------------------------------------------------------------------
-# set_session_ordinal — the scheduler keeps the window-expiry clock moving
+# Carry-over positions (issue #122)
 # ---------------------------------------------------------------------------
 
 
-def test_set_session_ordinal_updates_window_expiry_check() -> None:
-    monitor, bank, market_data, _ = _make_monitor(current_session_ordinal=1)
-    pos = _make_position(evaluation_window_session=7)
-    bank.load_open_positions.return_value = [pos]
-    market_data.get_latest_price.return_value = 450.0  # no stop, no target
+def test_window_expiry_is_independent_of_run_numbering() -> None:
+    """A position from a prior run expires on its own deadline, not a run ordinal."""
+    monitor, bank, market_data, _ = _make_monitor()
+    carry_over = _make_position(
+        stop_loss_price=430.0,
+        exit_target={"type": "price_level", "value": 480.0},
+        window_close_at=_PAST,
+    )
+    bank.load_open_positions.return_value = [carry_over]
+    market_data.get_latest_price.return_value = 450.0  # between stop and target
 
     with patch("alphoryn.monitor.monitor.TradingClient"):
         monitor._check_positions()
-    bank.update_position_close.assert_not_called()
 
-    monitor.set_session_ordinal(7)
+    assert bank.update_position_close.call_args.kwargs["status"] == "CLOSED_WINDOW_EXPIRY"
+
+
+def test_window_deadline_read_as_naive_is_treated_as_utc() -> None:
+    """SQLite hands back naive datetimes; comparing them must not raise."""
+    monitor, bank, market_data, _ = _make_monitor()
+    pos = _make_position(
+        stop_loss_price=430.0,
+        exit_target={"type": "price_level", "value": 480.0},
+        window_close_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=1),
+    )
+    assert pos.evaluation_window_close_at.tzinfo is None
+    bank.load_open_positions.return_value = [pos]
+    market_data.get_latest_price.return_value = 450.0
+
     with patch("alphoryn.monitor.monitor.TradingClient"):
         monitor._check_positions()
 
     bank.update_position_close.assert_called_once()
-    assert bank.update_position_close.call_args.kwargs["status"] == "CLOSED_WINDOW_EXPIRY"
