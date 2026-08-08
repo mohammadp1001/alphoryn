@@ -428,3 +428,28 @@ def test_get_price_at_never_looks_past_the_timestamp() -> None:
 def test_get_price_at_uses_the_configured_timeframe() -> None:
     _, req = _captured_price_at_request("4H")
     assert req.timeframe == TIMEFRAMES["4H"]
+
+
+# ---------------------------------------------------------------------------
+# ADX Smoothing & Empty Bars Protection
+# ---------------------------------------------------------------------------
+
+
+def test_compute_adx_smoothed_value() -> None:
+    """_compute_adx returns a smoothed 14-period ADX float between 0 and 100."""
+    closes = [100.0 + i * 0.5 for i in range(50)]
+    highs = [c + 1.0 for c in closes]
+    lows = [c - 1.0 for c in closes]
+    adx = _compute_adx(highs, lows, closes, 14)
+    assert 0.0 <= adx <= 100.0
+
+
+def test_data_fetch_raises_runtime_error_on_empty_bars() -> None:
+    """_data_fetch raises RuntimeError when Alpaca returns no bars for a ticker."""
+    client = MarketDataClient(api_key="k", secret_key="s", candle_timeframe="1H")
+    mock_response = MagicMock()
+    mock_response.__getitem__.side_effect = KeyError("SPY")
+    with patch("alphoryn.market_data.client.StockHistoricalDataClient") as mock_cls:
+        mock_cls.return_value.get_stock_bars.return_value = mock_response
+        with pytest.raises(RuntimeError, match="No market data bars returned for ticker SPY"):
+            client._data_fetch("SPY", datetime.now(UTC))

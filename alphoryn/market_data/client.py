@@ -94,7 +94,7 @@ def _compute_rsi(closes: list[float], period: int = 14) -> float:
 def _compute_adx(
     highs: list[float], lows: list[float], closes: list[float], period: int = 14
 ) -> float:
-    """Compute ADX using Wilder's smoothing (simplified average TR / average DM)."""
+    """Compute 14-period smoothed ADX (moving average of Directional Index DX)."""
     n = len(closes)
     if n < period + 1:
         return 0.0
@@ -111,15 +111,31 @@ def _compute_adx(
         dm_plus_list.append(dm_plus)
         dm_minus_list.append(dm_minus)
 
-    atr = sum(tr_list[-period:]) / period
-    if atr == 0:
+    if len(tr_list) < period:
         return 0.0
-    di_plus = (sum(dm_plus_list[-period:]) / period) / atr * 100
-    di_minus = (sum(dm_minus_list[-period:]) / period) / atr * 100
-    di_sum = di_plus + di_minus
-    if di_sum == 0:
+
+    dx_list = []
+    for i in range(period, len(tr_list) + 1):
+        tr_sub = tr_list[i - period : i]
+        plus_sub = dm_plus_list[i - period : i]
+        minus_sub = dm_minus_list[i - period : i]
+
+        atr = sum(tr_sub) / period
+        if atr == 0:
+            dx_list.append(0.0)
+            continue
+        di_plus = (sum(plus_sub) / period) / atr * 100
+        di_minus = (sum(minus_sub) / period) / atr * 100
+        di_sum = di_plus + di_minus
+        if di_sum == 0:
+            dx_list.append(0.0)
+        else:
+            dx_list.append(abs(di_plus - di_minus) / di_sum * 100)
+
+    if not dx_list:
         return 0.0
-    return abs(di_plus - di_minus) / di_sum * 100
+    adx_window = dx_list[-period:]
+    return sum(adx_window) / len(adx_window)
 
 
 def _compute_bollinger(
@@ -133,7 +149,7 @@ def _compute_bollinger(
     upper = sma + std_dev * std
     lower = sma - std_dev * std
     band_width = upper - lower
-    pct_b = (closes[-1] - lower) / band_width if band_width != 0 else 0.5
+    pct_b = (closes[-1] - lower) / band_width if band_width > 0 else 0.5
     return upper, lower, pct_b
 
 
@@ -207,7 +223,14 @@ class MarketDataClient:
             end=candle_close_at,
             feed=DataFeed.IEX,
         )
-        bars = client.get_stock_bars(req)[ticker][-REQUIRED_BARS:]
+        bars_response = client.get_stock_bars(req)
+        try:
+            bars_list = bars_response[ticker]
+        except (KeyError, TypeError, IndexError):
+            bars_list = []
+        if not bars_list:
+            raise RuntimeError(f"No market data bars returned for ticker {ticker}")
+        bars = bars_list[-REQUIRED_BARS:]
 
         closes = [b.close for b in bars]
         highs = [b.high for b in bars]
