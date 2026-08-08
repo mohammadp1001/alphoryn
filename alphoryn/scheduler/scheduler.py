@@ -12,7 +12,7 @@ import os
 import sys
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import typer
@@ -604,6 +604,31 @@ class Scheduler:
         if self._logger is not None:
             self._logger.emit("MONITOR_STOPPED", "scheduler", {})
 
+    def _handle_overrun_candles(
+        self,
+        run_id: int,
+        last_candle_close: datetime,
+        next_close: datetime,
+        session_ordinal: int,
+    ) -> int:
+        """Record skipped session rows for intermediate closed candles missed due to
+        processing overrun (SC-003).
+        """
+        candle_secs = TIMEFRAME_SECONDS[self._cfg.candle_timeframe]
+        overrun_time = last_candle_close + timedelta(seconds=candle_secs)
+        now = datetime.now(UTC)
+        while overrun_time <= now and overrun_time < next_close:
+            session_id = f"run-{run_id}/session-{session_ordinal:04d}"
+            status = (
+                "SKIPPED_MARKET_CLOSED"
+                if not self.is_market_open()
+                else "SKIPPED_DATA_UNAVAILABLE"
+            )
+            self._record_skipped_session(run_id, session_id, overrun_time, status)
+            session_ordinal += 1
+            overrun_time += timedelta(seconds=candle_secs)
+        return session_ordinal
+
     # ------------------------------------------------------------------
     # Entry point
     # ------------------------------------------------------------------
@@ -650,8 +675,11 @@ class Scheduler:
                         run_id, session_id, candle_close_at, "SKIPPED_MARKET_CLOSED"
                     )
                     next_close = self.compute_next_candle_close(datetime.now(UTC))
-                    self.wait_for_candle_close(next_close, _sleep=_sleep)
                     session_ordinal += 1
+                    session_ordinal = self._handle_overrun_candles(
+                        run_id, candle_close_at, next_close, session_ordinal
+                    )
+                    self.wait_for_candle_close(next_close, _sleep=_sleep)
                     continue  # skipped sessions not counted against total (FR-018)
 
                 session_status = self._process_session(
@@ -663,6 +691,9 @@ class Scheduler:
                 session_ordinal += 1
 
                 next_close = self.compute_next_candle_close(datetime.now(UTC))
+                session_ordinal = self._handle_overrun_candles(
+                    run_id, candle_close_at, next_close, session_ordinal
+                )
                 self.wait_for_candle_close(next_close, _sleep=_sleep)
         finally:
             self._bank.end_run(run_id)
