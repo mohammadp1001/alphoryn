@@ -386,3 +386,46 @@ def test_history_renders_the_execution_marker(tmp_path: Path) -> None:
     result = runner.invoke(app, ["history", "--db", str(db)])
     assert result.exit_code == 0
     assert "MR -> BUY (exec)" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Utility Commands Tests: version, verify-telemetry, reset
+# ---------------------------------------------------------------------------
+
+
+def test_version_command() -> None:
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 0
+    assert "Alphoryn v0.0.1" in result.output
+
+
+def test_verify_telemetry_command(tmp_path: Path) -> None:
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    result = runner.invoke(app, ["verify-telemetry", "--db", str(db)])
+    assert result.exit_code == 0
+    assert "Telemetry check for" in result.output
+    assert "Runs recorded: 1" in result.output
+
+
+def test_reset_command(tmp_path: Path) -> None:
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    assert db.exists()
+    bank._engine.dispose()
+
+    result = runner.invoke(app, ["reset", "--db", str(db), "--force"])
+    assert result.exit_code == 0
+    assert "Reset memory bank database" in result.output
+    assert not db.exists()
+
+
+def test_reset_command_cancellation(tmp_path: Path) -> None:
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    result = runner.invoke(app, ["reset", "--db", str(db)], input="n\n")
+    assert result.exit_code == 0
+    assert "Reset cancelled." in result.output
+    assert db.exists()
+    bank._engine.dispose()

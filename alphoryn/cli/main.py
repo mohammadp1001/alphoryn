@@ -314,3 +314,62 @@ def _format_decision(strategy: str | None, decision: str | None, result: str | N
     if result == "EXECUTED":
         return f"{strategy_abbr} -> {decision} (exec)"
     return f"{strategy_abbr} -> {decision}"
+
+
+# ---------------------------------------------------------------------------
+# Utility Commands: version, verify-telemetry, reset
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def version() -> None:
+    """Print the Alphoryn version and exit."""
+    typer.echo(f"Alphoryn v{_VERSION}")
+
+
+@app.command()
+def verify_telemetry(
+    db: Annotated[
+        str, typer.Option(help="Memory bank path.")
+    ] = "~/.alphoryn/memory.db",
+) -> None:
+    """Verify telemetry and system events recorded in the memory bank."""
+    db_path = str(Path(db).expanduser())
+    try:
+        bank = MemoryBank(db_path)
+    except MemoryBankError as exc:
+        typer.echo(f"Memory bank error: {exc}", err=True)
+        raise typer.Exit(2) from exc
+
+    with DBSession(bank._engine) as s:
+        runs_count = s.query(Run).count()
+        sessions_count = s.query(SessionModel).count()
+        positions_count = s.query(Position).count()
+
+    typer.echo(f"Telemetry check for {db_path}:")
+    typer.echo(f"  Runs recorded: {runs_count}")
+    typer.echo(f"  Sessions recorded: {sessions_count}")
+    typer.echo(f"  Positions recorded: {positions_count}")
+
+
+@app.command()
+def reset(
+    db: Annotated[
+        str, typer.Option(help="Memory bank path to reset.")
+    ] = "~/.alphoryn/memory.db",
+    force: Annotated[
+        bool, typer.Option("--force", "-f", help="Force reset without confirmation prompt.")
+    ] = False,
+) -> None:
+    """Reset the memory bank database."""
+    db_path = Path(db).expanduser()
+    if not db_path.exists():
+        typer.echo(f"Memory bank database {db_path} does not exist.")
+        return
+    if not force:
+        confirm = typer.confirm(f"Are you sure you want to delete {db_path}?")
+        if not confirm:
+            typer.echo("Reset cancelled.")
+            return
+    db_path.unlink()
+    typer.echo(f"Reset memory bank database: {db_path}")
