@@ -678,3 +678,43 @@ def test_a_position_that_gaps_down_keeps_its_entry_price_as_the_trail_floor(tmp_
     # position survives - and the watermark must not have ratcheted down to 447.
     assert bank.load_open_positions()[0].trailing_stop_high_watermark == 450.0
     bank._engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# FR-001 & FR-010 Risk Management and Budget Enforcement
+# ---------------------------------------------------------------------------
+
+
+def test_custom_stop_loss_pct_override(tmp_path) -> None:
+    """FR-001: ExecutionAgent uses configured stop_loss_pct when writing Position."""
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], stop_loss_pct=0.05)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    _run(agent, _decision(_buy("SPY", lot=5)))
+
+    position = bank.load_open_positions()[0]
+    # ask_price = 450.0; stop_loss_pct = 0.05 -> stop_loss_price = 450 * 0.95 = 427.5
+    assert position.stop_loss_price == 427.5
+    bank._engine.dispose()
+
+
+def test_session_money_budget_rejects_insufficient_funds(tmp_path) -> None:
+    """FR-010: order requiring more than session_money_budget fails with INSUFFICIENT_BUDGET."""
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    # Price is 450.0, lot=5 -> required = 2250.0; session_money_budget = 1000.0
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=1000.0)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    mock_alpaca = _run(agent, _decision(_buy("SPY", lot=5)))
+
+    mock_alpaca.submit_order.assert_not_called()
+    assert bank.load_open_positions() == []
+    bank._engine.dispose()
+
