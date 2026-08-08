@@ -280,7 +280,6 @@ class ExecutionAgent:
         # Write OPEN Position record to memory bank
         stop_loss_pct = self._stop_loss_pct
         stop_loss_price = ask_price * (1 - stop_loss_pct)
-        stop_loss_price = ask_price * (1 - stop_loss_pct)
         entry_time = datetime.now(UTC)
         pos = Position(
             session_id=session_id,
