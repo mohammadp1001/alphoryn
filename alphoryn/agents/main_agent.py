@@ -67,6 +67,7 @@ class MainAgent:
         tickers: list[str],
         candle_close_at: datetime,
         memory_entries: list[dict[str, Any]] | None = None,
+        session_money_budget: float | None = None,
     ) -> SessionDecision:
         """Run the LLM agent and return a SessionDecision.
 
@@ -74,7 +75,9 @@ class MainAgent:
         Raises MainAgentError if no valid JSON decision is produced.
         """
         t0 = datetime.now(UTC)
-        prompt = _build_prompt(session_id, tickers, candle_close_at, memory_entries)
+        prompt = _build_prompt(
+            session_id, tickers, candle_close_at, memory_entries, session_money_budget
+        )
 
         runner = InMemoryRunner(agent=self._agent, app_name="alphoryn")
         runner.auto_create_session = True
@@ -151,12 +154,15 @@ def _build_prompt(
     tickers: list[str],
     candle_close_at: datetime,
     memory_entries: list[dict[str, Any]] | None,
+    session_money_budget: float | None = None,
 ) -> str:
     lines = [
         f"session_id: {session_id}",
         f"tickers: {', '.join(tickers)}",
         f"candle_close_at: {candle_close_at.isoformat()}",
     ]
+    if session_money_budget is not None:
+        lines.append(f"session_money_budget: {session_money_budget}")
     if memory_entries:
         lines.append(f"memory_entries: {json.dumps(memory_entries)}")
     return "\n".join(lines)

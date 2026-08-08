@@ -19,7 +19,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
 
-from alphoryn.config.models import TIMEFRAME_SECONDS
+from alphoryn.config.models import TIMEFRAME_SECONDS, AlphorynConfig
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import Position, to_db_utc
 from alphoryn.telemetry.logger import TelemetryLogger
@@ -69,10 +69,23 @@ class ExecutionAgent:
         bank: MemoryBank,
         candle_timeframe: str = "1H",
         logger: "TelemetryLogger | None" = None,
+        cfg: "AlphorynConfig | None" = None,
+        stop_loss_pct: float | None = None,
+        session_money_budget: float | None = None,
     ) -> None:
         self._bank = bank
         self._candle_seconds = TIMEFRAME_SECONDS[candle_timeframe]
         self._logger = logger
+        self._stop_loss_pct = (
+            cfg.stop_loss_pct
+            if cfg is not None
+            else (stop_loss_pct if stop_loss_pct is not None else 0.02)
+        )
+        self._session_money_budget = (
+            cfg.session_money_budget
+            if cfg is not None
+            else session_money_budget
+        )
 
     def _emit(
         self,
@@ -209,10 +222,14 @@ class ExecutionAgent:
 
         client = self._trading_client()
 
-        # Budget check via Alpaca account API. Buying power only constrains an
-        # entry; closing a position never needs it, which is why this sits here.
+        # Budget check via Alpaca account API and optional session_money_budget (FR-010).
         account = client.get_account()
         buying_power = float(account.buying_power)
+        effective_budget = (
+            min(buying_power, self._session_money_budget)
+            if self._session_money_budget is not None
+            else buying_power
+        )
         ask_price = self._latest_ask(asset_decision.ticker)
         lot = asset_decision.lot_size or 1
         required = ask_price * lot
@@ -220,21 +237,24 @@ class ExecutionAgent:
             "BUDGET_CHECK",
             {
                 "buying_power": buying_power,
+                "session_money_budget": self._session_money_budget,
+                "effective_budget": effective_budget,
                 "required": required,
                 "lot_size": lot,
                 "price": ask_price,
-                "sufficient": buying_power >= required,
+                "sufficient": effective_budget >= required,
             },
             ticker=asset_decision.ticker,
             session_id=session_id,
         )
-        if buying_power < required:
+        if effective_budget < required:
             self._emit(
                 "ORDER_FAILED",
                 {
                     "side": "BUY",
                     "reason": "INSUFFICIENT_BUDGET",
                     "buying_power": buying_power,
+                    "session_money_budget": self._session_money_budget,
                     "required": required,
                 },
                 ticker=asset_decision.ticker,
@@ -258,7 +278,8 @@ class ExecutionAgent:
         )
 
         # Write OPEN Position record to memory bank
-        stop_loss_pct = 0.02
+        stop_loss_pct = self._stop_loss_pct
+        stop_loss_price = ask_price * (1 - stop_loss_pct)
         stop_loss_price = ask_price * (1 - stop_loss_pct)
         entry_time = datetime.now(UTC)
         pos = Position(

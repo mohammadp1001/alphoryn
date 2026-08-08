@@ -477,3 +477,16 @@ def test_decide_markdown_fenced_json_is_parsed_correctly() -> None:
         decision = agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
 
     assert decision.session_id == "sess-001"
+
+
+def test_build_prompt_includes_session_money_budget() -> None:
+    """FR-010a: _build_prompt includes session_money_budget when provided."""
+    prompt = _build_prompt(
+        "sess-001",
+        ["SPY", "QQQ"],
+        _CANDLE_CLOSE_AT,
+        memory_entries=None,
+        session_money_budget=5000.0,
+    )
+    assert "session_money_budget: 5000.0" in prompt
+

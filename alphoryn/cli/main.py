@@ -161,7 +161,7 @@ def _start_scheduler(cfg: AlphorynConfig, bank: MemoryBank) -> None:
         cfg,
         bank,
         main_agent=MainAgent(market_data, logger),
-        execution_agent=ExecutionAgent(bank, cfg.candle_timeframe, logger),
+        execution_agent=ExecutionAgent(bank, cfg.candle_timeframe, logger, cfg=cfg),
         feedback_agent=FeedbackAgent(market_data, bank, logger),
         report_generator=ReportGenerator(),
         logger=logger,

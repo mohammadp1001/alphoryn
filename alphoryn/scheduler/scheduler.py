@@ -268,6 +268,7 @@ class Scheduler:
                     tickers,
                     candle_close_at,
                     self._recent_memory(tickers),
+                    self._cfg.session_money_budget,
                 )
                 try:
                     return future.result(timeout=self._investigation_budget), None
