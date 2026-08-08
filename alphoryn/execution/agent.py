@@ -158,9 +158,22 @@ class ExecutionAgent:
     def _execute_ticker(self, asset_decision: AssetDecision, session_id: str) -> str:
         if asset_decision.action == "HOLD":
             return "HOLD"
-        if asset_decision.action == "SELL":
-            return self._close_position(asset_decision, session_id)
-        return self._open_position(asset_decision, session_id)
+        try:
+            if asset_decision.action == "SELL":
+                return self._close_position(asset_decision, session_id)
+            return self._open_position(asset_decision, session_id)
+        except Exception as exc:
+            self._emit(
+                "ORDER_FAILED",
+                {
+                    "side": asset_decision.action,
+                    "reason": "API_ERROR",
+                    "error": str(exc),
+                },
+                ticker=asset_decision.ticker,
+                session_id=session_id,
+            )
+            return "FAILED"
 
     def _close_position(self, asset_decision: AssetDecision, session_id: str) -> str:
         """Close the open position on this ticker (data-model.md: Sell closes a Buy).
