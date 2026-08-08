@@ -34,7 +34,6 @@ def load_config(
 
     if overrides:
         for key, value in overrides.items():
-            if value is not None:
-                raw[key] = value
+            raw[key] = value
 
     return AlphorynConfig(**raw)
