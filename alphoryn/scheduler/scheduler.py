@@ -417,7 +417,7 @@ class Scheduler:
         session_id: str,
         session_ordinal: int,
         candle_close_at: datetime,
-    ) -> None:
+    ) -> str:
         """Execute one complete feedback → investigation → decide → execute → report cycle."""
         candle_str = candle_close_at.strftime("%H:%M UTC")
         typer.echo(f"\n[{session_id}] SESSION START  candle={candle_str}")
@@ -538,6 +538,7 @@ class Scheduler:
                 "SESSION_END", "scheduler", {}, session_id=session_id, latency_ms=latency_ms
             )
         typer.echo(f"[{session_id}] SESSION END  status={session_status}")
+        return session_status
 
     def _record_skipped_session(
         self,
@@ -548,21 +549,20 @@ class Scheduler:
     ) -> None:
         """Persist a Session row for a candle the scheduler never processed.
 
-        SC-003: no session ends silently. Without this a closed-market candle
-        leaves no trace, so `alphoryn history` cannot tell "the market was
-        closed" apart from "the process was not running".
+        Used for market-closed candles and data fetch failures so history views
+        and reporting have a contiguous session record.
         """
-        self._bank.write_session(
-            Session(
-                id=session_id,
-                run_id=run_id,
-                candle_close_at=candle_close_at,
-                created_at=datetime.now(UTC),
-                status=status,
-                html_report_path=None,
-                ticker_decisions=None,
-            )
+        session_record = Session(
+            id=session_id,
+            run_id=run_id,
+            candle_close_at=candle_close_at,
+            created_at=datetime.now(UTC),
+            status=status,
+            html_report_path=None,
+            ticker_decisions=None,
+            warnings=None,
         )
+        self._bank.write_session(session_record)
 
     # ------------------------------------------------------------------
     # Position monitor lifecycle
@@ -630,36 +630,40 @@ class Scheduler:
         session_ordinal = 1
         self._start_monitor()
 
-        while sessions_completed < self._cfg.session_count:
-            candle_close_at = datetime.now(UTC)
+        try:
+            while sessions_completed < self._cfg.session_count:
+                candle_close_at = datetime.now(UTC)
 
-            session_id = f"run-{run_id}/session-{session_ordinal:04d}"
+                session_id = f"run-{run_id}/session-{session_ordinal:04d}"
 
-            if not self.is_market_open():
-                typer.echo(f"[{session_id}] MARKET_CLOSED - waiting for next candle")
-                if self._logger is not None:
-                    self._logger.emit(
-                        "MARKET_CLOSED",
-                        "scheduler",
-                        {"session_ordinal": session_ordinal},
-                        session_id=session_id,
+                if not self.is_market_open():
+                    typer.echo(f"[{session_id}] MARKET_CLOSED - waiting for next candle")
+                    if self._logger is not None:
+                        self._logger.emit(
+                            "MARKET_CLOSED",
+                            "scheduler",
+                            {"session_ordinal": session_ordinal},
+                            session_id=session_id,
+                        )
+                    self._record_skipped_session(
+                        run_id, session_id, candle_close_at, "SKIPPED_MARKET_CLOSED"
                     )
-                self._record_skipped_session(
-                    run_id, session_id, candle_close_at, "SKIPPED_MARKET_CLOSED"
+                    next_close = self.compute_next_candle_close(datetime.now(UTC))
+                    self.wait_for_candle_close(next_close, _sleep=_sleep)
+                    session_ordinal += 1
+                    continue  # skipped sessions not counted against total (FR-018)
+
+                session_status = self._process_session(
+                    run_id, session_id, session_ordinal, candle_close_at
                 )
+
+                if session_status == "COMPLETED":
+                    sessions_completed += 1
+                session_ordinal += 1
+
                 next_close = self.compute_next_candle_close(datetime.now(UTC))
                 self.wait_for_candle_close(next_close, _sleep=_sleep)
-                session_ordinal += 1
-                continue  # skipped sessions not counted against total (FR-018)
-
-            self._process_session(run_id, session_id, session_ordinal, candle_close_at)
-
-            sessions_completed += 1
-            session_ordinal += 1
-
-            next_close = self.compute_next_candle_close(datetime.now(UTC))
-            self.wait_for_candle_close(next_close, _sleep=_sleep)
-
-        self._bank.end_run(run_id)
-        self._drain_open_positions(_sleep=_sleep)
-        self._stop_monitor()
+        finally:
+            self._bank.end_run(run_id)
+            self._drain_open_positions(_sleep=_sleep)
+            self._stop_monitor()

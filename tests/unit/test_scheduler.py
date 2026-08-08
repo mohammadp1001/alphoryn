@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 from io import StringIO
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from alphoryn.config.models import AlphorynConfig
@@ -1376,3 +1377,43 @@ def test_feedback_input_carries_the_evaluation_window_deadline() -> None:
     assert feedback_input.evaluation_window_close_at == datetime(
         2024, 1, 15, 19, 0, tzinfo=UTC
     )
+
+
+# ---------------------------------------------------------------------------
+# FR-018 Session budget counting & try/finally cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_skipped_sessions_do_not_count_against_session_budget() -> None:
+    """FR-018: SKIPPED_TIMEOUT and SKIPPED_DATA_UNAVAILABLE do not increment completed count."""
+    sched = _full_scheduler()
+    sched._cfg.session_count = 1
+    call_count = 0
+
+    def mock_investigation(*args: Any, **kwargs: Any) -> tuple[Any, str | None]:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return None, "SKIPPED_TIMEOUT"
+        return _decision_for("SPY"), None
+
+    with patch.object(sched, "_run_investigation", side_effect=mock_investigation):
+        _run_with_no_wait(sched)
+
+    # 1 timeout skip + 1 completed session = 2 total attempts to hit session_count=1
+    assert call_count == 2
+    assert sched._bank.write_session.call_count == 2
+
+
+def test_run_finally_cleans_up_on_keyboard_interrupt() -> None:
+    """Aborting during the run loop must still execute end_run, drain, and stop_monitor."""
+    sched = _full_scheduler()
+    with patch.object(sched, "_process_session", side_effect=KeyboardInterrupt):
+        try:
+            _run_with_no_wait(sched)
+        except KeyboardInterrupt:
+            pass
+
+    sched._bank.end_run.assert_called_once()
+    sched._monitor_stop_event.set.assert_called_once()
+
