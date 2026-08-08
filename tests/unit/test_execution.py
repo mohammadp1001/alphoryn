@@ -718,3 +718,28 @@ def test_session_money_budget_rejects_insufficient_funds(tmp_path) -> None:
     assert bank.load_open_positions() == []
     bank._engine.dispose()
 
+
+def test_alpaca_api_exception_emits_order_failed_and_returns_failed(tmp_path) -> None:
+    """Alpaca API failures emit ORDER_FAILED telemetry and return FAILED status."""
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY"]}', 6)
+    logger = MagicMock()
+    agent = ExecutionAgent(bank, "1H", logger=logger)
+
+    with (
+        patch("alphoryn.execution.agent.TradingClient") as mock_client_cls,
+        patch("alphoryn.execution.agent.StockHistoricalDataClient"),
+    ):
+        mock_client_cls.side_effect = RuntimeError("Alpaca API unavailable")
+        results = agent.execute(_decision(_buy("SPY", lot=5)))
+
+    assert results == {"SPY": "FAILED"}
+    logger.emit.assert_called_with(
+        "ORDER_FAILED",
+        "execution_agent",
+        {"side": "BUY", "reason": "API_ERROR", "error": "Alpaca API unavailable"},
+        session_id="run-1/session-abc",
+        etf="SPY",
+    )
+    bank._engine.dispose()
+
