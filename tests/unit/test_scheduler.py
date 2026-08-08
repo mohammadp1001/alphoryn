@@ -1407,7 +1407,9 @@ def test_skipped_sessions_do_not_count_against_session_budget() -> None:
 
 def test_run_finally_cleans_up_on_keyboard_interrupt() -> None:
     """Aborting during the run loop must still execute end_run, drain, and stop_monitor."""
-    sched = _full_scheduler()
+    stop_event = MagicMock()
+    monitor = MagicMock()
+    sched = _full_scheduler(monitor=monitor, monitor_stop_event=stop_event)
     with patch.object(sched, "_process_session", side_effect=KeyboardInterrupt):
         try:
             _run_with_no_wait(sched)
@@ -1415,5 +1417,6 @@ def test_run_finally_cleans_up_on_keyboard_interrupt() -> None:
             pass
 
     sched._bank.end_run.assert_called_once()
-    sched._monitor_stop_event.set.assert_called_once()
+    stop_event.set.assert_called_once()
+    monitor.join.assert_called_once()
 
