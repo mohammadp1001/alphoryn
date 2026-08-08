@@ -1420,3 +1420,25 @@ def test_run_finally_cleans_up_on_keyboard_interrupt() -> None:
     stop_event.set.assert_called_once()
     monitor.join.assert_called_once()
 
+
+def test_handle_overrun_candles_records_skipped_sessions() -> None:
+    """SC-003: intermediate closed candles passed during long session processing
+    are recorded as skipped.
+    """
+    sched = _full_scheduler()
+    last_close = datetime(2024, 1, 15, 14, 0, tzinfo=UTC)
+    next_close = datetime(2024, 1, 15, 17, 0, tzinfo=UTC)
+    mock_now = datetime(2024, 1, 15, 16, 30, tzinfo=UTC)
+
+    with patch("alphoryn.scheduler.scheduler.datetime") as mock_datetime:
+        mock_datetime.now.return_value = mock_now
+        new_ordinal = sched._handle_overrun_candles(1, last_close, next_close, session_ordinal=2)
+
+    # Missed 15:00 and 16:00 boundaries -> ordinal advances by 2 (from 2 to 4)
+    assert new_ordinal == 4
+    assert sched._bank.write_session.call_count == 2
+    session_statuses = [
+        call.args[0].status for call in sched._bank.write_session.call_args_list
+    ]
+    assert all(s in ("SKIPPED_DATA_UNAVAILABLE", "SKIPPED_MARKET_CLOSED") for s in session_statuses)
+
