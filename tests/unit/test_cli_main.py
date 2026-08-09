@@ -23,6 +23,7 @@ from alphoryn.config.models import AlphorynConfig
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.memory.schema import Position
 from alphoryn.memory.schema import Session as Sess
+from alphoryn.telemetry.otel import TelemetrySetupError
 
 runner = CliRunner()
 
@@ -462,3 +463,42 @@ def test_verify_telemetry_reports_a_broken_memory_bank(tmp_path: Path) -> None:
 
     assert result.exit_code == 2
     assert "Memory bank error: disk is read-only" in result.output
+
+# ---------------------------------------------------------------------------
+# Telemetry preflight (exit 4)
+# ---------------------------------------------------------------------------
+
+
+def test_run_exits_4_when_telemetry_cannot_be_set_up(tmp_path: Path) -> None:
+    """An untraced run leaves no record of why it traded, so it must not start."""
+    cfg_file = _cfg_file(tmp_path)
+    with (
+        patch("alphoryn.cli.main.load_alpaca_credentials"),
+        patch("alphoryn.cli.main.MemoryBank"),
+        patch("alphoryn.cli.main._start_scheduler") as mock_start,
+        patch(
+            "alphoryn.cli.main.setup_otel",
+            side_effect=TelemetrySetupError("no credentials"),
+        ),
+    ):
+        result = runner.invoke(app, ["run", "--config", str(cfg_file)])
+    assert result.exit_code == 4
+    assert "Telemetry error: no credentials" in result.output
+    mock_start.assert_not_called()
+
+
+def test_run_reports_the_gcp_project_traces_land_in(tmp_path: Path) -> None:
+    """Telemetry going to the wrong project looks exactly like none at all."""
+    cfg_file = _cfg_file(tmp_path)
+    with (
+        patch("alphoryn.cli.main.load_alpaca_credentials"),
+        patch("alphoryn.cli.main.MemoryBank") as mock_bank_cls,
+        patch("alphoryn.cli.main._start_scheduler"),
+        patch("alphoryn.cli.main.setup_otel", return_value="alphoryn"),
+    ):
+        mock_bank = MagicMock()
+        mock_bank.load_open_positions.return_value = []
+        mock_bank_cls.return_value = mock_bank
+        result = runner.invoke(app, ["run", "--config", str(cfg_file)])
+    assert result.exit_code == 0
+    assert "Telemetry -> GCP project 'alphoryn'" in result.output

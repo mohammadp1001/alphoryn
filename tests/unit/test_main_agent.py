@@ -490,3 +490,36 @@ def test_build_prompt_includes_session_money_budget() -> None:
     )
     assert "session_money_budget: 5000.0" in prompt
 
+
+def test_decide_skips_a_thought_part_and_parses_the_answer() -> None:
+    """With include_thoughts on, Gemini puts its reasoning in earlier text parts.
+    Taking the first non-empty text would parse the thought summary as the
+    decision and fail every session."""
+    agent, _ = _make_agent()
+    thought_part = MagicMock(text="First I check the regime, then size the lot.", thought=True)
+    json_part = MagicMock(text=json.dumps(_DECISION_DICT), thought=None)
+    event = MagicMock()
+    event.get_function_calls.return_value = []
+    event.get_function_responses.return_value = []
+    event.is_final_response.return_value = True
+    event.content.parts = [thought_part, json_part]
+
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([event])
+
+        decision = agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
+
+    assert decision.session_id == "sess-001"
+    assert [d.action for d in decision.decisions] == ["BUY", "HOLD"]
+
+
+def test_main_agent_requests_thought_summaries() -> None:
+    """Reasoning is only exported to Cloud Trace if the model is asked for it."""
+    with patch("alphoryn.agents.main_agent.LlmAgent") as mock_llm_agent, \
+         patch("alphoryn.agents.main_agent.load_skill_from_dir"), \
+         patch("alphoryn.agents.main_agent.SkillToolset"):
+        MainAgent(MagicMock(), MagicMock())
+    config = mock_llm_agent.call_args.kwargs["generate_content_config"]
+    assert config.thinking_config.include_thoughts is True

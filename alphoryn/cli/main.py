@@ -34,7 +34,7 @@ from alphoryn.reports.generator import ReportGenerator
 from alphoryn.scheduler.scheduler import Scheduler
 from alphoryn.secrets.client import SecretsError, load_alpaca_credentials
 from alphoryn.telemetry.logger import TelemetryLogger
-from alphoryn.telemetry.otel import setup_otel
+from alphoryn.telemetry.otel import TelemetrySetupError, setup_otel
 
 _VERSION = "0.0.1"
 
@@ -75,7 +75,15 @@ def run(
     """Start a paper trading session."""
     os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "1")
     os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
-    setup_otel()
+
+    # Telemetry is a preflight check, not a nicety: an untraced run leaves no
+    # record of why it traded the way it did. Exit rather than trade blind.
+    try:
+        otel_project = setup_otel()
+    except TelemetrySetupError as exc:
+        typer.echo(f"Telemetry error: {exc}", err=True)
+        sys.exit(4)
+    typer.echo(f"Telemetry -> GCP project '{otel_project}'")
 
     # 1. Load and validate config (exit 1 on failure)
     overrides: dict = {}

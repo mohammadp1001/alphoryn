@@ -528,3 +528,55 @@ def test_feedback_agent_system_prompt_mentions_judgment_values() -> None:
 def test_feedback_agent_system_prompt_mentions_investment_thesis() -> None:
     prompt_lower = FEEDBACK_AGENT_SYSTEM_PROMPT.lower()
     assert "investment-thesis" in prompt_lower or "thesis" in prompt_lower
+
+def test_evaluate_skips_a_thought_part_and_parses_the_answer() -> None:
+    """parts[0] is the thought summary once include_thoughts is on. Reading it
+    blindly makes json.loads fail, burning all three attempts and filing a
+    perfectly good evaluation as EVALUATION_FAILED."""
+    agent, _market_data, bank, _logger = _make_agent()
+    thought_part = MagicMock(text="Comparing the thesis against the exit price.", thought=True)
+    json_part = MagicMock(text=json.dumps(_RESULT_DICT), thought=None)
+    event = MagicMock()
+    event.get_function_calls.return_value = []
+    event.get_function_responses.return_value = []
+    event.is_final_response.return_value = True
+    event.content.parts = [thought_part, json_part]
+
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner") as mock_runner_cls,
+        patch.object(agent, "_extract_thesis", return_value="Price was oversold."),
+    ):
+        mock_runner_cls.return_value.run.return_value = iter([event])
+        agent.evaluate(_INPUT, "sess-002")
+
+    bank.write_feedback_evaluation.assert_called_once()
+    evaluation = bank.write_feedback_evaluation.call_args.args[0]
+    assert evaluation.outcome_judgment == _RESULT_DICT["outcome_judgment"]
+
+
+def test_feedback_agent_requests_thought_summaries() -> None:
+    """Reasoning is only exported to Cloud Trace if the model is asked for it."""
+    with patch("alphoryn.agents.feedback_agent.LlmAgent") as mock_llm_agent:
+        FeedbackAgent(MagicMock(), MagicMock(), MagicMock())
+    config = mock_llm_agent.call_args.kwargs["generate_content_config"]
+    assert config.thinking_config.include_thoughts is True
+
+def test_evaluate_treats_a_thought_only_response_as_no_answer() -> None:
+    """If the model spends its whole turn thinking and never emits the JSON,
+    that is a failed attempt to be retried - not a crash, and not a silent pass."""
+    agent, _, bank, _ = _make_agent()
+    thought_only = MagicMock()
+    thought_only.get_function_calls.return_value = []
+    thought_only.get_function_responses.return_value = []
+    thought_only.is_final_response.return_value = True
+    thought_only.content.parts = [MagicMock(text="Still weighing it up.", thought=True)]
+
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner") as mock_runner_cls,
+        patch.object(agent, "_extract_thesis", return_value="thesis text"),
+    ):
+        mock_runner_cls.return_value.run.side_effect = lambda **_: iter([thought_only])
+        agent.evaluate(_INPUT, "run-1/session-0004")
+
+    _, status_arg = bank.write_feedback_evaluation.call_args.args
+    assert status_arg == "EVALUATION_FAILED"

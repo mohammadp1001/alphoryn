@@ -18,6 +18,7 @@ from google.adk.tools.skill_toolset import SkillToolset
 from google.genai import types as genai_types
 
 from alphoryn.agents.prompts import MAIN_AGENT_SYSTEM_PROMPT
+from alphoryn.agents.thinking import is_thought_part, thinking_enabled_config
 from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.telemetry.logger import TelemetryLogger
@@ -59,6 +60,7 @@ class MainAgent:
             model=self._MODEL,
             instruction=MAIN_AGENT_SYSTEM_PROMPT,
             tools=[market_data_client.build_snapshot, SkillToolset(skills)],
+            generate_content_config=thinking_enabled_config(),
         )
 
     def decide(
@@ -108,6 +110,8 @@ class MainAgent:
                     )
             if event.is_final_response() and event.content and event.content.parts:
                 for part in event.content.parts:
+                    if is_thought_part(part):
+                        continue
                     text = getattr(part, "text", None)
                     if text and text.strip():
                         raw_json = _strip_fences(text.strip())
