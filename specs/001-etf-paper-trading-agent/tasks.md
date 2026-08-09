@@ -16,6 +16,23 @@
 
 ---
 
+## Note: this file is a historical record
+
+Task descriptions below say what was planned at the time and are left as written. Where
+the shipped code has since moved on, the current behaviour is in `spec.md`,
+`data-model.md`, and `contracts/`, and those win. Two differences show up repeatedly:
+
+- **Evaluation window.** T032–T035 and T038–T040 describe
+  `evaluation_window_session == current_session_ordinal`. That ordinal was replaced by an
+  absolute UTC deadline, `Position.evaluation_window_close_at`, so a window survives the
+  run that opened it (issue #122). See data-model.md §Position.
+- **Thesis section id.** T037 and T038 describe parsing
+  `<section id="investment-thesis">`. The id is now ticker-scoped,
+  `investment-thesis-{ticker}`, so a multi-ticker session cannot judge one ticker's thesis
+  against another's outcome (issue #134). See contracts/report-context.md.
+
+---
+
 ## Phase 1: Setup
 
 **Purpose**: Project initialization and skeleton. Must complete before any module is written.

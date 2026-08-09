@@ -13,12 +13,12 @@ for all session parameters (design doc §Configuration table; spec FR-001).
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `ticker1` | `str` | required | Ticker symbol (e.g., `SPY`) |
-| `ticker2` | `str` | required | Ticker symbol (e.g., `QQQ`) |
-| `candle_timeframe` | `str` | `"1H"` | One of: `"30min"`, `"1H"`, `"4H"` |
+| `tickers` | `list[str]` | required | At least 2 ticker symbols, e.g. `["SPY", "QQQ"]`. Any number is supported; they are evaluated independently |
+| `candle_timeframe` | `str` | `"1H"` | One of: `"10min"`, `"15min"`, `"30min"`, `"1H"`, `"4H"` |
+| `extended_hours` | `bool` | `False` | Allows pre/post-market execution; testing affordance |
 | `run_duration` | `str` | `"24H"` | e.g., `"24H"`, `"8H"` |
 | `exchange` | `str \| None` | `None` | Optional, informational only — Alpaca routes US equities automatically; market hours from Alpaca calendar API |
-| `session_money_budget` | `float \| None` | `None` | USD; `None` means no budget constraint |
+| `session_money_budget` | `float \| None` | `None` | USD; must be > 0 when set. `None` means no budget constraint |
 | `stop_loss_pct` | `float` | `0.02` | e.g., `0.02` = 2% below entry price |
 | `currency` | `str` | `"USD"` | Display currency — USD for Alpaca paper accounts |
 | `memory_db_path` | `str` | `"~/.alphoryn/memory.db"` | SQLite file path |
@@ -87,7 +87,7 @@ One record per candle close processed. Linked to its Run.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | `TEXT PK` | Composite: `run-{run_id}/session-{random_seq}` (spec Clarification Q4) |
+| `id` | `TEXT PK` | Composite: `run-{run_id}/session-{ordinal}`, ordinal zero-padded to 4 digits, e.g. `run-1/session-0001` (spec Clarification Q4) |
 | `run_id` | `INTEGER FK → Run.id` | |
 | `candle_close_at` | `DATETIME` | Candle close timestamp (UTC) |
 | `created_at` | `DATETIME` | When session record was written |
@@ -96,7 +96,7 @@ One record per candle close processed. Linked to its Run.
 | `ticker_decisions` | `TEXT \| NULL` | JSON object keyed by ticker symbol, e.g. `{"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": "EXECUTED"}, ...}`. One entry per ticker processed this session — supports any number of configured tickers, not just two. |
 | `warnings` | `TEXT \| NULL` | JSON list of warning strings |
 
-Per-ticker `strategy` is `MEAN_REVERSION` or `MOMENTUM`; `decision` is `BUY`, `SELL`, or `HOLD`; `execution_result` is `EXECUTED`, `SKIPPED_BUDGET`, `SKIPPED_MARKET_CLOSED`, or `SKIPPED_API_ERROR`.
+Per-ticker `strategy` is `MEAN_REVERSION` or `MOMENTUM`; `decision` is `BUY`, `SELL`, or `HOLD`; `execution_result` is `EXECUTED`, `HOLD`, or `FAILED` — the value returned by `ExecutionAgent.execute()`. `FAILED` covers every refused or failed order (insufficient budget, feedback-blocked ticker, no open position to sell, Alpaca API error); the specific reason is in the `ORDER_FAILED` telemetry event, not in this field.
 
 Session `status` values distinguish *why* a candle produced no decision:
 
@@ -114,7 +114,7 @@ Only `COMPLETED` counts against the run's session budget (FR-018).
 
 ### Position
 
-One record per open paper trade. Ticker-scoped; the two tickers are fully independent.
+One record per open paper trade. Ticker-scoped; tickers are fully independent of each other.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -128,7 +128,7 @@ One record per open paper trade. Ticker-scoped; the two tickers are fully indepe
 | `lot_size` | `REAL` | Units / shares purchased |
 | `stop_loss_price` | `REAL` | Derived: `entry_price * (1 - stop_loss_pct)` |
 | `exit_target` | `TEXT` | JSON: `{"type": "price_level", "value": 123.45}` for Mean Reversion; `{"type": "trailing_stop", "trail_pct": 0.015}` for Momentum |
-| `trailing_stop_high_watermark` | `REAL \| NULL` | Updated by monitor when price makes a new high; used for trailing stop computation; NULL for non-Momentum positions |
+| `trailing_stop_high_watermark` | `REAL \| NULL` | Initialised to `entry_price` for **every** position, then updated by the monitor when price makes a new high; used for trailing stop computation. Left NULL, a position that gaps down before ever printing a new high would seed its trail floor from the lower price (issue #130) |
 | `evaluation_window_close_at` | `DATETIME` | Absolute UTC deadline at which the window expires and the feedback agent fires. Derived at entry: `entry_time + N x candle_timeframe`, N = 4 for Mean Reversion, 2 for Momentum. Stored as wall-clock rather than a session ordinal so it stays meaningful across runs, restarts, and market-closed sessions |
 | `status` | `TEXT` | See Position States below |
 | `exit_price` | `REAL \| NULL` | NULL until closed |
@@ -205,9 +205,9 @@ Run ──< Session ──< Position ──< FeedbackEvaluation
 ```
 
 - One Run has many Sessions.
-- One Session has zero, one, or two Positions (one per ticker, only if Buy was executed).
+- One Session has zero or more Positions (at most one per configured ticker, only if a Buy was executed).
 - One Position has zero or one FeedbackEvaluation.
-- One Session has zero, one, or two MemoryEntry records (one per ticker that was processed).
+- One Session has zero or more MemoryEntry records (one per ticker that was processed).
 
 ---
 
