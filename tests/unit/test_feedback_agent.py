@@ -419,6 +419,99 @@ def test_evaluate_three_failures_evaluation_written_once() -> None:
 
 
 # ---------------------------------------------------------------------------
+# A setup failure is retried, not raised (issue #164, FR-016a)
+# ---------------------------------------------------------------------------
+
+
+def test_a_missing_report_file_does_not_escape_evaluate() -> None:
+    """The entry session may carry no report path, so _extract_thesis opens "".
+
+    Before #164 the FileNotFoundError escaped evaluate() and ended the run.
+    """
+    agent, _, bank, _ = _make_agent()
+    broken = FeedbackInput(**{**_INPUT.__dict__, "html_report_path": ""})
+
+    with patch("alphoryn.agents.feedback_agent.InMemoryRunner"):
+        agent.evaluate(broken, "run-1/session-0003")
+
+    bank.write_feedback_evaluation.assert_called_once()
+    assert bank.write_feedback_evaluation.call_args.args[1] == "EVALUATION_FAILED"
+
+
+def test_a_price_fetch_failure_does_not_escape_evaluate() -> None:
+    agent, market_data, bank, _ = _make_agent()
+    market_data.get_price_at.side_effect = RuntimeError("Alpaca unreachable")
+
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner"),
+        patch.object(agent, "_extract_thesis", return_value="thesis text"),
+    ):
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    bank.write_feedback_evaluation.assert_called_once()
+    assert bank.write_feedback_evaluation.call_args.args[1] == "EVALUATION_FAILED"
+
+
+def test_a_price_fetch_is_retried_three_times() -> None:
+    agent, market_data, _, _ = _make_agent()
+    market_data.get_price_at.side_effect = RuntimeError("Alpaca unreachable")
+
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner"),
+        patch.object(agent, "_extract_thesis", return_value="thesis text"),
+    ):
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    assert market_data.get_price_at.call_count == 3
+
+
+def test_a_price_fetch_that_recovers_on_the_second_attempt_succeeds() -> None:
+    agent, market_data, bank, _ = _make_agent()
+    market_data.get_price_at.side_effect = [RuntimeError("flaky"), 460.0]
+    final_event = _make_event(is_final=True, text=json.dumps(_RESULT_DICT))
+
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner") as mock_runner_cls,
+        patch.object(agent, "_extract_thesis", return_value="thesis text"),
+    ):
+        mock_runner_cls.return_value.run.return_value = iter([final_event])
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    assert bank.write_feedback_evaluation.call_args.args[1] == "EVALUATED"
+
+
+def test_failure_without_a_price_records_the_exit_price_instead() -> None:
+    """candle_close_price is NOT NULL, so the position's own exit price stands in."""
+    agent, market_data, bank, _ = _make_agent()
+    market_data.get_price_at.side_effect = RuntimeError("Alpaca unreachable")
+
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner"),
+        patch.object(agent, "_extract_thesis", return_value="thesis text"),
+    ):
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    evaluation = bank.write_feedback_evaluation.call_args.args[0]
+    assert evaluation.candle_close_price == _INPUT.exit_price
+    assert "could not be fetched" in evaluation.reasoning
+
+
+def test_failure_after_a_successful_price_fetch_keeps_that_price() -> None:
+    agent, _, bank, _ = _make_agent()
+
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner") as mock_runner_cls,
+        patch.object(agent, "_extract_thesis", return_value="thesis text"),
+    ):
+        mock_runner_cls.return_value.run.return_value = iter([_make_event(is_final=False)])
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    evaluation = bank.write_feedback_evaluation.call_args.args[0]
+    assert evaluation.candle_close_price == 460.0
+    assert "could not be fetched" not in evaluation.reasoning
+
+
+# ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
 

@@ -7,6 +7,7 @@ T030 adds the full per-session loop (main_agent → execution_agent → report �
 
 import concurrent.futures
 import json
+import logging
 import math
 import os
 import sys
@@ -23,10 +24,12 @@ from alphoryn.agents.main_agent import MainAgent
 from alphoryn.config.models import TIMEFRAME_SECONDS, AlphorynConfig
 from alphoryn.execution.agent import AssetDecision, ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
-from alphoryn.memory.schema import MemoryEntry, Session, from_db_utc
+from alphoryn.memory.schema import MemoryEntry, Position, Session, from_db_utc
 from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.telemetry.logger import TelemetryLogger
+
+_logger = logging.getLogger(__name__)
 
 _INVESTIGATION_BUDGET_FRACTION = 0.87
 _EXECUTE_BUDGET_FRACTION = 0.13
@@ -329,24 +332,43 @@ class Scheduler:
             return
         positions = self._bank.get_positions_due_for_feedback(datetime.now(UTC))
         for pos in positions:
-            entry_session = self._bank.get_session(pos.session_id)
-            html_report_path = (
-                entry_session.html_report_path
-                if entry_session is not None
-                else ""
-            )
-            feedback_input = FeedbackInput(
-                position_id=pos.id,
-                session_id=pos.session_id,
-                ticker=pos.ticker,
-                strategy=pos.strategy,
-                html_report_path=html_report_path or "",
-                entry_price=pos.entry_price,
-                exit_price=pos.exit_price or pos.entry_price,
-                exit_reason=pos.exit_reason or "UNKNOWN",
-                evaluation_window_close_at=from_db_utc(pos.evaluation_window_close_at),
-            )
-            self._feedback_agent.evaluate(feedback_input, session_id)
+            try:
+                self._evaluate_position(pos, session_id)
+            except Exception as exc:
+                # One position that cannot be evaluated must not end the run
+                # (FR-016a). The agent already retries and unblocks the ticker
+                # itself; this only catches what escapes that.
+                _logger.exception("Feedback evaluation failed for position %s", pos.id)
+                typer.echo(
+                    f"[{session_id}] FEEDBACK_ERROR {pos.ticker} - {exc}", err=True
+                )
+                if self._logger is not None:
+                    self._logger.emit(
+                        "EVALUATION_FAILED",
+                        "scheduler",
+                        {"position_id": pos.id, "error": str(exc)},
+                        session_id=session_id,
+                        etf=pos.ticker,
+                    )
+
+    def _evaluate_position(self, pos: Position, session_id: str) -> None:
+        """Hand one closed position to the feedback agent."""
+        entry_session = self._bank.get_session(pos.session_id)
+        html_report_path = (
+            entry_session.html_report_path if entry_session is not None else ""
+        )
+        feedback_input = FeedbackInput(
+            position_id=pos.id,
+            session_id=pos.session_id,
+            ticker=pos.ticker,
+            strategy=pos.strategy,
+            html_report_path=html_report_path or "",
+            entry_price=pos.entry_price,
+            exit_price=pos.exit_price or pos.entry_price,
+            exit_reason=pos.exit_reason or "UNKNOWN",
+            evaluation_window_close_at=from_db_utc(pos.evaluation_window_close_at),
+        )
+        self._feedback_agent.evaluate(feedback_input, session_id)
 
     def _blocked_tickers(self, session_id: str) -> set[str]:
         """Return configured tickers that are feedback-blocked this session (FR-005)."""
