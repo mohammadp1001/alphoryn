@@ -44,7 +44,8 @@ class Session(Base):
     candle_close_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, nullable=False)
     status = Column(String, nullable=False)
-    # Valid statuses: COMPLETED | SKIPPED_TIMEOUT | SKIPPED_MARKET_CLOSED | SKIPPED_DATA_UNAVAILABLE
+    # Valid statuses: COMPLETED | SKIPPED_TIMEOUT | SKIPPED_MARKET_CLOSED
+    #                 | SKIPPED_DATA_UNAVAILABLE | SKIPPED_OVERRUN
     html_report_path = Column(String, nullable=True)
     # JSON: {"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": ...}}
     ticker_decisions = Column(Text, nullable=True)

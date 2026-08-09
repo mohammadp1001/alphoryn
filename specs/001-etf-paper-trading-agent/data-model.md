@@ -91,12 +91,24 @@ One record per candle close processed. Linked to its Run.
 | `run_id` | `INTEGER FK → Run.id` | |
 | `candle_close_at` | `DATETIME` | Candle close timestamp (UTC) |
 | `created_at` | `DATETIME` | When session record was written |
-| `status` | `TEXT` | `COMPLETED`, `SKIPPED_TIMEOUT`, `SKIPPED_MARKET_CLOSED`, `SKIPPED_DATA_UNAVAILABLE` |
+| `status` | `TEXT` | `COMPLETED`, `SKIPPED_TIMEOUT`, `SKIPPED_MARKET_CLOSED`, `SKIPPED_DATA_UNAVAILABLE`, `SKIPPED_OVERRUN` |
 | `html_report_path` | `TEXT \| NULL` | Relative path to HTML report file |
 | `ticker_decisions` | `TEXT \| NULL` | JSON object keyed by ticker symbol, e.g. `{"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": "EXECUTED"}, ...}`. One entry per ticker processed this session — supports any number of configured tickers, not just two. |
 | `warnings` | `TEXT \| NULL` | JSON list of warning strings |
 
 Per-ticker `strategy` is `MEAN_REVERSION` or `MOMENTUM`; `decision` is `BUY`, `SELL`, or `HOLD`; `execution_result` is `EXECUTED`, `SKIPPED_BUDGET`, `SKIPPED_MARKET_CLOSED`, or `SKIPPED_API_ERROR`.
+
+Session `status` values distinguish *why* a candle produced no decision:
+
+| Status | Meaning |
+|---|---|
+| `COMPLETED` | The session ran end to end and produced a decision record |
+| `SKIPPED_TIMEOUT` | The investigation or execute budget ran out |
+| `SKIPPED_MARKET_CLOSED` | The market was closed at that candle |
+| `SKIPPED_DATA_UNAVAILABLE` | Market data could not be fetched |
+| `SKIPPED_OVERRUN` | The previous session was still running when this candle closed — the data was fine |
+
+Only `COMPLETED` counts against the run's session budget (FR-018).
 
 ---
 

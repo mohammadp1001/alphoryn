@@ -1520,5 +1520,40 @@ def test_handle_overrun_candles_records_skipped_sessions() -> None:
     session_statuses = [
         call.args[0].status for call in sched._bank.write_session.call_args_list
     ]
-    assert all(s in ("SKIPPED_DATA_UNAVAILABLE", "SKIPPED_MARKET_CLOSED") for s in session_statuses)
+    assert all(s in ("SKIPPED_OVERRUN", "SKIPPED_MARKET_CLOSED") for s in session_statuses)
+
+
+def test_handle_overrun_candles_uses_skipped_overrun_when_the_market_is_open() -> None:
+    """The data was fine, we were busy - so not SKIPPED_DATA_UNAVAILABLE (issue #169)."""
+    sched = _full_scheduler()
+    last_close = datetime(2024, 1, 15, 14, 0, tzinfo=UTC)
+    next_close = datetime(2024, 1, 15, 17, 0, tzinfo=UTC)
+    mock_now = datetime(2024, 1, 15, 16, 30, tzinfo=UTC)
+
+    with (
+        patch("alphoryn.scheduler.scheduler.datetime") as mock_datetime,
+        patch.object(sched, "is_market_open", return_value=True),
+    ):
+        mock_datetime.now.return_value = mock_now
+        sched._handle_overrun_candles(1, last_close, next_close, session_ordinal=2)
+
+    statuses = [c.args[0].status for c in sched._bank.write_session.call_args_list]
+    assert statuses == ["SKIPPED_OVERRUN", "SKIPPED_OVERRUN"]
+
+
+def test_handle_overrun_candles_still_says_market_closed_when_it_is() -> None:
+    sched = _full_scheduler()
+    last_close = datetime(2024, 1, 15, 14, 0, tzinfo=UTC)
+    next_close = datetime(2024, 1, 15, 17, 0, tzinfo=UTC)
+    mock_now = datetime(2024, 1, 15, 16, 30, tzinfo=UTC)
+
+    with (
+        patch("alphoryn.scheduler.scheduler.datetime") as mock_datetime,
+        patch.object(sched, "is_market_open", return_value=False),
+    ):
+        mock_datetime.now.return_value = mock_now
+        sched._handle_overrun_candles(1, last_close, next_close, session_ordinal=2)
+
+    statuses = [c.args[0].status for c in sched._bank.write_session.call_args_list]
+    assert statuses == ["SKIPPED_MARKET_CLOSED", "SKIPPED_MARKET_CLOSED"]
 

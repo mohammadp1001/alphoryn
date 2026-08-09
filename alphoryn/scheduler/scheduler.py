@@ -635,6 +635,12 @@ class Scheduler:
     ) -> int:
         """Record skipped session rows for intermediate closed candles missed due to
         processing overrun (SC-003).
+
+        An overrun candle is recorded as ``SKIPPED_OVERRUN``, not
+        ``SKIPPED_DATA_UNAVAILABLE``: the market data was fine, the previous
+        session was still running. Those are two different problems with two
+        different fixes, and filing one as the other sends you to check Alpaca
+        when the real story is that the session budget needs a look (issue #169).
         """
         candle_secs = TIMEFRAME_SECONDS[self._cfg.candle_timeframe]
         overrun_time = last_candle_close + timedelta(seconds=candle_secs)
@@ -642,9 +648,7 @@ class Scheduler:
         while overrun_time <= now and overrun_time < next_close:
             session_id = f"run-{run_id}/session-{session_ordinal:04d}"
             status = (
-                "SKIPPED_MARKET_CLOSED"
-                if not self.is_market_open()
-                else "SKIPPED_DATA_UNAVAILABLE"
+                "SKIPPED_MARKET_CLOSED" if not self.is_market_open() else "SKIPPED_OVERRUN"
             )
             self._record_skipped_session(run_id, session_id, overrun_time, status)
             session_ordinal += 1
