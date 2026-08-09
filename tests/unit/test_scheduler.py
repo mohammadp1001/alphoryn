@@ -892,6 +892,53 @@ def test_run_feedback_no_entry_session_uses_empty_string_for_path() -> None:
     assert fi.html_report_path == ""
 
 
+# One bad position must not take down the run (issue #164, FR-016a).
+
+
+def test_run_feedback_carries_on_when_one_position_blows_up() -> None:
+    sched = _full_scheduler_with_feedback()
+    pos1 = _make_mock_position()
+    pos2 = _make_mock_position()
+    pos2.id = 100
+    pos2.ticker = "QQQ"
+    sched._bank.get_positions_due_for_feedback.return_value = [pos1, pos2]
+    sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
+    sched._feedback_agent.evaluate.side_effect = [RuntimeError("boom"), None]
+
+    sched._run_feedback("run-1/session-0002")  # must not raise
+
+    assert sched._feedback_agent.evaluate.call_count == 2
+
+
+def test_run_feedback_emits_evaluation_failed_for_the_position_that_blew_up() -> None:
+    sched = _full_scheduler_with_feedback()
+    pos = _make_mock_position()
+    sched._bank.get_positions_due_for_feedback.return_value = [pos]
+    sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
+    sched._feedback_agent.evaluate.side_effect = RuntimeError("boom")
+
+    sched._run_feedback("run-1/session-0002")
+
+    failed = [
+        c for c in sched._logger.emit.call_args_list if c.args[0] == "EVALUATION_FAILED"
+    ]
+    assert len(failed) == 1
+    assert failed[0].args[2]["position_id"] == 99
+    assert "boom" in failed[0].args[2]["error"]
+    assert failed[0].kwargs["etf"] == "SPY"
+
+
+def test_run_feedback_survives_a_blow_up_without_a_logger() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._logger = None
+    pos = _make_mock_position()
+    sched._bank.get_positions_due_for_feedback.return_value = [pos]
+    sched._bank.get_session.return_value = MagicMock(html_report_path="/reports/r.html")
+    sched._feedback_agent.evaluate.side_effect = RuntimeError("boom")
+
+    sched._run_feedback("run-1/session-0002")  # must not raise
+
+
 def test_process_session_calls_run_feedback_before_investigation() -> None:
     sched = _full_scheduler_with_feedback()
 

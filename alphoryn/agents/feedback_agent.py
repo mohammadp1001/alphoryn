@@ -83,21 +83,30 @@ class FeedbackAgent:
     def evaluate(self, feedback_input: FeedbackInput, current_session_id: str) -> None:
         """Evaluate a closed position and write a FeedbackEvaluation to the bank.
 
-        Retries up to 3 times on LLM failure. On 3rd failure, writes
-        EVALUATION_FAILED status and unblocks the ticker.
-        """
-        thesis = self._extract_thesis(
-            feedback_input.html_report_path, feedback_input.ticker
-        )
-        # FR-016: the price at the evaluation timestamp, not the latest one.
-        # Feedback can run one or more sessions after the window closed.
-        evaluation_price = self._market_data.get_price_at(
-            feedback_input.ticker, feedback_input.evaluation_window_close_at
-        )
+        Retries up to 3 times on failure. On the 3rd failure, writes
+        EVALUATION_FAILED status and unblocks the ticker (FR-016a).
 
+        Reading the report and fetching the evaluation price are inside the retry
+        loop, not before it. Both touch the outside world - a missing report file,
+        an unreachable Alpaca - and an exception raised before the loop escaped
+        ``evaluate()`` entirely, taking down the whole run and leaving the position
+        blocked forever, which is what FR-016a and FR-017 exist to prevent
+        (issue #164).
+        """
+        thesis = ""
+        evaluation_price: float | None = None
         last_exc: Exception | None = None
+
         for attempt in range(1, _MAX_ATTEMPTS + 1):
             try:
+                thesis = self._extract_thesis(
+                    feedback_input.html_report_path, feedback_input.ticker
+                )
+                # FR-016: the price at the evaluation timestamp, not the latest one.
+                # Feedback can run one or more sessions after the window closed.
+                evaluation_price = self._market_data.get_price_at(
+                    feedback_input.ticker, feedback_input.evaluation_window_close_at
+                )
                 raw_json = self._call_agent(feedback_input, thesis, evaluation_price, attempt)
                 result = self._parse_result(raw_json)
                 self._write_success(
@@ -279,17 +288,33 @@ class FeedbackAgent:
         self,
         feedback_input: FeedbackInput,
         current_session_id: str,
-        evaluation_price: float,
+        evaluation_price: float | None,
         thesis: str,
     ) -> None:
+        """Record the failed evaluation so the ticker is unblocked (FR-016a).
+
+        ``evaluation_price`` is ``None`` when every attempt failed before the
+        price could be fetched. ``candle_close_price`` is NOT NULL, so the
+        position's own exit price stands in - a real price for this position -
+        and the reasoning text says the evaluation price was never obtained so
+        the row is not read as a genuine candle close.
+        """
+        reasoning = "Evaluation failed after 3 attempts; judgment defaulted to NEUTRAL."
+        if evaluation_price is None:
+            reasoning += (
+                " The evaluation candle close price could not be fetched;"
+                " the position exit price is recorded in its place."
+            )
         evaluation = FeedbackEvaluation(
             position_id=feedback_input.position_id,
             evaluated_at=datetime.now(UTC),
             evaluation_session_id=current_session_id,
-            candle_close_price=evaluation_price,
+            candle_close_price=(
+                evaluation_price if evaluation_price is not None else feedback_input.exit_price
+            ),
             thesis_summary=thesis[:500] if thesis else "unavailable",
             outcome_judgment="NEUTRAL",
-            reasoning="Evaluation failed after 3 attempts; judgment defaulted to NEUTRAL.",
+            reasoning=reasoning,
             attempt_count=_MAX_ATTEMPTS,
         )
         self._bank.write_feedback_evaluation(evaluation, "EVALUATION_FAILED")
