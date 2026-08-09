@@ -53,6 +53,32 @@ class SessionDecision:
     decisions: list[AssetDecision]
 
 
+class _RemainingBudget:
+    """What is left of the session money budget as orders are placed (FR-010).
+
+    Lives for exactly one ``execute()`` call: the budget is per session, not
+    cumulative across the run. ``None`` means the config set no session cap, in
+    which case Alpaca buying power is the only limit.
+
+    Only a *placed* order spends the budget. A skipped or failed order leaves it
+    untouched, so the next ticker in the sequence can still use it.
+    """
+
+    def __init__(self, total: float | None) -> None:
+        self.remaining = total
+
+    def cap(self, buying_power: float) -> float:
+        """Return the budget this order may draw on."""
+        if self.remaining is None:
+            return buying_power
+        return min(buying_power, self.remaining)
+
+    def spend(self, amount: float) -> None:
+        """Deduct a placed order's cost from what is left."""
+        if self.remaining is not None:
+            self.remaining -= amount
+
+
 class ExecutionAgent:
     """Deterministic order executor — no LLM model configured.
 
@@ -126,9 +152,15 @@ class ExecutionAgent:
         Returns the per-ticker execution result keyed by ticker, one of
         ``EXECUTED``, ``HOLD`` or ``FAILED`` — the ``execution_result`` the
         session record carries per data-model.md.
+
+        The session money budget is spent down across the tickers of this one
+        session (FR-010): each order is checked against what is *left*, not
+        against the full budget, so two tickers cannot each consume it in full.
         """
+        remaining = _RemainingBudget(self._session_money_budget)
         return {
-            d.ticker: self._execute_ticker(d, decision.session_id) for d in decision.decisions
+            d.ticker: self._execute_ticker(d, decision.session_id, remaining)
+            for d in decision.decisions
         }
 
     def _trading_client(self) -> TradingClient:
@@ -155,13 +187,19 @@ class ExecutionAgent:
         )
         return float(quotes[ticker].ask_price)
 
-    def _execute_ticker(self, asset_decision: AssetDecision, session_id: str) -> str:
+    def _execute_ticker(
+        self,
+        asset_decision: AssetDecision,
+        session_id: str,
+        remaining: "_RemainingBudget",
+    ) -> str:
         if asset_decision.action == "HOLD":
             return "HOLD"
         try:
             if asset_decision.action == "SELL":
+                # Closing never draws on the budget - it returns cash.
                 return self._close_position(asset_decision, session_id)
-            return self._open_position(asset_decision, session_id)
+            return self._open_position(asset_decision, session_id, remaining)
         except Exception as exc:
             self._emit(
                 "ORDER_FAILED",
@@ -220,7 +258,12 @@ class ExecutionAgent:
         )
         return "EXECUTED"
 
-    def _open_position(self, asset_decision: AssetDecision, session_id: str) -> str:
+    def _open_position(
+        self,
+        asset_decision: AssetDecision,
+        session_id: str,
+        remaining: "_RemainingBudget",
+    ) -> str:
         """Open a new long position (FR-014 blocked tickers are refused)."""
         # Second gate only — the scheduler already keeps blocked tickers out of
         # the investigation (FR-005) — so this protects direct callers.
@@ -235,14 +278,12 @@ class ExecutionAgent:
 
         client = self._trading_client()
 
-        # Budget check via Alpaca account API and optional session_money_budget (FR-010).
+        # Budget check via Alpaca account API and what is left of the session
+        # money budget (FR-010). Earlier tickers in this session have already
+        # spent part of it, so the full budget is not what this order may draw on.
         account = client.get_account()
         buying_power = float(account.buying_power)
-        effective_budget = (
-            min(buying_power, self._session_money_budget)
-            if self._session_money_budget is not None
-            else buying_power
-        )
+        effective_budget = remaining.cap(buying_power)
         ask_price = self._latest_ask(asset_decision.ticker)
         lot = asset_decision.lot_size or 1
         required = ask_price * lot
@@ -251,6 +292,7 @@ class ExecutionAgent:
             {
                 "buying_power": buying_power,
                 "session_money_budget": self._session_money_budget,
+                "remaining_session_budget": remaining.remaining,
                 "effective_budget": effective_budget,
                 "required": required,
                 "lot_size": lot,
@@ -268,6 +310,7 @@ class ExecutionAgent:
                     "reason": "INSUFFICIENT_BUDGET",
                     "buying_power": buying_power,
                     "session_money_budget": self._session_money_budget,
+                    "remaining_session_budget": remaining.remaining,
                     "required": required,
                 },
                 ticker=asset_decision.ticker,
@@ -283,6 +326,7 @@ class ExecutionAgent:
                 time_in_force=TimeInForce.DAY,
             )
         )
+        remaining.spend(required)  # only a placed order draws down the session budget
         self._emit(
             "ORDER_PLACED",
             {"side": "BUY", "qty": lot, "price": ask_price, "strategy": asset_decision.strategy},

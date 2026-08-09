@@ -743,3 +743,141 @@ def test_alpaca_api_exception_emits_order_failed_and_returns_failed(tmp_path) ->
     )
     bank._engine.dispose()
 
+
+
+# ---------------------------------------------------------------------------
+# Session money budget is spent down across tickers (issue #163, FR-010)
+# ---------------------------------------------------------------------------
+
+
+def test_second_buy_is_refused_once_the_first_spent_the_budget(tmp_path) -> None:
+    """FR-010: the second ticker sees what is *left*, not the full budget.
+
+    SPY costs 900 of a 1000 budget, leaving 100 - not enough for QQQ's 760.
+    Before the fix both orders were compared against the full 1000 and both
+    were placed, spending 1660 of a 1000 budget.
+    """
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=1000.0)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    mock_alpaca = _run(agent, _decision(_buy("SPY", lot=2), _buy("QQQ", lot=2)))
+
+    assert mock_alpaca.submit_order.call_count == 1
+    assert [p.ticker for p in bank.load_open_positions()] == ["SPY"]
+    bank._engine.dispose()
+
+
+def test_execute_returns_failed_for_the_ticker_that_ran_out_of_budget(tmp_path) -> None:
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=1000.0)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    mock_alpaca = MagicMock()
+    mock_alpaca.get_account.return_value.buying_power = "100000"
+    mock_data = MagicMock()
+    mock_data.get_stock_latest_quote.return_value = {
+        "SPY": MagicMock(ask_price=450.0),
+        "QQQ": MagicMock(ask_price=380.0),
+    }
+    with (
+        patch("alphoryn.execution.agent.TradingClient", return_value=mock_alpaca),
+        patch("alphoryn.execution.agent.StockHistoricalDataClient", return_value=mock_data),
+    ):
+        results = agent.execute(_decision(_buy("SPY", lot=2), _buy("QQQ", lot=2)))
+
+    assert results == {"SPY": "EXECUTED", "QQQ": "FAILED"}
+    bank._engine.dispose()
+
+
+def test_both_buys_placed_when_the_budget_covers_both(tmp_path) -> None:
+    """The drawdown must not refuse an order the budget genuinely covers."""
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=2000.0)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    # SPY 2 x 450 = 900, QQQ 2 x 380 = 760; 1660 total, under 2000.
+    mock_alpaca = _run(agent, _decision(_buy("SPY", lot=2), _buy("QQQ", lot=2)))
+
+    assert mock_alpaca.submit_order.call_count == 2
+    assert sorted(p.ticker for p in bank.load_open_positions()) == ["QQQ", "SPY"]
+    bank._engine.dispose()
+
+
+def test_skipped_order_does_not_consume_budget(tmp_path) -> None:
+    """A refused order leaves the budget intact for the next ticker (FR-010)."""
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=1000.0)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    # SPY wants 3 x 450 = 1350 and is refused; QQQ's 2 x 380 = 760 still fits.
+    mock_alpaca = _run(agent, _decision(_buy("SPY", lot=3), _buy("QQQ", lot=2)))
+
+    assert mock_alpaca.submit_order.call_count == 1
+    assert [p.ticker for p in bank.load_open_positions()] == ["QQQ"]
+    bank._engine.dispose()
+
+
+def test_sell_does_not_consume_the_session_budget(tmp_path) -> None:
+    """Closing a position returns cash; it must not reduce what a later BUY may spend."""
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = _bank_with_position(tmp_path, status="OPEN", ticker="SPY")
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=1000.0)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    mock_alpaca = _run(agent, _decision(_sell("SPY", lot=5), _buy("QQQ", lot=2)))
+
+    assert mock_alpaca.submit_order.call_count == 2
+    assert [p.ticker for p in bank.load_open_positions()] == ["QQQ"]
+    bank._engine.dispose()
+
+
+def test_no_session_budget_leaves_buying_power_as_the_only_limit(tmp_path) -> None:
+    """session_money_budget=None keeps today's behaviour: Alpaca buying power only."""
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=None)
+    agent = ExecutionAgent(bank, "1H", cfg=cfg)
+
+    mock_alpaca = _run(agent, _decision(_buy("SPY", lot=2), _buy("QQQ", lot=2)))
+
+    assert mock_alpaca.submit_order.call_count == 2
+    bank._engine.dispose()
+
+
+def test_budget_check_telemetry_reports_the_remaining_budget(tmp_path) -> None:
+    """SC-004: the log must show why the second order was refused."""
+    from alphoryn.config.models import AlphorynConfig
+
+    bank = MemoryBank(str(tmp_path / "memory.db"))
+    bank.start_run('{"tickers":["SPY","QQQ"]}', 6)
+    cfg = AlphorynConfig(tickers=["SPY", "QQQ"], session_money_budget=1000.0)
+    logger = MagicMock()
+    agent = ExecutionAgent(bank, "1H", logger, cfg=cfg)
+
+    _run(agent, _decision(_buy("SPY", lot=2), _buy("QQQ", lot=2)))
+
+    checks = [p for name, p in _emitted(logger) if name == "BUDGET_CHECK"]
+    assert checks[0]["remaining_session_budget"] == 1000.0
+    assert checks[0]["sufficient"] is True
+    assert checks[1]["remaining_session_budget"] == 100.0
+    assert checks[1]["sufficient"] is False
+
+    failures = [p for name, p in _emitted(logger) if name == "ORDER_FAILED"]
+    assert failures[0]["remaining_session_budget"] == 100.0
+    bank._engine.dispose()
