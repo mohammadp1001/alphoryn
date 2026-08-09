@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from alphoryn.config.loader import load_config
+from alphoryn.config.loader import CLEAR, load_config
 from alphoryn.config.models import AlphorynConfig, _parse_duration_seconds
 
 # ---------------------------------------------------------------------------
@@ -187,6 +187,24 @@ def test_load_config_none_overrides_not_applied(tmp_path: Path) -> None:
     cfg = load_config(config_path=cfg_file, overrides={"stop_loss_pct": None})
     # None value must NOT override the file value
     assert cfg.stop_loss_pct == pytest.approx(0.03)
+
+
+def test_load_config_clear_sentinel_resets_field_to_default(tmp_path: Path) -> None:
+    """CLEAR drops the key so the model default applies - how --budget 0 works."""
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(
+        json.dumps({"tickers": ["SPY", "QQQ"], "session_money_budget": 5000.0}),
+        encoding="utf-8",
+    )
+    cfg = load_config(config_path=cfg_file, overrides={"session_money_budget": CLEAR})
+    assert cfg.session_money_budget is None
+
+
+def test_load_config_clear_on_absent_key_is_harmless(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"tickers": ["SPY", "QQQ"]}), encoding="utf-8")
+    cfg = load_config(config_path=cfg_file, overrides={"session_money_budget": CLEAR})
+    assert cfg.session_money_budget is None
 
 
 def test_load_config_no_file_no_overrides_raises() -> None:

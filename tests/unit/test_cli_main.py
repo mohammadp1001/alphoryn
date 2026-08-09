@@ -20,7 +20,7 @@ from typer.testing import CliRunner
 
 from alphoryn.cli.main import _format_decision, _start_scheduler, _warn_fractional_sessions, app
 from alphoryn.config.models import AlphorynConfig
-from alphoryn.memory.bank import MemoryBank
+from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.memory.schema import Position
 from alphoryn.memory.schema import Session as Sess
 
@@ -429,3 +429,36 @@ def test_reset_command_cancellation(tmp_path: Path) -> None:
     assert "Reset cancelled." in result.output
     assert db.exists()
     bank._engine.dispose()
+
+
+def test_reset_command_confirmed_at_the_prompt(tmp_path: Path) -> None:
+    """Answering yes deletes the database, same as --force."""
+    db = tmp_path / "memory.db"
+    bank = MemoryBank(str(db))
+    bank._engine.dispose()
+
+    result = runner.invoke(app, ["reset", "--db", str(db)], input="y\n")
+
+    assert result.exit_code == 0
+    assert "Reset memory bank database" in result.output
+    assert not db.exists()
+
+
+def test_reset_command_on_missing_database(tmp_path: Path) -> None:
+    """Nothing to reset is not an error - say so and stop."""
+    db = tmp_path / "never-created.db"
+
+    result = runner.invoke(app, ["reset", "--db", str(db)])
+
+    assert result.exit_code == 0
+    assert "does not exist" in result.output
+
+
+def test_verify_telemetry_reports_a_broken_memory_bank(tmp_path: Path) -> None:
+    """An unopenable bank exits 2 rather than raising at the user."""
+    db = tmp_path / "memory.db"
+    with patch("alphoryn.cli.main.MemoryBank", side_effect=MemoryBankError("disk is read-only")):
+        result = runner.invoke(app, ["verify-telemetry", "--db", str(db)])
+
+    assert result.exit_code == 2
+    assert "Memory bank error: disk is read-only" in result.output

@@ -317,6 +317,10 @@ def _full_scheduler(**extra) -> Scheduler:
     bank = MagicMock()
     bank.start_run.return_value = 1
     bank.get_feedback_blocked_tickers.return_value = set()
+    # A bare MagicMock is truthy, which makes the `while load_open_positions()`
+    # drain loop in run()'s finally block spin forever (issue #165). Tests that
+    # exercise draining set their own return_value/side_effect.
+    bank.load_open_positions.return_value = []
     cfg = AlphorynConfig(
         tickers=["SPY", "QQQ"],
         candle_timeframe="1H",
@@ -507,12 +511,18 @@ def test_process_session_writes_data_unavailable_status() -> None:
 # ---------------------------------------------------------------------------
 
 
+# These drive _process_session directly rather than run(). A timed-out session
+# is not counted against session_count (FR-018), so a scheduler whose every
+# session times out never satisfies `sessions_completed < session_count` and
+# run() spins forever once the waits are stubbed out (issue #165).
+
+
 def test_investigation_timeout_emits_budget_timeout() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
     # Make decide() block long enough for timeout
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
 
-    _run_with_no_wait(sched)
+    sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     emitted = [c.args[0] for c in sched._logger.emit.call_args_list]
     assert "BUDGET_TIMEOUT" in emitted
@@ -522,11 +532,34 @@ def test_investigation_timeout_writes_skipped_session() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
 
-    _run_with_no_wait(sched)
+    status = sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
+    assert status == "SKIPPED_TIMEOUT"
     sched._bank.write_session.assert_called_once()
     session_arg = sched._bank.write_session.call_args.args[0]
     assert session_arg.status == "SKIPPED_TIMEOUT"
+
+
+def test_run_loop_does_not_count_a_timed_out_session() -> None:
+    """FR-018: a timed-out session must not consume the run's session budget.
+
+    Guards the loop condition itself without letting it spin: the first pass
+    times out, the second succeeds and ends the run.
+    """
+    sched = _full_scheduler()
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+    statuses = iter(["SKIPPED_TIMEOUT", "COMPLETED"])
+
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close"),
+        patch.object(sched, "is_market_open", return_value=True),
+        patch.object(sched, "_process_session", side_effect=lambda *a: next(statuses)) as proc,
+    ):
+        sched.run()
+
+        # Two passes were needed to bank one countable session.
+        assert proc.call_count == 2
 
 
 def test_execute_timeout_emits_budget_timeout() -> None:
@@ -1386,8 +1419,8 @@ def test_feedback_input_carries_the_evaluation_window_deadline() -> None:
 
 def test_skipped_sessions_do_not_count_against_session_budget() -> None:
     """FR-018: SKIPPED_TIMEOUT and SKIPPED_DATA_UNAVAILABLE do not increment completed count."""
+    # session_count is derived (run_duration 1H / candle 1H = 1), not assignable.
     sched = _full_scheduler()
-    sched._cfg.session_count = 1
     call_count = 0
 
     def mock_investigation(*args: Any, **kwargs: Any) -> tuple[Any, str | None]:
