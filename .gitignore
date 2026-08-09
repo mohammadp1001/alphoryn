@@ -229,6 +229,7 @@ TELEMETRY_ACCESS.md
 
 # speckit spec-driven-development scaffolding (local only)
 .specify/
+specs/
 
 # Local runtime config (copy config.example.json to get started)
 config.json
