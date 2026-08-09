@@ -111,9 +111,8 @@ def _compute_adx(
         dm_plus_list.append(dm_plus)
         dm_minus_list.append(dm_minus)
 
-    if len(tr_list) < period:
-        return 0.0
-
+    # The n < period + 1 guard above already means len(tr_list) == n - 1 >= period,
+    # so the DX loop below always runs at least once and dx_list is never empty.
     dx_list = []
     for i in range(period, len(tr_list) + 1):
         tr_sub = tr_list[i - period : i]
@@ -132,8 +131,6 @@ def _compute_adx(
         else:
             dx_list.append(abs(di_plus - di_minus) / di_sum * 100)
 
-    if not dx_list:
-        return 0.0
     adx_window = dx_list[-period:]
     return sum(adx_window) / len(adx_window)
 

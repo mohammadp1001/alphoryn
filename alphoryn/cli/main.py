@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from alphoryn.agents.feedback_agent import FeedbackAgent
 from alphoryn.agents.main_agent import MainAgent
-from alphoryn.config.loader import load_config
+from alphoryn.config.loader import CLEAR, load_config
 from alphoryn.config.models import (
     TIMEFRAME_SECONDS,
     AlphorynConfig,
@@ -88,7 +88,9 @@ def run(
     if duration is not None:
         overrides["run_duration"] = duration
     if budget is not None:
-        overrides["session_money_budget"] = budget if budget > 0 else None
+        # --budget 0 means "no session cap": clear the field rather than pass
+        # None, which load_config reads as "flag absent, keep the file value".
+        overrides["session_money_budget"] = budget if budget > 0 else CLEAR
     if stop_loss is not None:
         overrides["stop_loss_pct"] = stop_loss
 

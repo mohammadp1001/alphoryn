@@ -1,8 +1,18 @@
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from .models import AlphorynConfig
+
+
+class _Sentinel(Enum):
+    """Distinguishes "clear this field" from "the flag was absent" (``None``)."""
+
+    CLEAR = "CLEAR"
+
+
+CLEAR = _Sentinel.CLEAR
 
 
 def load_config(
@@ -16,11 +26,15 @@ def load_config(
     2. Apply each entry in ``overrides`` where the value is not ``None``.
     3. Validate the merged dict into an ``AlphorynConfig``.
 
+    ``None`` never overrides a file value: an absent CLI flag arrives as
+    ``None`` and must leave the file alone. To *clear* a field the caller
+    passes ``CLEAR``, which drops the key so the model default applies -
+    this is how ``--budget 0`` removes a session money cap.
+
     Args:
         config_path: Path to JSON config file. Default: ``config.json``.
-        overrides:   Dict of CLI option values; only non-``None`` values
-                     are applied so that absent CLI flags don't overwrite
-                     file values.
+        overrides:   Dict of CLI option values; ``None`` values are ignored
+                     and ``CLEAR`` values reset the field to its default.
 
     Returns:
         Validated ``AlphorynConfig`` instance.
@@ -34,6 +48,9 @@ def load_config(
 
     if overrides:
         for key, value in overrides.items():
-            raw[key] = value
+            if value is CLEAR:
+                raw.pop(key, None)
+            elif value is not None:
+                raw[key] = value
 
     return AlphorynConfig(**raw)
