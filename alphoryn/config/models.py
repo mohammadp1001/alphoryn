@@ -58,6 +58,23 @@ class AlphorynConfig(BaseModel):
             raise ValueError(f"stop_loss_pct must be between 0 and 1 exclusive, got {v}")
         return v
 
+    @field_validator("session_money_budget")
+    @classmethod
+    def validate_session_money_budget(cls, v: float | None) -> float | None:
+        """Reject a cap that can never fund an order (contracts/config-schema.md).
+
+        ``None`` stays valid and keeps meaning "no session cap". Zero or a
+        negative cap is not a cap, it is a run that silently places no orders
+        at all and looks like the market simply never gave a signal (FR-017).
+
+        ``--budget 0`` still clears the cap: the CLI turns it into CLEAR before
+        the config is built, so it never reaches this validator as ``0``.
+        """
+        if v is not None and v <= 0:
+            _logger.error("Invalid session_money_budget=%s - must be greater than 0", v)
+            raise ValueError(f"session_money_budget must be greater than 0, got {v}")
+        return v
+
     @field_validator("run_duration")
     @classmethod
     def validate_run_duration(cls, v: str) -> str:
