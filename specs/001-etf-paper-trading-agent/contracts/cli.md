@@ -18,9 +18,9 @@ Options:
   --config    PATH    Path to JSON config file. Default: ./config.json
   --tickers   TEXT    Comma-separated ticker symbols, e.g. SPY,QQQ. Overrides config.
   --exchange  TEXT    Optional/informational. Alpaca routes automatically. Overrides config.
-  --timeframe TEXT    Candle timeframe: 30min | 1H | 4H. Overrides config.
+  --timeframe TEXT    Candle timeframe: 10min | 15min | 30min | 1H | 4H. Overrides config.
   --duration  TEXT    Run duration: e.g. 8H | 24H. Overrides config.
-  --budget    FLOAT   Session money budget in USD. Overrides config. 0 or negative = no limit.
+  --budget    FLOAT   Session money budget in USD. Overrides config. 0 = no limit.
   --stop-loss FLOAT   Stop-loss percentage, e.g. 0.02 for 2%. Overrides config.
   --help              Show this message and exit.
 ```
@@ -40,14 +40,14 @@ Memory bank: /home/user/.alphoryn/memory.db — 0 open positions loaded
 **Session completion** (one line per session; ticker decisions are pipe-separated,
 not one line per ticker):
 ```
-[run-1/session-a3f7] DECISION  SPY: BUY (MEAN_REVERSION)  |  QQQ: HOLD (MOMENTUM)
-[run-1/session-a3f7] Report -> reports/run-1/session-a3f7.html
+[run-1/session-0001] DECISION  SPY: BUY (MEAN_REVERSION)  |  QQQ: HOLD (MOMENTUM)
+[run-1/session-0001] Report -> reports/run-1/session-0001.html
 ```
 
 **Failure / skip**:
 ```
-[run-1/session-b9c2] SKIPPED  investigation budget exceeded
-[session-c1d4] MARKET_CLOSED — waiting for next candle
+[run-1/session-0002] SKIPPED  investigation budget exceeded
+[run-1/session-0003] MARKET_CLOSED - waiting for next candle
 ```
 
 **Exit codes**:
@@ -100,7 +100,67 @@ Options:
 **Output** (table, most recent first; one column per ticker in the run's config snapshot):
 ```
 Session                   Candle Close           SPY                     QQQ
-run-1/session-a3f7        2026-07-03 14:00       MR -> BUY (exec)        MOM -> HOLD
-run-1/session-b9c2        2026-07-03 15:00       MOM -> HOLD             MOM -> SELL (exec)
+run-1/session-0001        2026-07-03 14:00       MR -> BUY (exec)        MOM -> HOLD
+run-1/session-0002        2026-07-03 15:00       MOM -> HOLD             MOM -> SELL (exec)
 ...
 ```
+
+---
+
+## Command: `alphoryn version`
+
+Print the version and exit.
+
+```
+Usage: alphoryn version
+
+Options:
+  --help
+```
+
+**Output**:
+```
+Alphoryn v0.0.1
+```
+
+---
+
+## Command: `alphoryn verify-telemetry`
+
+Count what the memory bank actually recorded. Use it to confirm a run wrote anything at
+all before going looking in GCP Logs Explorer.
+
+```
+Usage: alphoryn verify-telemetry [OPTIONS]
+
+Options:
+  --db PATH    Memory bank path. Default: ~/.alphoryn/memory.db
+  --help
+```
+
+**Output**:
+```
+Telemetry check for /home/you/.alphoryn/memory.db:
+  Runs recorded: 3
+  Sessions recorded: 41
+  Positions recorded: 6
+```
+
+Exits 2 if the memory bank cannot be opened.
+
+---
+
+## Command: `alphoryn reset`
+
+Delete the memory bank database. Prompts for confirmation unless `--force` is given.
+
+```
+Usage: alphoryn reset [OPTIONS]
+
+Options:
+  --db PATH        Memory bank path to reset. Default: ~/.alphoryn/memory.db
+  --force, -f      Skip the confirmation prompt.
+  --help
+```
+
+A database that does not exist is not an error - the command says so and exits 0.

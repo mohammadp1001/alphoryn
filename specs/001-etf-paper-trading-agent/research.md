@@ -202,14 +202,14 @@ order placement, confirmation). No reasoning or language model is required. ADK 
 provides the same ADK infrastructure (event bus, tool integration, lifecycle hooks) without
 attaching a model.
 
-**Implementation**: `execution/agent.py` subclasses `google.adk.BaseAgent` and overrides
-`_run_async_impl`. It calls `alpaca-py` directly (not via MCP server) for maximum control
-and testability. Unit tests mock the `alpaca-py` client and assert fixed outputs for fixed
-decision inputs — satisfying constitution Principle I (Determinism).
-
-**Why not pure Python?** Using ADK BaseAgent keeps the execution agent in the same event
-and observability framework as the rest of the system (traces, lifecycle hooks, cancellation
-propagation) without adding non-determinism.
+**Implementation**: `execution/agent.py` is a plain Python class with `model = None`,
+not an ADK agent. The ADK subclass was considered and dropped: the execution agent is
+called synchronously by the scheduler with a `SessionDecision` and returns a per-ticker
+result dict, so the ADK event bus and async lifecycle bought nothing and cost an async
+boundary in the one place the system most needs to be simple and deterministic. It calls
+`alpaca-py` directly (not via MCP server) for maximum control and testability. Unit tests
+mock the `alpaca-py` client and assert fixed outputs for fixed decision inputs —
+satisfying constitution Principle I (Determinism).
 
 ---
 
@@ -255,13 +255,11 @@ correlation without a separate tracing backend.
 | `MONITOR_STARTED` / `MONITOR_STOPPED` | `scheduler` | (empty payload) |
 | `EVALUATION_FAILED` | `feedback_agent` | `position_id`, `ticker`, `error` |
 
-**Known gap**: `ORDER_PLACED`, `ORDER_FAILED`, and `BUDGET_CHECK` are declared in the
-`EVENT_TYPES` constant but are never emitted — `execution/agent.py` has no
-`TelemetryLogger` wired in and does not call `emit()` at all. Also, `EVALUATION_FAILED`
-(emitted by `feedback_agent.py`) is missing from the `EVENT_TYPES` constant itself
-(the constant is documentation-only and not enforced by `emit()`, so this doesn't raise
-an error, but it is inconsistent). These are implementation gaps to track separately,
-not a documentation error.
+`ORDER_PLACED`, `ORDER_FAILED`, and `BUDGET_CHECK` are emitted by
+`execution/agent.py`, which takes a `TelemetryLogger` like the other components.
+`EVALUATION_FAILED` is emitted by both `feedback_agent.py` (all 3 attempts failed) and
+`scheduler.py` (an evaluation escaped the agent entirely), and is present in the
+`EVENT_TYPES` constant. The constant is documentation-only and not enforced by `emit()`.
 
 GCP Logs Explorer is the primary observability UI — filter by `session_id`, `event_type`,
 `component`, or `etf` to query any slice of system activity.

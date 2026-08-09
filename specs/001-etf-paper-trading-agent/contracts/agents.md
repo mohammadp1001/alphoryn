@@ -53,11 +53,13 @@ Gating below) and re-inserts them as Hold afterwards.
 6. Place market order via `alpaca-py`
 7. On success: write `Position` record to memory bank with `status=OPEN`, `direction=BUY`
 
-**Known gap**: unlike `main_agent`, `monitor`, and `feedback_agent`, `execution/agent.py`
-does not currently have a `TelemetryLogger` wired in and emits no telemetry events
-(`ORDER_PLACED`/`ORDER_FAILED`/`BUDGET_CHECK`, though declared in `telemetry/logger.py`'s
-`EVENT_TYPES`, are never emitted in the current implementation). See research.md
-§Telemetry for the full known-gap note.
+**Telemetry**: `execution/agent.py` takes a `TelemetryLogger` and emits on every order
+path. `BUDGET_CHECK` before each entry (carrying `remaining_session_budget`, since the
+session budget is spent down across tickers), `ORDER_PLACED` on a placed order, and
+`ORDER_FAILED` on every refusal with a `reason` of `INSUFFICIENT_BUDGET`,
+`FEEDBACK_BLOCKED`, `NO_OPEN_POSITION`, or `API_ERROR`. A run that silently places no
+orders is therefore distinguishable from one where the agent decided to Hold (FR-017,
+SC-004).
 
 ---
 

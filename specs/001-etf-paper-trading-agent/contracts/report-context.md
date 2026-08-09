@@ -1,10 +1,10 @@
 # Report Template Context: Alphoryn
 
-Phase 1 output | Date: 2026-07-05 (updated 2026-07-21) | Plan: ../plan.md
+Phase 1 output | Date: 2026-07-05 (updated 2026-08-09) | Plan: ../plan.md
 
 Documents the Jinja2 context object passed by `reports/generator.py` to the unified
 session report template (`templates/reports/session.html.j2`), as actually built by
-`scheduler/scheduler.py::_run_session` (or equivalent session-loop method).
+`scheduler/scheduler.py::_process_session`.
 
 ## Context Object Fields (as built by the scheduler)
 
@@ -16,7 +16,8 @@ strategy: str|None          -- known gap: currently set from the FIRST ticker's 
                                 not per ticker (see Known Gaps)
 signals: dict|None          -- known gap: currently always None (never populated) — the
                                 Signal Snapshot section of the template never renders
-execution_result: str|None  -- known gap: currently always None (never populated)
+execution_result: str|None  -- known gap: the top-level field is always None. The real
+                                per-ticker result lives in ticker_details[].execution_result
 position: dict|None         -- known gap: currently always None (never populated) — the
                                 Position section always renders "No position opened this session"
 
@@ -27,6 +28,8 @@ action: str           -- "BUY", "SELL", or "HOLD"
 strategy: str|None    -- "MEAN_REVERSION" or "MOMENTUM"; None if HOLD with no strategy selected
 reasoning: str         -- agent's full reasoning text; IS the investment thesis, rendered per ticker
 memory_summary: str|None  -- known gap: currently always None (never populated from the memory bank)
+execution_result: str|None -- "EXECUTED", "HOLD" or "FAILED" for this ticker, from
+                              ExecutionAgent.execute(); None when execution did not run
 
 ## signals dict keys (when populated)
 
@@ -54,9 +57,14 @@ scheduler never populates `signals`/`position`).
 
 ## Thesis extraction (feedback agent)
 
-The feedback agent parses `section id="investment-thesis"` from the rendered HTML.
-The template renders one such section per ticker (`{{ detail.ticker }} — Investment Thesis`),
-and the `reasoning` field rendered inside is the thesis for that ticker.
+The feedback agent parses `section id="investment-thesis-{ticker}"` from the rendered HTML
+— the id is ticker-scoped, so a multi-ticker session cannot have one ticker's thesis judged
+against another's outcome (issue #134). The `reasoning` field rendered inside is the thesis
+for that ticker.
+
+Reports written before that change used one unscoped `investment-thesis` id for every
+ticker. They are still reachable from the memory bank, so the agent falls back to the
+unscoped id, and then to the whole document, before giving up.
 
 ## Known Gaps
 
@@ -65,8 +73,10 @@ scheduler in the current implementation — they are always `None`, so the corre
 template sections never render real data:
 - `strategy` (top-level) — only the first ticker's strategy is passed; not accurate for
   multi-ticker sessions where tickers run different strategies (spec FR-008)
-- `signals`, `execution_result`, `position` — always `None`; the Signal Snapshot and
-  Position sections of the report never show data even when a trade executed
+- `signals`, top-level `execution_result`, `position` — always `None`; the Signal Snapshot
+  and Position sections of the report never show data even when a trade executed.
+  `ticker_details[].execution_result` *is* populated, so the per-ticker decision table does
+  show what happened to each order
 - `ticker_details[].memory_summary` — always `None`; the memory-context box never renders
 
 These are implementation gaps to track separately, not documentation errors.
