@@ -106,6 +106,26 @@ def test_config_stop_loss_pct_valid() -> None:
     assert cfg.stop_loss_pct == pytest.approx(0.05)
 
 
+def test_config_session_money_budget_zero_raises() -> None:
+    with pytest.raises(ValidationError, match="session_money_budget"):
+        _minimal(session_money_budget=0.0)
+
+
+def test_config_session_money_budget_negative_raises() -> None:
+    with pytest.raises(ValidationError, match="session_money_budget"):
+        _minimal(session_money_budget=-500.0)
+
+
+def test_config_session_money_budget_none_means_no_cap() -> None:
+    cfg = _minimal(session_money_budget=None)
+    assert cfg.session_money_budget is None
+
+
+def test_config_session_money_budget_positive_is_kept() -> None:
+    cfg = _minimal(session_money_budget=1000.0)
+    assert cfg.session_money_budget == pytest.approx(1000.0)
+
+
 def test_config_invalid_run_duration_raises() -> None:
     with pytest.raises(ValidationError):
         _minimal(run_duration="5D")
