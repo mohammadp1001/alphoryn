@@ -57,6 +57,7 @@ not one line per ticker):
 | 1 | Config validation error |
 | 2 | Memory bank inaccessible or corrupt (hard abort) |
 | 3 | Google Secret Manager unreachable at startup |
+| 4 | OpenTelemetry could not be wired up - the run would not be traced |
 
 ---
 

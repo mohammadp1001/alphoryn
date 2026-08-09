@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import sqlalchemy.orm as orm
 from typer.testing import CliRunner
 
@@ -25,6 +26,18 @@ runner = CliRunner()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _stub_telemetry_preflight():
+    """Neutralise the telemetry preflight, like the other network calls here.
+
+    setup_otel() resolves Google credentials and exits 4 when it cannot, so
+    leaving it live would make these startup tests depend on whether the
+    machine running them has ADC - green on a developer box, red in CI.
+    """
+    with patch("alphoryn.cli.main.setup_otel", return_value="test-project") as m:
+        yield m
 
 
 def _write_config(cfg_path: Path, db_path: Path, **fields) -> Path:

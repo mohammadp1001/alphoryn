@@ -16,6 +16,7 @@ from alphoryn.cli.main import app
 from alphoryn.config.loader import load_config
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.secrets.client import SecretsError
+from alphoryn.telemetry.otel import TelemetrySetupError
 
 runner = CliRunner()
 
@@ -30,6 +31,20 @@ def _plain(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _stub_telemetry_preflight():
+    """Neutralise the telemetry preflight for every test in this module.
+
+    setup_otel() resolves Google credentials and exits 4 when it cannot. These
+    are CLI-surface tests, so without this stub each one would pass or fail
+    depending on whether the machine running the suite happens to have ADC -
+    green on a developer box, red in CI. Tests that are specifically about the
+    preflight patch over this with their own side effect.
+    """
+    with patch("alphoryn.cli.main.setup_otel", return_value="test-project") as m:
+        yield m
 
 
 @pytest.fixture()
@@ -146,6 +161,40 @@ def test_exit_code_2_on_inaccessible_memory_bank(config_file: Path) -> None:
     ):
         result = runner.invoke(app, ["run", "--config", str(config_file)])
     assert result.exit_code == 2
+
+
+def test_exit_code_4_when_telemetry_cannot_be_set_up(config_file: Path) -> None:
+    """Telemetry unavailable → exit code 4, before any trading starts."""
+    with (
+        patch("alphoryn.cli.main.load_alpaca_credentials"),
+        patch("alphoryn.cli.main.MemoryBank"),
+        patch("alphoryn.cli.main._start_scheduler") as mock_start,
+        patch(
+            "alphoryn.cli.main.setup_otel",
+            side_effect=TelemetrySetupError("no credentials"),
+        ),
+    ):
+        result = runner.invoke(app, ["run", "--config", str(config_file)])
+    assert result.exit_code == 4
+    mock_start.assert_not_called()
+
+
+def test_config_errors_win_over_telemetry_errors(tmp_path: Path) -> None:
+    """A bad config exits 1 even when telemetry is also broken.
+
+    Config validation is local, cheap and deterministic; the telemetry
+    preflight needs network and credentials. Running the preflight first sent
+    anyone with a typo in config.json chasing a credentials problem instead.
+    """
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text("not json", encoding="utf-8")
+    with patch(
+        "alphoryn.cli.main.setup_otel",
+        side_effect=TelemetrySetupError("no credentials"),
+    ):
+        result = runner.invoke(app, ["run", "--config", str(cfg_file)])
+    assert result.exit_code == 1
+    assert "Config error" in result.output
 
 
 def test_exit_code_3_on_secret_manager_unreachable(config_file: Path) -> None:

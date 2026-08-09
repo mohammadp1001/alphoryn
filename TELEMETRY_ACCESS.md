@@ -115,6 +115,46 @@ If Cloud Logging is unavailable, events are written to stderr as JSON:
 
 ### Status: ✅ Confirmed working — both Cloud Logging and Cloud Trace export verified end-to-end
 
+#### Full LLM capture (added 2026-08-09, branch `feat/otel-full-llm-capture`)
+
+What is now recorded for every LLM call, on top of the prompt/response content
+that already worked:
+
+- **System prompt and tool definitions.** `setup_otel()` opts into the
+  experimental GenAI semantic conventions
+  (`OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental`). Only that path
+  emits `gen_ai.system_instructions` and `gen_ai.tool_definitions`; the stable
+  path records what the model said but never what it was told or what tools it
+  had. Set the variable to `stable` to opt back out.
+- **Thinking / reasoning.** Both agents now pass
+  `thinking_config(include_thoughts=True)` (`alphoryn/agents/thinking.py`).
+  Gemini reasons either way, but only returns the summary when asked, so before
+  this there was literally nothing for OTel to capture.
+
+  ⚠️ Thought summaries arrive as extra text parts **before** the answer, flagged
+  `thought=True`. Any code reading `parts[0].text` or the first non-empty text
+  part will parse a thought as the answer. Both agents route through
+  `is_thought_part()`; any new response reader must too.
+
+#### Setup now fails loudly (exit code 4)
+
+`setup_otel()` used to catch every exception, log a warning, and let the run
+continue with no exporters at all. Three ways that lost a whole run silently:
+`google.auth.default()` failing; credentials resolving with no project ID (ADK
+returns empty hooks here rather than raising, so nothing was ever thrown); and
+a crash losing whatever was still buffered in the `BatchSpanProcessor`.
+
+It now raises `TelemetrySetupError`, the CLI reports it and exits **4**, and
+`flush_otel()` is registered with `atexit`. `alphoryn run` also prints
+`Telemetry -> GCP project '<id>'` at startup — telemetry landing in the wrong
+project (e.g. `wortcast`, gcloud's default on this box) looks identical to
+telemetry landing nowhere.
+
+This does not contradict constitution Principle IV. Principle IV governs
+per-event emission at run time, and `TelemetryLogger.emit` still falls back to
+stderr and never blocks. Setup is a preflight check, the same class of thing as
+config validation, which already exits 1.
+
 `alphoryn/telemetry/otel.py:setup_otel()` calls `get_gcp_exporters(enable_cloud_tracing=True,
 enable_cloud_logging=True)` unconditionally at every CLI startup (`cli/main.py`). Getting here
 required fixing three stacked gaps:

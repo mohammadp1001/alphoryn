@@ -34,7 +34,7 @@ from alphoryn.reports.generator import ReportGenerator
 from alphoryn.scheduler.scheduler import Scheduler
 from alphoryn.secrets.client import SecretsError, load_alpaca_credentials
 from alphoryn.telemetry.logger import TelemetryLogger
-from alphoryn.telemetry.otel import setup_otel
+from alphoryn.telemetry.otel import TelemetrySetupError, setup_otel
 
 _VERSION = "0.0.1"
 
@@ -75,7 +75,6 @@ def run(
     """Start a paper trading session."""
     os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "1")
     os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
-    setup_otel()
 
     # 1. Load and validate config (exit 1 on failure)
     overrides: dict = {}
@@ -100,14 +99,26 @@ def run(
         typer.echo(f"Config error: {exc}", err=True)
         sys.exit(1)
 
-    # 2. Fetch secrets from GCP Secret Manager (exit 3 on failure)
+    # 2. Telemetry preflight (exit 4 on failure). An untraced run leaves no
+    # record of why it traded the way it did, so this blocks the run - but it
+    # comes after config validation, which is local, cheap and deterministic.
+    # Reporting a credentials problem for a config file with a typo in it
+    # sends you to the wrong place entirely.
+    try:
+        otel_project = setup_otel()
+    except TelemetrySetupError as exc:
+        typer.echo(f"Telemetry error: {exc}", err=True)
+        sys.exit(4)
+    typer.echo(f"Telemetry -> GCP project '{otel_project}'")
+
+    # 3. Fetch secrets from GCP Secret Manager (exit 3 on failure)
     try:
         load_alpaca_credentials()
     except SecretsError as exc:
         typer.echo(f"Secret Manager error: {exc}", err=True)
         sys.exit(3)
 
-    # 3. Load memory bank (exit 2 on failure)
+    # 4. Load memory bank (exit 2 on failure)
     db_path = str(Path(cfg.memory_db_path).expanduser())
     try:
         bank = MemoryBank(db_path)
@@ -116,10 +127,10 @@ def run(
         typer.echo(f"Memory bank error: {exc}", err=True)
         sys.exit(2)
 
-    # 4. Warn if run_duration is not evenly divisible by candle_timeframe
+    # 5. Warn if run_duration is not evenly divisible by candle_timeframe
     _warn_fractional_sessions(cfg)
 
-    # 5. Print startup banner
+    # 6. Print startup banner
     typer.echo(f"Alphoryn v{_VERSION} — Paper Trading")
     typer.echo(
         f"Tickers: {', '.join(cfg.tickers)}"
@@ -132,7 +143,7 @@ def run(
         f" — {len(open_positions)} open position{'s' if len(open_positions) != 1 else ''} loaded"
     )
 
-    # 6. Delegate to scheduler
+    # 7. Delegate to scheduler
     _start_scheduler(cfg, bank)
 
 
