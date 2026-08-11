@@ -16,9 +16,20 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
-from alphoryn.cli.main import _format_decision, _start_scheduler, _warn_fractional_sessions, app
+from alphoryn.cli.main import (
+    _format_decision,
+    _start_scheduler,
+    _warn_fractional_sessions,
+    app,
+)
+
+# _real_reconcile_broker_state is bound at import time, before the autouse
+# fixture below patches the module attribute: the reconciliation tests need
+# the real function rather than that stub.
+from alphoryn.cli.main import _reconcile_broker_state as _real_reconcile_broker_state
 from alphoryn.config.models import AlphorynConfig
 from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.memory.schema import Position
@@ -26,6 +37,18 @@ from alphoryn.memory.schema import Session as Sess
 from alphoryn.telemetry.otel import TelemetrySetupError
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _stub_broker_reconciliation():
+    """Neutralise the startup reconciliation for every test in this module.
+
+    It builds a real TradingClient and calls Alpaca, so leaving it live would
+    make these tests depend on whether the machine has credentials - green on
+    a developer box, red in CI. Tests about reconciliation patch over this.
+    """
+    with patch("alphoryn.cli.main._reconcile_broker_state") as m:
+        yield m
 
 
 # ---------------------------------------------------------------------------
@@ -502,3 +525,129 @@ def test_run_reports_the_gcp_project_traces_land_in(tmp_path: Path) -> None:
         result = runner.invoke(app, ["run", "--config", str(cfg_file)])
     assert result.exit_code == 0
     assert "Telemetry -> GCP project 'alphoryn'" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Startup reconciliation (_reconcile_broker_state)
+# ---------------------------------------------------------------------------
+
+
+def _run_reconcile(*, discrepancies=None, apply_fixes=False, side_effect=None,
+                   resolve_messages=None):
+    """Drive _reconcile_broker_state with check_positions/resolve patched."""
+    bank = MagicMock()
+    with (
+        patch("alphoryn.cli.main.TradingClient"),
+        patch("alphoryn.cli.main.TelemetryLogger"),
+        patch("alphoryn.cli.main.check_positions") as mock_check,
+        patch("alphoryn.cli.main.resolve") as mock_resolve,
+    ):
+        if side_effect is not None:
+            mock_check.side_effect = side_effect
+        else:
+            mock_check.return_value = discrepancies or []
+        mock_resolve.return_value = resolve_messages or []
+        buf = StringIO()
+        err = StringIO()
+        with patch("sys.stdout", buf), patch("sys.stderr", err):
+            _real_reconcile_broker_state(bank, apply_fixes=apply_fixes)
+        return buf.getvalue() + err.getvalue(), mock_resolve, bank
+
+
+def _discrepancy(kind="ORPHAN", ticker="QQQ"):
+    from alphoryn.reconcile.positions import Discrepancy
+
+    if kind == "ORPHAN":
+        return Discrepancy(ticker, kind, None, 113.0, ())
+    return Discrepancy(ticker, kind, 2.0, None, (7,))
+
+
+def test_reconcile_reports_agreement_when_nothing_differs() -> None:
+    output, mock_resolve, _ = _run_reconcile()
+    assert "reconciled" in output.lower()
+    mock_resolve.assert_not_called()
+
+
+def test_reconcile_prints_every_discrepancy() -> None:
+    output, _, _ = _run_reconcile(
+        discrepancies=[_discrepancy(ticker="QQQ"), _discrepancy(ticker="SPY")]
+    )
+    assert "QQQ" in output
+    assert "SPY" in output
+    assert "2 ticker(s)" in output
+
+
+def test_reconcile_does_not_fix_without_the_flag() -> None:
+    """The default is report-only: nothing destructive from a plain run."""
+    _, mock_resolve, _ = _run_reconcile(discrepancies=[_discrepancy()])
+    mock_resolve.assert_not_called()
+
+
+def test_reconcile_warns_that_it_is_continuing_anyway() -> None:
+    output, _, _ = _run_reconcile(discrepancies=[_discrepancy()])
+    assert "--reconcile" in output
+    assert "continuing anyway" in output
+
+
+def test_reconcile_flag_resolves_the_discrepancies() -> None:
+    _, mock_resolve, bank = _run_reconcile(
+        discrepancies=[_discrepancy()], apply_fixes=True
+    )
+    mock_resolve.assert_called_once()
+    assert mock_resolve.call_args.kwargs["bank"] is bank
+
+
+def test_reconcile_flag_prints_what_it_did() -> None:
+    output, _, _ = _run_reconcile(
+        discrepancies=[_discrepancy()],
+        apply_fixes=True,
+        resolve_messages=["QQQ: reconciled (ORPHAN)"],
+    )
+    assert "QQQ: reconciled (ORPHAN)" in output
+
+
+def test_reconcile_warns_and_continues_when_the_broker_is_unreachable() -> None:
+    """A check that could stop trading would be worse than the drift."""
+    from alphoryn.reconcile.positions import ReconcileError
+
+    output, mock_resolve, _ = _run_reconcile(
+        side_effect=ReconcileError("Cannot list Alpaca positions: timeout")
+    )
+    assert "reconciliation skipped" in output
+    assert "timeout" in output
+    mock_resolve.assert_not_called()
+
+
+def test_run_invokes_reconciliation_before_the_scheduler(tmp_path: Path) -> None:
+    cfg_file = _cfg_file(tmp_path)
+    with (
+        patch("alphoryn.cli.main.load_alpaca_credentials"),
+        patch("alphoryn.cli.main.MemoryBank") as mock_bank_cls,
+        patch("alphoryn.cli.main._start_scheduler"),
+        patch("alphoryn.cli.main.setup_otel", return_value="alphoryn"),
+        patch("alphoryn.cli.main._reconcile_broker_state") as mock_reconcile,
+    ):
+        mock_bank = MagicMock()
+        mock_bank.load_open_positions.return_value = []
+        mock_bank_cls.return_value = mock_bank
+        result = runner.invoke(app, ["run", "--config", str(cfg_file)])
+    assert result.exit_code == 0
+    mock_reconcile.assert_called_once()
+    assert mock_reconcile.call_args.kwargs["apply_fixes"] is False
+
+
+def test_run_passes_the_reconcile_flag_through(tmp_path: Path) -> None:
+    cfg_file = _cfg_file(tmp_path)
+    with (
+        patch("alphoryn.cli.main.load_alpaca_credentials"),
+        patch("alphoryn.cli.main.MemoryBank") as mock_bank_cls,
+        patch("alphoryn.cli.main._start_scheduler"),
+        patch("alphoryn.cli.main.setup_otel", return_value="alphoryn"),
+        patch("alphoryn.cli.main._reconcile_broker_state") as mock_reconcile,
+    ):
+        mock_bank = MagicMock()
+        mock_bank.load_open_positions.return_value = []
+        mock_bank_cls.return_value = mock_bank
+        result = runner.invoke(app, ["run", "--config", str(cfg_file), "--reconcile"])
+    assert result.exit_code == 0
+    assert mock_reconcile.call_args.kwargs["apply_fixes"] is True

@@ -78,10 +78,14 @@ class Position(Base):
     status = Column(String, nullable=False, default="OPEN")
     # Valid statuses: OPEN | CLOSED_STOP_LOSS | CLOSED_PROFIT_TARGET |
     #                 CLOSED_WINDOW_EXPIRY | CLOSED_AGENT_EXIT |
-    #                 EVALUATED | EVALUATION_FAILED
-    exit_price = Column(Float, nullable=True)
+    #                 CLOSED_RECONCILED | EVALUATED | EVALUATION_FAILED
+    # CLOSED_RECONCILED sits outside both the feedback-blocking and
+    # feedback-due sets on purpose: the position's real outcome was never
+    # observed, so the ticker is freed and no thesis judgment is attempted.
+    exit_price = Column(Float, nullable=True)  # NULL when reconciled: outcome unknown
     exit_time = Column(DateTime, nullable=True)
-    # STOP_LOSS | PROFIT_TARGET | WINDOW_EXPIRY (monitor) | AGENT_EXIT (Sell decision)
+    # STOP_LOSS | PROFIT_TARGET | WINDOW_EXPIRY (monitor) | AGENT_EXIT (Sell
+    # decision) | RECONCILED (broker and bank disagreed at startup)
     exit_reason = Column(String, nullable=True)
 
     session = relationship("Session", back_populates="positions")
