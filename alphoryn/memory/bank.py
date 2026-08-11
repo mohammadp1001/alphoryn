@@ -140,6 +140,23 @@ class MemoryBank:
             pos.trailing_stop_high_watermark = watermark
             s.commit()
 
+    def mark_position_reconciled(self, position_id: int, at: datetime) -> None:
+        """Close a position whose real outcome was never observed.
+
+        ``exit_price`` is deliberately left NULL rather than given a value.
+        Reconciliation establishes that the broker is not holding the position,
+        not what it was worth when it went: 0.0 would report a total loss and
+        the entry price would report a flat trade, and both are inventions.
+        A NULL says the one true thing, which is that nobody knows.
+        """
+        with DBSession(self._engine) as s:
+            pos = s.query(Position).filter(Position.id == position_id).one()
+            pos.exit_price = None
+            pos.exit_time = to_db_utc(at)
+            pos.exit_reason = "RECONCILED"
+            pos.status = "CLOSED_RECONCILED"
+            s.commit()
+
     # ------------------------------------------------------------------
     # Feedback evaluation writes
     # ------------------------------------------------------------------

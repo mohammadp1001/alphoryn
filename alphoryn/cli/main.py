@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from alpaca.trading.client import TradingClient
 from sqlalchemy.orm import Session as DBSession
 
 from alphoryn.agents.feedback_agent import FeedbackAgent
@@ -30,6 +31,7 @@ from alphoryn.memory.bank import MemoryBank, MemoryBankError
 from alphoryn.memory.schema import Position, Run
 from alphoryn.memory.schema import Session as SessionModel
 from alphoryn.monitor.monitor import PositionMonitor
+from alphoryn.reconcile.positions import ReconcileError, check_positions, resolve
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.scheduler.scheduler import Scheduler
 from alphoryn.secrets.client import SecretsError, load_alpaca_credentials
@@ -71,6 +73,16 @@ def run(
     stop_loss: Annotated[
         float | None, typer.Option(help="Stop-loss percentage (0-1). Overrides config.")
     ] = None,
+    reconcile: Annotated[
+        bool,
+        typer.Option(
+            help=(
+                "Flatten any Alpaca/memory-bank disagreement before starting, "
+                "instead of only reporting it. Closes broker positions the bank "
+                "does not know about."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Start a paper trading session."""
     os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "1")
@@ -127,10 +139,16 @@ def run(
         typer.echo(f"Memory bank error: {exc}", err=True)
         sys.exit(2)
 
-    # 5. Warn if run_duration is not evenly divisible by candle_timeframe
+    # 5. Reconcile Alpaca against the memory bank. Reports and continues by
+    # default; --reconcile flattens the disagreement first. This never blocks
+    # the run, so a broker outage cannot stop trading - but see the warning
+    # text: an unreported orphan is exposure nothing is monitoring.
+    _reconcile_broker_state(bank, apply_fixes=reconcile)
+
+    # 6. Warn if run_duration is not evenly divisible by candle_timeframe
     _warn_fractional_sessions(cfg)
 
-    # 6. Print startup banner
+    # 7. Print startup banner
     typer.echo(f"Alphoryn v{_VERSION} — Paper Trading")
     typer.echo(
         f"Tickers: {', '.join(cfg.tickers)}"
@@ -143,8 +161,51 @@ def run(
         f" — {len(open_positions)} open position{'s' if len(open_positions) != 1 else ''} loaded"
     )
 
-    # 7. Delegate to scheduler
+    # 8. Delegate to scheduler
     _start_scheduler(cfg, bank)
+
+
+def _reconcile_broker_state(bank: MemoryBank, *, apply_fixes: bool) -> None:
+    """Report - and optionally flatten - Alpaca/memory-bank disagreements.
+
+    Never raises and never exits: a broker that cannot be reached is reported
+    and the run continues. The check exists to make drift visible, and a check
+    that can itself stop trading would be a worse problem than the drift.
+    """
+    logger = TelemetryLogger()
+    client = TradingClient(
+        api_key=os.environ.get("ALPACA_API_KEY", ""),
+        secret_key=os.environ.get("ALPACA_SECRET_KEY", ""),
+        paper=True,
+    )
+    try:
+        found = check_positions(bank, trading_client=client, logger=logger)
+    except ReconcileError as exc:
+        typer.echo(f"WARN: position reconciliation skipped - {exc}", err=True)
+        return
+
+    if not found:
+        typer.echo("Broker state reconciled - Alpaca and memory bank agree.")
+        return
+
+    typer.echo(
+        f"WARN: Alpaca and the memory bank disagree on {len(found)} ticker(s):",
+        err=True,
+    )
+    for d in found:
+        typer.echo(f"  - {d.describe()}", err=True)
+
+    if not apply_fixes:
+        typer.echo(
+            "WARN: continuing anyway. Re-run with --reconcile to flatten these "
+            "first; until then an orphan has no stop-loss and a new position "
+            "may be opened on top of it.",
+            err=True,
+        )
+        return
+
+    for message in resolve(found, bank=bank, trading_client=client, logger=logger):
+        typer.echo(f"  {message}")
 
 
 def _warn_fractional_sessions(cfg: AlphorynConfig) -> None:

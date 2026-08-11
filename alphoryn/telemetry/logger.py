@@ -29,6 +29,9 @@ EVENT_TYPES = frozenset(
         "MONITOR_STOPPED",
         "MONITOR_ERROR",
         "EVALUATION_FAILED",
+        "RECONCILE_MISMATCH",
+        "RECONCILE_RESOLVED",
+        "RECONCILE_FAILED",
     }
 )
 

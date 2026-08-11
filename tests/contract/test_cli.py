@@ -47,6 +47,18 @@ def _stub_telemetry_preflight():
         yield m
 
 
+@pytest.fixture(autouse=True)
+def _stub_broker_reconciliation():
+    """Neutralise the startup reconciliation for every test in this module.
+
+    Same trap as the telemetry preflight above: it builds a real TradingClient
+    and calls Alpaca, so leaving it live makes these tests depend on whether
+    the machine has credentials. Tests about reconciliation patch over this.
+    """
+    with patch("alphoryn.cli.main._reconcile_broker_state") as m:
+        yield m
+
+
 @pytest.fixture()
 def config_file(tmp_path: Path) -> Path:
     cfg = {"tickers": ["SPY", "QQQ"]}
