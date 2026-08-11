@@ -74,6 +74,23 @@ class PositionMonitor(threading.Thread):
                 )
 
     def _check_position(self, pos: Position) -> None:
+        # Window expiry is checked first, and priced from the deadline rather
+        # than from now, because it is the one exit that must not depend on a
+        # live quote. When get_latest_price was the first statement here, a
+        # feed outage raised before this check could run, so an expired
+        # position stayed OPEN indefinitely - and the CLI may not exit while a
+        # position is open, so the whole process hung with it.
+        deadline = from_db_utc(pos.evaluation_window_close_at)
+        if datetime.now(UTC) >= deadline:
+            self._close_position(
+                pos,
+                self._market_data.get_price_at(pos.ticker, deadline),
+                "WINDOW_EXPIRY",
+                "CLOSED_WINDOW_EXPIRY",
+                "WINDOW_EXPIRY_TRIGGERED",
+            )
+            return
+
         current_price = self._market_data.get_latest_price(pos.ticker)
 
         if current_price <= pos.stop_loss_price:
@@ -114,15 +131,6 @@ class PositionMonitor(threading.Thread):
                     "PROFIT_TARGET_TRIGGERED",
                 )
                 return
-
-        if datetime.now(UTC) >= from_db_utc(pos.evaluation_window_close_at):
-            self._close_position(
-                pos,
-                current_price,
-                "WINDOW_EXPIRY",
-                "CLOSED_WINDOW_EXPIRY",
-                "WINDOW_EXPIRY_TRIGGERED",
-            )
 
     def _close_position(
         self,

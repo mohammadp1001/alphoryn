@@ -9,7 +9,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from alphoryn.memory.schema import Position
+from alphoryn.memory.schema import Position, from_db_utc
 from alphoryn.monitor.monitor import PositionMonitor
 
 # ---------------------------------------------------------------------------
@@ -537,6 +537,66 @@ def test_close_position_exception_emits_monitor_error() -> None:
     assert call_args.args[0] == "MONITOR_ERROR"
     assert "Connection refused" in call_args.args[2]["error"]
     bank.update_position_close.assert_not_called()
+
+
+def test_window_expiry_closes_even_when_latest_price_is_unavailable() -> None:
+    """A dead price feed must not trap an expired position OPEN forever.
+
+    The live failure: get_latest_price raised on every poll, so the window
+    check below it never ran, the position stayed OPEN, and the CLI - which
+    may not exit while a position is open - hung for 7.5 hours.
+    """
+    monitor, bank, market_data, _ = _make_monitor()
+    pos = _make_position(
+        stop_loss_price=430.0,
+        exit_target={"type": "price_level", "value": 480.0},
+        window_close_at=_PAST,
+    )
+    bank.load_open_positions.return_value = [pos]
+    market_data.get_latest_price.side_effect = RuntimeError(
+        "subscription does not permit querying recent SIP data"
+    )
+    market_data.get_price_at.return_value = 450.0
+
+    with patch("alphoryn.monitor.monitor.TradingClient"):
+        monitor._check_positions()
+
+    bank.update_position_close.assert_called_once()
+    assert bank.update_position_close.call_args.kwargs["status"] == "CLOSED_WINDOW_EXPIRY"
+
+
+def test_window_expiry_prices_the_exit_at_the_deadline_not_at_discovery() -> None:
+    """The exit belongs to the deadline, however late the monitor notices it."""
+    monitor, bank, market_data, _ = _make_monitor()
+    pos = _make_position(
+        stop_loss_price=430.0,
+        exit_target={"type": "price_level", "value": 480.0},
+        window_close_at=_PAST,
+    )
+    bank.load_open_positions.return_value = [pos]
+    market_data.get_price_at.return_value = 447.5
+
+    with patch("alphoryn.monitor.monitor.TradingClient"):
+        monitor._check_positions()
+
+    market_data.get_price_at.assert_called_once()
+    ticker, at = market_data.get_price_at.call_args.args
+    assert ticker == "SPY"
+    assert at == from_db_utc(_PAST)
+    assert bank.update_position_close.call_args.kwargs["exit_price"] == 447.5
+
+
+def test_expired_window_does_not_fetch_the_latest_price() -> None:
+    """Nothing below the expiry check may gate it - that was the whole bug."""
+    monitor, bank, market_data, _ = _make_monitor()
+    pos = _make_position(window_close_at=_PAST)
+    bank.load_open_positions.return_value = [pos]
+    market_data.get_price_at.return_value = 450.0
+
+    with patch("alphoryn.monitor.monitor.TradingClient"):
+        monitor._check_positions()
+
+    market_data.get_latest_price.assert_not_called()
 
 
 def test_load_open_positions_exception_emits_monitor_error() -> None:
