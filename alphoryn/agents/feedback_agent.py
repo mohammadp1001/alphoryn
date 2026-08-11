@@ -20,7 +20,8 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types as genai_types
 
 from alphoryn.agents.prompts import FEEDBACK_AGENT_SYSTEM_PROMPT
-from alphoryn.agents.thinking import is_thought_part, thinking_enabled_config
+from alphoryn.agents.responses import extract_response_json
+from alphoryn.agents.thinking import thinking_enabled_config
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import FeedbackEvaluation
@@ -196,11 +197,7 @@ class FeedbackAgent:
             ),
         ):
             if event.is_final_response() and event.content and event.content.parts:
-                for part in event.content.parts:
-                    if is_thought_part(part):
-                        continue
-                    raw_json = part.text
-                    break
+                raw_json = extract_response_json(event.content.parts)
 
         if raw_json is None:
             _logger.error("feedback_agent produced no final response (attempt %d)", attempt)

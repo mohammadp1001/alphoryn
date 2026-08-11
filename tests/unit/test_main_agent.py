@@ -11,7 +11,6 @@ from alphoryn.agents.main_agent import (
     MainAgentError,
     _build_prompt,
     _parse_decision,
-    _strip_fences,
 )
 
 # ---------------------------------------------------------------------------
@@ -394,29 +393,8 @@ def test_parse_decision_non_list_decisions_raises_main_agent_error() -> None:
         _parse_decision(bad_data)
 
 
-# ---------------------------------------------------------------------------
-# _strip_fences
-# ---------------------------------------------------------------------------
-
-
-def test_strip_fences_plain_json_unchanged() -> None:
-    raw = '{"a": 1}'
-    assert _strip_fences(raw) == raw
-
-
-def test_strip_fences_removes_json_code_fence() -> None:
-    raw = '```json\n{"a": 1}\n```'
-    assert _strip_fences(raw) == '{"a": 1}'
-
-
-def test_strip_fences_removes_plain_code_fence() -> None:
-    raw = '```\n{"a": 1}\n```'
-    assert _strip_fences(raw) == '{"a": 1}'
-
-
-def test_strip_fences_fence_without_closing_tick() -> None:
-    raw = '```json\n{"a": 1}'
-    assert _strip_fences(raw) == '{"a": 1}'
+# Fence-stripping moved to alphoryn/agents/responses.py, shared with the
+# feedback agent; its tests live in tests/unit/test_responses.py.
 
 
 # ---------------------------------------------------------------------------

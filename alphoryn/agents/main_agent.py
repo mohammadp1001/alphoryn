@@ -18,7 +18,8 @@ from google.adk.tools.skill_toolset import SkillToolset
 from google.genai import types as genai_types
 
 from alphoryn.agents.prompts import MAIN_AGENT_SYSTEM_PROMPT
-from alphoryn.agents.thinking import is_thought_part, thinking_enabled_config
+from alphoryn.agents.responses import extract_response_json
+from alphoryn.agents.thinking import thinking_enabled_config
 from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.telemetry.logger import TelemetryLogger
@@ -109,13 +110,7 @@ class MainAgent:
                         session_id=session_id,
                     )
             if event.is_final_response() and event.content and event.content.parts:
-                for part in event.content.parts:
-                    if is_thought_part(part):
-                        continue
-                    text = getattr(part, "text", None)
-                    if text and text.strip():
-                        raw_json = _strip_fences(text.strip())
-                        break
+                raw_json = extract_response_json(event.content.parts)
 
         if raw_json is None:
             _logger.error("main_agent produced no final response for session %s", session_id)
@@ -141,16 +136,6 @@ class MainAgent:
             latency_ms=latency_ms,
         )
         return decision
-
-
-def _strip_fences(text: str) -> str:
-    """Strip markdown code fences from LLM output (e.g. ```json ... ```)."""
-    if text.startswith("```"):
-        lines = text.splitlines()
-        # drop first line (```json or ```) and trailing ``` line
-        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-        return "\n".join(inner).strip()
-    return text
 
 
 def _build_prompt(
