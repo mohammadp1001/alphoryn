@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from alpaca.data.enums import DataFeed
 
 from alphoryn.config.models import TIMEFRAME_SECONDS
 from alphoryn.market_data.client import (
@@ -339,6 +340,23 @@ def test_get_latest_price_returns_float() -> None:
         price = client.get_latest_price("QQQ")
     assert isinstance(price, float)
     assert price == pytest.approx(452.75, rel=1e-6)
+
+
+def test_get_latest_price_requests_the_iex_feed() -> None:
+    """Omitting the feed defaults to SIP, which the free plan rejects.
+
+    A live run failed every monitor poll for 7.5 hours with "subscription does
+    not permit querying recent SIP data", so the position never closed.
+    """
+    client = _client()
+    bar = _make_bar(close=452.75)
+    mock_response = MagicMock()
+    mock_response.__getitem__ = MagicMock(return_value=[bar])
+    with patch("alphoryn.market_data.client.StockHistoricalDataClient") as mock_cls:
+        mock_cls.return_value.get_stock_bars.return_value = mock_response
+        client.get_latest_price("QQQ")
+        request = mock_cls.return_value.get_stock_bars.call_args.args[0]
+    assert request.feed == DataFeed.IEX
 
 
 # ---------------------------------------------------------------------------

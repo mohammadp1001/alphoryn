@@ -300,6 +300,7 @@ class MarketDataClient:
             timeframe=TimeFrame.Minute,
             start=now - timedelta(minutes=5),
             end=now,
+            feed=DataFeed.IEX,
         )
         bars = client.get_stock_bars(req)[ticker]
         return float(bars[-1].close)
