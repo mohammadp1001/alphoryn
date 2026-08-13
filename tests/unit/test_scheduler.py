@@ -1,6 +1,7 @@
 """Unit tests for alphoryn/scheduler/scheduler.py (T016 + T029/T030 scope)."""
 
 import json
+import signal
 import threading
 import time
 from datetime import UTC, datetime, timedelta
@@ -8,11 +9,19 @@ from io import StringIO
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from alphoryn.agents.main_agent import MainAgentError
 from alphoryn.config.models import AlphorynConfig
 from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.monitor.monitor import PositionMonitor
-from alphoryn.scheduler.scheduler import Scheduler, SessionSkip
+from alphoryn.scheduler.scheduler import (
+    RunTerminatedError,
+    Scheduler,
+    SessionSkip,
+    _install_termination_signals,
+    _restore_termination_signals,
+)
 from alphoryn.usage import TokenUsage
 
 # ---------------------------------------------------------------------------
@@ -1704,3 +1713,133 @@ def test_an_unpriced_model_still_reports_its_tokens() -> None:
     out = buf.getvalue()
     assert "cost unknown" in out
     assert "500 in" in out
+
+
+# ---------------------------------------------------------------------------
+# Termination: record what is left open, do not trade on the way out
+# ---------------------------------------------------------------------------
+
+
+def _open_position(ticker: str = "XLE") -> MagicMock:
+    p = MagicMock()
+    p.ticker = ticker
+    p.lot_size = 16.0
+    p.entry_price = 60.93
+    p.stop_loss_price = 59.71
+    p.evaluation_window_close_at = datetime(2026, 8, 13, 17, 22, tzinfo=UTC)
+    return p
+
+
+def test_a_termination_signal_raises_rather_than_killing_the_process() -> None:
+    """SIGTERM used to kill the run outright, so run()'s finally never executed."""
+    previous = _install_termination_signals()
+    try:
+        handler = signal.getsignal(signal.SIGTERM)
+        with pytest.raises(RunTerminatedError, match="SIGTERM"):
+            handler(signal.SIGTERM, None)
+    finally:
+        _restore_termination_signals(previous)
+
+
+def test_previous_handlers_are_restored() -> None:
+    """Embedding the scheduler must not permanently redirect the host's signals."""
+    original = signal.getsignal(signal.SIGTERM)
+    previous = _install_termination_signals()
+    assert signal.getsignal(signal.SIGTERM) is not original
+    _restore_termination_signals(previous)
+    assert signal.getsignal(signal.SIGTERM) is original
+
+
+def test_signals_are_skipped_outside_the_main_thread() -> None:
+    """A scheduler on a worker thread keeps default behaviour rather than crashing."""
+    with patch("alphoryn.scheduler.scheduler.signal.signal", side_effect=ValueError):
+        assert _install_termination_signals() == {}
+
+
+def test_termination_reports_the_positions_it_is_leaving_open() -> None:
+    """2026-08-13: XLE 16 @ 60.93 was stranded past its window and nothing said so."""
+    sched = _full_scheduler_with_feedback()
+    sched._bank.load_open_positions.return_value = [_open_position()]
+    buf = StringIO()
+    with patch("sys.stderr", buf):
+        sched._report_abandoned_positions("SIGTERM")
+
+    out = buf.getvalue()
+    assert "1 position(s) left OPEN and UNMONITORED" in out
+    assert "XLE 16.0 @ 60.93" in out
+    assert "stop 59.71" in out
+    assert "2026-08-13 17:22" in out
+    assert "--reconcile" in out
+
+
+def test_termination_emits_abandoned_position_telemetry() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._bank.load_open_positions.return_value = [_open_position()]
+    with patch("sys.stderr", StringIO()):
+        sched._report_abandoned_positions("SIGTERM")
+
+    payloads = [
+        c.args[2] for c in sched._logger.emit.call_args_list if c.args[0] == "POSITIONS_ABANDONED"
+    ]
+    assert len(payloads) == 1
+    assert payloads[0]["signal"] == "SIGTERM"
+    assert payloads[0]["count"] == 1
+    assert payloads[0]["positions"][0]["ticker"] == "XLE"
+
+
+def test_termination_with_nothing_open_says_so_and_emits_nothing() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._bank.load_open_positions.return_value = []
+    buf = StringIO()
+    with patch("sys.stdout", buf):
+        sched._report_abandoned_positions("SIGINT")
+
+    assert "Nothing was left open" in buf.getvalue()
+    assert not [
+        c for c in sched._logger.emit.call_args_list if c.args[0] == "POSITIONS_ABANDONED"
+    ]
+
+
+def test_termination_reports_without_a_logger() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._logger = None
+    sched._bank.load_open_positions.return_value = [_open_position()]
+    with patch("sys.stderr", StringIO()):
+        sched._report_abandoned_positions("SIGTERM")  # must not raise
+
+
+def test_a_terminated_run_reports_exposure_instead_of_draining() -> None:
+    """Draining waits candle by candle. A run being killed does not have that time."""
+    sched = _full_scheduler_with_feedback()
+    sched._bank.load_open_positions.return_value = [_open_position()]
+    mock_target = datetime(2024, 1, 15, 15, 0, 0, tzinfo=UTC)
+    with (
+        patch.object(sched, "compute_next_candle_close", return_value=mock_target),
+        patch.object(sched, "wait_for_candle_close"),
+        patch.object(sched, "is_market_open", side_effect=RunTerminatedError("SIGTERM")),
+        patch.object(sched, "_drain_open_positions") as drain,
+        patch.object(sched, "_report_abandoned_positions") as report,
+        patch("sys.stderr", StringIO()),
+    ):
+        sched.run()
+
+    drain.assert_not_called()
+    report.assert_called_once_with("SIGTERM")
+
+
+def test_a_run_that_ends_normally_still_drains() -> None:
+    sched = _full_scheduler_with_feedback()
+    with (
+        patch.object(sched, "_drain_open_positions") as drain,
+        patch.object(sched, "_report_abandoned_positions") as report,
+    ):
+        _run_with_no_wait(sched)
+
+    drain.assert_called_once()
+    report.assert_not_called()
+
+
+def test_a_signal_name_missing_on_this_platform_is_skipped() -> None:
+    """SIGBREAK exists only on Windows, so no name in the list can be assumed."""
+    with patch("alphoryn.scheduler.scheduler._TERMINATION_SIGNALS", ("SIGNOTAREALSIGNAL",)):
+        assert _install_termination_signals() == {}
