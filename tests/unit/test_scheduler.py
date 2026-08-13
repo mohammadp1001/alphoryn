@@ -8,10 +8,11 @@ from io import StringIO
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+from alphoryn.agents.main_agent import MainAgentError
 from alphoryn.config.models import AlphorynConfig
 from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.monitor.monitor import PositionMonitor
-from alphoryn.scheduler.scheduler import Scheduler
+from alphoryn.scheduler.scheduler import Scheduler, SessionSkip
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -499,11 +500,22 @@ def test_process_session_writes_data_unavailable_status() -> None:
     """Issue #136: SKIPPED_DATA_UNAVAILABLE is reachable, not just declared."""
     sched = _full_scheduler()
     with patch.object(
-        sched, "_run_investigation", return_value=(None, "SKIPPED_DATA_UNAVAILABLE")
+        sched, "_run_investigation", return_value=(None, SessionSkip("SKIPPED_DATA_UNAVAILABLE"))
     ):
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     assert sched._bank.write_session.call_args.args[0].status == "SKIPPED_DATA_UNAVAILABLE"
+
+
+def test_process_session_writes_agent_error_status() -> None:
+    """An agent failure is its own status, not a market-data one."""
+    sched = _full_scheduler()
+    with patch.object(
+        sched, "_run_investigation", return_value=(None, SessionSkip("SKIPPED_AGENT_ERROR", "boom"))
+    ):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    assert sched._bank.write_session.call_args.args[0].status == "SKIPPED_AGENT_ERROR"
 
 
 # ---------------------------------------------------------------------------
@@ -622,18 +634,39 @@ def test_run_investigation_returns_timeout_status_on_timeout() -> None:
     sched = _full_scheduler(_investigation_budget_secs=0)
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
     result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
-    assert result == (None, "SKIPPED_TIMEOUT")
+    assert result == (None, SessionSkip("SKIPPED_TIMEOUT"))
 
 
-def test_run_investigation_returns_data_unavailable_when_the_agent_raises() -> None:
+def test_run_investigation_returns_data_unavailable_when_market_data_raises() -> None:
     """Issue #136: a market-data failure skips the session, it does not crash the run."""
     sched = _full_scheduler()
     sched._main_agent.decide.side_effect = RuntimeError("alpaca down")
     buf = StringIO()
     with patch("sys.stderr", buf):
         result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
-    assert result == (None, "SKIPPED_DATA_UNAVAILABLE")
+    assert result == (None, SessionSkip("SKIPPED_DATA_UNAVAILABLE", "alpaca down"))
     assert "alpaca down" in buf.getvalue()
+
+
+def test_run_investigation_separates_an_agent_failure_from_a_data_failure() -> None:
+    """2026-08-13: two sessions died on the model and were filed as data outages.
+
+    A MainAgentError means the agent was reached and gave an unusable answer -
+    an unparseable reply, or none at all because the provider returned 429.
+    Market data was never involved.
+    """
+    sched = _full_scheduler()
+    sched._main_agent.decide.side_effect = MainAgentError(
+        "main_agent response is not valid JSON: Expecting value: line 1 column 1 (char 0)"
+    )
+    buf = StringIO()
+    with patch("sys.stderr", buf):
+        decision, skip = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY"])
+
+    assert decision is None
+    assert skip.status == "SKIPPED_AGENT_ERROR"
+    assert "not valid JSON" in skip.detail
+    assert "Investigation failed (agent)" in buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -657,7 +690,9 @@ def test_process_session_with_none_decision_writes_skipped_session() -> None:
     sched._main_agent = None  # force decision = None via direct override
 
     # Manually patch _run_investigation to return None
-    with patch.object(sched, "_run_investigation", return_value=(None, "SKIPPED_TIMEOUT")):
+    with patch.object(
+        sched, "_run_investigation", return_value=(None, SessionSkip("SKIPPED_TIMEOUT"))
+    ):
         sched._process_session(
             run_id=1,
             session_id="run-1/session-0001",
@@ -738,7 +773,7 @@ def test_investigation_timeout_no_logger_returns_none() -> None:
     sched._logger = None
     sched._main_agent.decide.side_effect = lambda *a, **kw: time.sleep(0.5) or _FIXTURE_DECISION
     result = sched._run_investigation("sess-001", datetime.now(UTC), ["SPY", "QQQ"])
-    assert result == (None, "SKIPPED_TIMEOUT")
+    assert result == (None, SessionSkip("SKIPPED_TIMEOUT"))
 
 
 def test_execute_timeout_no_logger_does_not_raise() -> None:
@@ -1254,12 +1289,30 @@ def test_a_clean_session_records_no_warnings() -> None:
 def test_a_skipped_session_records_why_as_a_warning() -> None:
     sched = _blocking_scheduler(set())
     with patch.object(
-        sched, "_run_investigation", return_value=(None, "SKIPPED_DATA_UNAVAILABLE")
+        sched, "_run_investigation", return_value=(None, SessionSkip("SKIPPED_DATA_UNAVAILABLE"))
     ):
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     warnings = json.loads(sched._bank.write_session.call_args.args[0].warnings)
     assert warnings == ["Session not completed: SKIPPED_DATA_UNAVAILABLE."]
+
+
+def test_a_skipped_session_records_the_exception_text_in_the_bank() -> None:
+    """The cause must be readable from the bank alone, not only from stdout.
+
+    Without this the 2026-08-13 post-mortem had to go to the run log to learn
+    that a 'data unavailable' session was really a model failure.
+    """
+    sched = _blocking_scheduler(set())
+    skip = SessionSkip("SKIPPED_AGENT_ERROR", "main_agent produced no final response")
+    with patch.object(sched, "_run_investigation", return_value=(None, skip)):
+        sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
+
+    warnings = json.loads(sched._bank.write_session.call_args.args[0].warnings)
+    assert warnings == [
+        "Session not completed: SKIPPED_AGENT_ERROR.",
+        "Cause: main_agent produced no final response",
+    ]
 
 
 def test_a_ticker_the_investigation_dropped_is_recorded_as_a_warning() -> None:
@@ -1360,7 +1413,9 @@ def test_merge_keeps_a_ticker_the_agent_invented() -> None:
 def test_timed_out_investigation_is_not_merged() -> None:
     """A budget timeout must still record SKIPPED_TIMEOUT, not a wall of Holds."""
     sched = _blocking_scheduler({"SPY"})
-    with patch.object(sched, "_run_investigation", return_value=(None, "SKIPPED_TIMEOUT")):
+    with patch.object(
+        sched, "_run_investigation", return_value=(None, SessionSkip("SKIPPED_TIMEOUT"))
+    ):
         sched._process_session(1, "run-1/session-0001", 1, datetime.now(UTC))
 
     written = sched._bank.write_session.call_args.args[0]
@@ -1470,11 +1525,11 @@ def test_skipped_sessions_do_not_count_against_session_budget() -> None:
     sched = _full_scheduler()
     call_count = 0
 
-    def mock_investigation(*args: Any, **kwargs: Any) -> tuple[Any, str | None]:
+    def mock_investigation(*args: Any, **kwargs: Any) -> tuple[Any, SessionSkip | None]:
         nonlocal call_count
         call_count += 1
         if call_count == 1:
-            return None, "SKIPPED_TIMEOUT"
+            return None, SessionSkip("SKIPPED_TIMEOUT")
         return _decision_for("SPY"), None
 
     with patch.object(sched, "_run_investigation", side_effect=mock_investigation):

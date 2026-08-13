@@ -46,6 +46,10 @@ class Session(Base):
     status = Column(String, nullable=False)
     # Valid statuses: COMPLETED | SKIPPED_TIMEOUT | SKIPPED_MARKET_CLOSED
     #                 | SKIPPED_DATA_UNAVAILABLE | SKIPPED_OVERRUN
+    #                 | SKIPPED_AGENT_ERROR
+    # Each names a distinct cause. SKIPPED_DATA_UNAVAILABLE means market data
+    # was unreachable and nothing else; an agent that failed to answer is
+    # SKIPPED_AGENT_ERROR, and the exception text is in `warnings`.
     html_report_path = Column(String, nullable=True)
     # JSON: {"SPY": {"strategy": "MEAN_REVERSION", "decision": "BUY", "execution_result": ...}}
     ticker_decisions = Column(Text, nullable=True)

@@ -13,6 +13,7 @@ import os
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,7 +21,7 @@ import typer
 from alpaca.trading.client import TradingClient
 
 from alphoryn.agents.feedback_agent import FeedbackAgent, FeedbackInput
-from alphoryn.agents.main_agent import MainAgent
+from alphoryn.agents.main_agent import MainAgent, MainAgentError
 from alphoryn.config.models import TIMEFRAME_SECONDS, AlphorynConfig
 from alphoryn.execution.agent import AssetDecision, ExecutionAgent, SessionDecision
 from alphoryn.memory.bank import MemoryBank
@@ -34,6 +35,25 @@ _logger = logging.getLogger(__name__)
 _INVESTIGATION_BUDGET_FRACTION = 0.87
 _EXECUTE_BUDGET_FRACTION = 0.13
 _HEARTBEAT_INTERVAL_SECS = 5 * 60
+
+
+@dataclass(frozen=True)
+class SessionSkip:
+    """Why a session was not completed: the status, and the cause behind it.
+
+    The two travel together because separating them is how the memory bank
+    started lying. On 2026-08-13 two sessions failed - one on an unparseable
+    model reply, one on a Vertex 429 - and both were filed as
+    ``SKIPPED_DATA_UNAVAILABLE``. Market data was fine in both cases, and the
+    exception text existed only on stdout, so the bank sent you to check Alpaca
+    for a problem that was never there.
+
+    *detail* is the exception text. It is persisted to the session's warnings so
+    a post-mortem can read the real cause out of the bank alone.
+    """
+
+    status: str
+    detail: str | None = None
 
 
 class Scheduler:
@@ -247,13 +267,22 @@ class Scheduler:
         session_id: str,
         candle_close_at: datetime,
         tickers: list[str],
-    ) -> "tuple[SessionDecision | None, str | None]":
+    ) -> "tuple[SessionDecision | None, SessionSkip | None]":
         """Run main_agent.decide() with investigation budget and heartbeat.
 
-        Returns ``(decision, skip_status)``. On success ``skip_status`` is None.
-        A budget overrun yields ``SKIPPED_TIMEOUT``; any failure reaching market
-        data or the investigation agent yields ``SKIPPED_DATA_UNAVAILABLE``.
-        Both leave ``decision`` as None. Emits BUDGET_TIMEOUT on timeout.
+        Returns ``(decision, skip)``. On success *skip* is None.
+
+        A budget overrun yields ``SKIPPED_TIMEOUT``. A failure *inside the
+        agent* - an unparseable reply, or no reply at all because the model
+        provider refused - yields ``SKIPPED_AGENT_ERROR``. Only a failure
+        reaching market data yields ``SKIPPED_DATA_UNAVAILABLE``.
+
+        Those are three different problems with three different fixes, and
+        filing one as another sends you to check Alpaca when the real story is
+        the model. The same reasoning already separates ``SKIPPED_OVERRUN``
+        (see ``_handle_overrun_candles``).
+
+        All three leave ``decision`` as None. Emits BUDGET_TIMEOUT on timeout.
         """
         stop_heartbeat = threading.Event()
         heartbeat_thread = threading.Thread(
@@ -283,15 +312,23 @@ class Scheduler:
                             {"phase": "investigation", "budget_secs": self._investigation_budget},
                             session_id=session_id,
                         )
-                    return None, "SKIPPED_TIMEOUT"
+                    return None, SessionSkip("SKIPPED_TIMEOUT")
+                except MainAgentError as exc:
+                    # The agent was reached and failed to produce a usable
+                    # answer. Nothing to do with market data.
+                    typer.echo(
+                        f"[{session_id}] Investigation failed (agent): {exc}",
+                        err=True,
+                    )
+                    return None, SessionSkip("SKIPPED_AGENT_ERROR", str(exc))
                 except Exception as exc:
-                    # Market data or the agent itself was unreachable. Skipping
-                    # the session is correct; crashing the run is not.
+                    # Market data was unreachable. Skipping the session is
+                    # correct; crashing the run is not.
                     typer.echo(
                         f"[{session_id}] Investigation failed: {exc}",
                         err=True,
                     )
-                    return None, "SKIPPED_DATA_UNAVAILABLE"
+                    return None, SessionSkip("SKIPPED_DATA_UNAVAILABLE", str(exc))
         finally:
             stop_heartbeat.set()
             heartbeat_thread.join(timeout=1.0)
@@ -460,19 +497,21 @@ class Scheduler:
 
         if active:
             typer.echo(f"[{session_id}] Investigating market snapshot …")
-            decision, skip_status = self._run_investigation(session_id, candle_close_at, active)
+            decision, skip = self._run_investigation(session_id, candle_close_at, active)
         else:
             # FR-005: no Investigation Agent call is made when every ticker is blocked.
             typer.echo(f"[{session_id}] All tickers feedback-blocked — skipping investigation")
-            decision, skip_status = SessionDecision(session_id=session_id, decisions=[]), None
+            decision, skip = SessionDecision(session_id=session_id, decisions=[]), None
 
         if decision is not None:
             decision, merge_warnings = self._merge_blocked_holds(decision, blocked)
             warnings.extend(merge_warnings)
 
-        if decision is None:
-            typer.echo(f"[{session_id}] SKIPPED  {skip_status}")
-            warnings.append(f"Session not completed: {skip_status}.")
+        if skip is not None:
+            typer.echo(f"[{session_id}] SKIPPED  {skip.status}")
+            warnings.append(f"Session not completed: {skip.status}.")
+            if skip.detail is not None:
+                warnings.append(f"Cause: {skip.detail}")
         else:
             decision_str = "  |  ".join(
                 f"{d.ticker}: {d.action} ({d.strategy})" for d in decision.decisions
@@ -526,7 +565,7 @@ class Scheduler:
                 }
             )
 
-        session_status = "COMPLETED" if decision is not None else skip_status
+        session_status = skip.status if skip is not None else "COMPLETED"
         session_record = Session(
             id=session_id,
             run_id=run_id,
