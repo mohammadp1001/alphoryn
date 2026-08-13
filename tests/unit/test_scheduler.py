@@ -13,6 +13,7 @@ from alphoryn.config.models import AlphorynConfig
 from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.scheduler.scheduler import Scheduler, SessionSkip
+from alphoryn.usage import TokenUsage
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -329,6 +330,10 @@ def _full_scheduler(**extra) -> Scheduler:
     )
     main_agent = MagicMock()
     main_agent.decide.return_value = _FIXTURE_DECISION
+    # Real values, not MagicMocks: the end-of-run cost summary adds usage and
+    # prices it by model, and a MagicMock in either slot is not a token count.
+    main_agent.usage = TokenUsage()
+    main_agent.model = "gemini-2.5-pro"
     execution_agent = MagicMock()
     # Explicit, not a bare MagicMock: execute() returns the per-ticker
     # execution_result the session record carries (issue #131).
@@ -823,7 +828,11 @@ def _full_scheduler_with_feedback(**extra) -> Scheduler:
     )
     main_agent = MagicMock()
     main_agent.decide.return_value = _FIXTURE_DECISION
+    main_agent.usage = TokenUsage()
+    main_agent.model = "gemini-2.5-pro"
     feedback_agent = MagicMock()
+    feedback_agent.usage = TokenUsage()
+    feedback_agent.model = "gemini-2.5-pro"
     execution_agent = MagicMock()
     # Explicit, not a bare MagicMock: execute() returns the per-ticker
     # execution_result the session record carries (issue #131).
@@ -1612,3 +1621,86 @@ def test_handle_overrun_candles_still_says_market_closed_when_it_is() -> None:
     statuses = [c.args[0].status for c in sched._bank.write_session.call_args_list]
     assert statuses == ["SKIPPED_MARKET_CLOSED", "SKIPPED_MARKET_CLOSED"]
 
+
+
+# ---------------------------------------------------------------------------
+# Token usage summary at end of run
+# ---------------------------------------------------------------------------
+
+
+def _usage(**kwargs) -> TokenUsage:
+    return TokenUsage(**kwargs)
+
+
+def test_run_prints_what_each_agent_and_the_run_spent() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._main_agent.model = "gemini-2.5-pro"
+    sched._main_agent.usage = _usage(calls=10, input_tokens=1_000_000, output_tokens=100_000)
+    sched._feedback_agent.model = "gemini-2.5-flash"
+    sched._feedback_agent.usage = _usage(calls=2, input_tokens=1_000_000)
+
+    buf = StringIO()
+    with patch("sys.stdout", buf):
+        sched._report_token_usage()
+
+    out = buf.getvalue()
+    assert "gemini-2.5-pro" in out
+    assert "gemini-2.5-flash" in out
+    # pro: 1.25 + 1.00 = 2.25   flash: 0.30   run total: 2.55
+    assert "~$2.25" in out
+    assert "~$0.30" in out
+    assert "Run " in out and "~$2.55" in out
+
+
+def test_the_run_total_is_summed_per_model_not_priced_at_one_rate() -> None:
+    """Pricing a mixed total at one model's rate is how a cost report starts lying."""
+    sched = _full_scheduler_with_feedback()
+    sched._main_agent.model = "gemini-2.5-pro"
+    sched._main_agent.usage = _usage(calls=1, output_tokens=1_000_000)  # $10.00
+    sched._feedback_agent.model = "gemini-2.5-flash-lite"
+    sched._feedback_agent.usage = _usage(calls=1, output_tokens=1_000_000)  # $0.40
+
+    buf = StringIO()
+    with patch("sys.stdout", buf):
+        sched._report_token_usage()
+
+    assert "~$10.40" in buf.getvalue()  # not 2 x pro ($20) and not 2 x lite ($0.80)
+
+
+def test_a_run_that_never_called_the_model_prints_no_run_total() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._main_agent.model = "gemini-2.5-pro"
+    sched._main_agent.usage = TokenUsage()
+    sched._feedback_agent.model = "gemini-2.5-pro"
+    sched._feedback_agent.usage = TokenUsage()
+
+    buf = StringIO()
+    with patch("sys.stdout", buf):
+        sched._report_token_usage()
+
+    assert "Run " not in buf.getvalue()
+
+
+def test_usage_is_reported_without_agents_configured() -> None:
+    """Startup-only mode has no agents to bill; the summary must not blow up."""
+    sched = _scheduler()
+    buf = StringIO()
+    with patch("sys.stdout", buf):
+        sched._report_token_usage()
+    assert buf.getvalue() == ""
+
+
+def test_an_unpriced_model_still_reports_its_tokens() -> None:
+    sched = _full_scheduler_with_feedback()
+    sched._main_agent.model = "gemini-99-unreleased"
+    sched._main_agent.usage = _usage(calls=1, input_tokens=500)
+    sched._feedback_agent.model = "gemini-99-unreleased"
+    sched._feedback_agent.usage = TokenUsage()
+
+    buf = StringIO()
+    with patch("sys.stdout", buf):
+        sched._report_token_usage()
+
+    out = buf.getvalue()
+    assert "cost unknown" in out
+    assert "500 in" in out
