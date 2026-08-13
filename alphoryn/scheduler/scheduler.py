@@ -29,6 +29,7 @@ from alphoryn.memory.schema import MemoryEntry, Position, Session, from_db_utc
 from alphoryn.monitor.monitor import PositionMonitor
 from alphoryn.reports.generator import ReportGenerator
 from alphoryn.telemetry.logger import TelemetryLogger
+from alphoryn.usage import TokenUsage, estimated_usd, format_summary
 
 _logger = logging.getLogger(__name__)
 
@@ -764,3 +765,22 @@ class Scheduler:
             self._bank.end_run(run_id)
             self._drain_open_positions(_sleep=_sleep)
             self._stop_monitor()
+            self._report_token_usage()
+
+    def _report_token_usage(self) -> None:
+        """Print what this run spent on the model, per agent and in total.
+
+        In the ``finally`` block on purpose: a run that was interrupted or
+        killed still spent what it spent, and an aborted run is exactly when
+        you want the number. Both live runs so far ended by being killed.
+        """
+        spenders = [a for a in (self._main_agent, self._feedback_agent) if a is not None]
+        total = TokenUsage()
+        total_usd = 0.0
+        for agent in spenders:
+            cost = estimated_usd(agent.usage, agent.model)
+            typer.echo(f"  {agent.model}: {format_summary(agent.usage, cost)}")
+            total = total + agent.usage
+            total_usd += cost or 0.0
+        if total.calls:
+            typer.echo(f"Run {format_summary(total, total_usd)}")

@@ -26,6 +26,7 @@ from alphoryn.market_data.client import MarketDataClient
 from alphoryn.memory.bank import MemoryBank
 from alphoryn.memory.schema import FeedbackEvaluation
 from alphoryn.telemetry.logger import TelemetryLogger
+from alphoryn.usage import TokenUsage, usage_from_event
 
 _logger = logging.getLogger(__name__)
 
@@ -72,6 +73,8 @@ class FeedbackAgent:
         self._market_data = market_data_client
         self._bank = bank
         self._logger = logger
+        self.model = _FEEDBACK_AGENT_MODEL  # public: the scheduler prices usage against it
+        self.usage = TokenUsage()  # accumulated across every evaluation attempt
         self._agent = LlmAgent(
             name="alphoryn_feedback_agent",
             model=_FEEDBACK_AGENT_MODEL,
@@ -188,6 +191,7 @@ class FeedbackAgent:
         )
 
         raw_json: str | None = None
+        attempt_usage = TokenUsage()
         for event in runner.run(
             user_id="system",
             session_id=session_id,
@@ -196,8 +200,27 @@ class FeedbackAgent:
                 parts=[genai_types.Part(text=prompt)],
             ),
         ):
+            attempt_usage = attempt_usage + usage_from_event(event)
             if event.is_final_response() and event.content and event.content.parts:
                 raw_json = extract_response_json(event.content.parts)
+
+        # Before the failure path: a retry that produced nothing still cost.
+        self.usage = self.usage + attempt_usage
+        self._logger.emit(
+            "TOKEN_USAGE",
+            "feedback_agent",
+            {
+                "model": _FEEDBACK_AGENT_MODEL,
+                "attempt": attempt,
+                "calls": attempt_usage.calls,
+                "input_tokens": attempt_usage.input_tokens,
+                "cached_input_tokens": attempt_usage.cached_input_tokens,
+                "output_tokens": attempt_usage.output_tokens,
+                "reasoning_tokens": attempt_usage.reasoning_tokens,
+                "estimated_usd": attempt_usage.estimated_usd(_FEEDBACK_AGENT_MODEL),
+            },
+            session_id=session_id,
+        )
 
         if raw_json is None:
             _logger.error("feedback_agent produced no final response (attempt %d)", attempt)

@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from alphoryn.agents.main_agent import (
     _build_prompt,
     _parse_decision,
 )
+from alphoryn.usage import TokenUsage
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -48,11 +50,13 @@ def _make_event(
     text: str | None = None,
     function_calls: list | None = None,
     function_responses: list | None = None,
+    usage_metadata: object = None,
 ) -> MagicMock:
     event = MagicMock()
     event.get_function_calls.return_value = function_calls or []
     event.get_function_responses.return_value = function_responses or []
     event.is_final_response.return_value = is_final
+    event.usage_metadata = usage_metadata
     if text is not None:
         event.content.parts = [MagicMock(text=text)]
     else:
@@ -501,3 +505,116 @@ def test_main_agent_requests_thought_summaries() -> None:
         MainAgent(MagicMock(), MagicMock())
     config = mock_llm_agent.call_args.kwargs["generate_content_config"]
     assert config.thinking_config.include_thoughts is True
+
+
+# ---------------------------------------------------------------------------
+# Token accounting
+# ---------------------------------------------------------------------------
+
+
+def _usage_meta(prompt: int, total: int, cached: int = 0, thoughts: int = 0) -> SimpleNamespace:
+    return SimpleNamespace(
+        prompt_token_count=prompt,
+        total_token_count=total,
+        cached_content_token_count=cached,
+        thoughts_token_count=thoughts,
+    )
+
+
+def _decide_over(agent: MainAgent, events: list) -> None:
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter(events)
+        agent.decide("sess-001", ["SPY", "QQQ"], _CANDLE_CLOSE_AT)
+
+
+def test_decide_accumulates_token_usage_across_events() -> None:
+    agent, _ = _make_agent()
+    _decide_over(
+        agent,
+        [
+            _make_event(usage_metadata=_usage_meta(100, 150, thoughts=40)),
+            _make_event(
+                is_final=True,
+                text=json.dumps(_DECISION_DICT),
+                usage_metadata=_usage_meta(200, 260, cached=180),
+            ),
+        ],
+    )
+    assert agent.usage.calls == 2
+    assert agent.usage.input_tokens == 300
+    assert agent.usage.cached_input_tokens == 180
+    assert agent.usage.output_tokens == 110
+    assert agent.usage.reasoning_tokens == 40
+
+
+def test_usage_accumulates_across_sessions_rather_than_resetting() -> None:
+    agent, _ = _make_agent()
+    for _ in range(3):
+        _decide_over(
+            agent,
+            [
+                _make_event(
+                    is_final=True,
+                    text=json.dumps(_DECISION_DICT),
+                    usage_metadata=_usage_meta(100, 150),
+                )
+            ],
+        )
+    assert agent.usage.calls == 3
+    assert agent.usage.input_tokens == 300
+
+
+def test_decide_emits_token_usage_telemetry() -> None:
+    agent, logger = _make_agent()
+    _decide_over(
+        agent,
+        [
+            _make_event(
+                is_final=True,
+                text=json.dumps(_DECISION_DICT),
+                usage_metadata=_usage_meta(1_000_000, 2_000_000),
+            )
+        ],
+    )
+    payloads = [c.args[2] for c in logger.emit.call_args_list if c.args[0] == "TOKEN_USAGE"]
+    assert len(payloads) == 1
+    assert payloads[0]["model"] == "gemini-2.5-pro"
+    assert payloads[0]["input_tokens"] == 1_000_000
+    assert payloads[0]["estimated_usd"] == 1.25 + 10.00
+
+
+def test_a_failed_session_still_records_what_it_spent() -> None:
+    """The 2026-08-13 run burned three retries producing nothing. That spend is real."""
+    agent, logger = _make_agent()
+    with patch("alphoryn.agents.main_agent.InMemoryRunner") as mock_runner_cls:
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter(
+            [_make_event(usage_metadata=_usage_meta(500, 900))]
+        )
+        with pytest.raises(MainAgentError):
+            agent.decide("sess-001", ["SPY"], _CANDLE_CLOSE_AT)
+
+    assert agent.usage.input_tokens == 500
+    assert agent.usage.output_tokens == 400
+    assert any(c.args[0] == "TOKEN_USAGE" for c in logger.emit.call_args_list)
+
+
+def test_events_without_usage_metadata_do_not_inflate_the_call_count() -> None:
+    """Tool-call events carry no usage; counting them would overstate the calls."""
+    agent, _ = _make_agent()
+    _decide_over(
+        agent,
+        [
+            _make_event(function_calls=[_make_fc()]),
+            _make_event(is_final=True, text=json.dumps(_DECISION_DICT)),
+        ],
+    )
+    assert agent.usage == TokenUsage()
+
+
+def test_the_model_is_public_so_the_scheduler_can_price_usage() -> None:
+    agent, _ = _make_agent()
+    assert agent.model == "gemini-2.5-pro"

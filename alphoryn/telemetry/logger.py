@@ -32,6 +32,7 @@ EVENT_TYPES = frozenset(
         "RECONCILE_MISMATCH",
         "RECONCILE_RESOLVED",
         "RECONCILE_FAILED",
+        "TOKEN_USAGE",
     }
 )
 

@@ -23,6 +23,7 @@ from alphoryn.agents.thinking import thinking_enabled_config
 from alphoryn.execution.agent import AssetDecision, SessionDecision
 from alphoryn.market_data.client import MarketDataClient
 from alphoryn.telemetry.logger import TelemetryLogger
+from alphoryn.usage import TokenUsage, usage_from_event
 
 _SKILLS_DIR = Path(__file__).parent.parent / "skills"
 _SKILL_NAMES = [
@@ -55,6 +56,8 @@ class MainAgent:
         logger: TelemetryLogger,
     ) -> None:
         self._logger = logger
+        self.model = self._MODEL  # public: the scheduler prices usage against it
+        self.usage = TokenUsage()  # accumulated across every decide() call
         skills = [load_skill_from_dir(_SKILLS_DIR / name) for name in _SKILL_NAMES]
         self._agent = LlmAgent(
             name="alphoryn_main_agent",
@@ -86,6 +89,7 @@ class MainAgent:
         runner.auto_create_session = True
 
         raw_json: str | None = None
+        session_usage = TokenUsage()
         for event in runner.run(
             user_id="system",
             session_id=session_id,
@@ -94,6 +98,7 @@ class MainAgent:
                 role="user",
             ),
         ):
+            session_usage = session_usage + usage_from_event(event)
             for fc in event.get_function_calls():
                 self._logger.emit(
                     "TOOL_CALL",
@@ -111,6 +116,26 @@ class MainAgent:
                     )
             if event.is_final_response() and event.content and event.content.parts:
                 raw_json = extract_response_json(event.content.parts)
+
+        # Recorded before the failure paths below: a session that failed still
+        # spent the tokens it spent. The 2026-08-13 run burned three retries on
+        # a session that produced nothing, and that spend is exactly the kind
+        # you want to see.
+        self.usage = self.usage + session_usage
+        self._logger.emit(
+            "TOKEN_USAGE",
+            "main_agent",
+            {
+                "model": self._MODEL,
+                "calls": session_usage.calls,
+                "input_tokens": session_usage.input_tokens,
+                "cached_input_tokens": session_usage.cached_input_tokens,
+                "output_tokens": session_usage.output_tokens,
+                "reasoning_tokens": session_usage.reasoning_tokens,
+                "estimated_usd": session_usage.estimated_usd(self._MODEL),
+            },
+            session_id=session_id,
+        )
 
         if raw_json is None:
             _logger.error("main_agent produced no final response for session %s", session_id)

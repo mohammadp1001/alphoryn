@@ -7,6 +7,7 @@ InMemoryRunner is patched at the class level with synthetic events.
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -45,11 +46,14 @@ _RESULT_DICT = {
 }
 
 
-def _make_event(*, is_final: bool = False, text: str | None = None) -> MagicMock:
+def _make_event(
+    *, is_final: bool = False, text: str | None = None, usage_metadata: object = None
+) -> MagicMock:
     event = MagicMock()
     event.get_function_calls.return_value = []
     event.get_function_responses.return_value = []
     event.is_final_response.return_value = is_final
+    event.usage_metadata = usage_metadata
     if text is not None:
         event.content.parts = [MagicMock(text=text)]
     else:
@@ -580,3 +584,86 @@ def test_evaluate_treats_a_thought_only_response_as_no_answer() -> None:
 
     _, status_arg = bank.write_feedback_evaluation.call_args.args
     assert status_arg == "EVALUATION_FAILED"
+
+
+# ---------------------------------------------------------------------------
+# Token accounting
+# ---------------------------------------------------------------------------
+
+
+def _usage_meta(prompt: int, total: int, cached: int = 0, thoughts: int = 0) -> SimpleNamespace:
+    return SimpleNamespace(
+        prompt_token_count=prompt,
+        total_token_count=total,
+        cached_content_token_count=cached,
+        thoughts_token_count=thoughts,
+    )
+
+
+def test_evaluate_accumulates_token_usage() -> None:
+    agent, _md, _bank, _logger = _make_agent()
+    final_event = _make_event(
+        is_final=True,
+        text=json.dumps(_RESULT_DICT),
+        usage_metadata=_usage_meta(400, 700, cached=100, thoughts=250),
+    )
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner") as mock_runner_cls,
+        patch.object(agent, "_extract_thesis", return_value="Price was oversold."),
+    ):
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    assert agent.usage.calls == 1
+    assert agent.usage.input_tokens == 400
+    assert agent.usage.cached_input_tokens == 100
+    assert agent.usage.output_tokens == 300
+    assert agent.usage.reasoning_tokens == 250
+
+
+def test_every_retry_is_counted_not_just_the_one_that_worked() -> None:
+    """Three attempts cost three times. Counting only the success understates it."""
+    agent, _md, _bank, _logger = _make_agent()
+    events = [
+        _make_event(usage_metadata=_usage_meta(100, 200)),  # no final response -> retry
+    ]
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner") as mock_runner_cls,
+        patch.object(agent, "_extract_thesis", return_value="Price was oversold."),
+    ):
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.side_effect = lambda **kw: iter(list(events))
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    assert agent.usage.calls == 3
+    assert agent.usage.input_tokens == 300
+
+
+def test_evaluate_emits_token_usage_telemetry() -> None:
+    agent, _md, _bank, logger = _make_agent()
+    final_event = _make_event(
+        is_final=True,
+        text=json.dumps(_RESULT_DICT),
+        usage_metadata=_usage_meta(1_000_000, 1_000_000),
+    )
+    with (
+        patch("alphoryn.agents.feedback_agent.InMemoryRunner") as mock_runner_cls,
+        patch.object(agent, "_extract_thesis", return_value="Price was oversold."),
+    ):
+        mock_runner = MagicMock()
+        mock_runner_cls.return_value = mock_runner
+        mock_runner.run.return_value = iter([final_event])
+        agent.evaluate(_INPUT, "run-1/session-0003")
+
+    payloads = [c.args[2] for c in logger.emit.call_args_list if c.args[0] == "TOKEN_USAGE"]
+    assert len(payloads) == 1
+    assert payloads[0]["attempt"] == 1
+    assert payloads[0]["estimated_usd"] == 1.25
+
+
+def test_the_feedback_model_is_public_so_the_scheduler_can_price_usage() -> None:
+    agent, _md, _bank, _logger = _make_agent()
+    assert agent.model == "gemini-2.5-pro"
