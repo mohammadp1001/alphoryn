@@ -11,8 +11,8 @@ from alphoryn.telemetry.logger import EVENT_TYPES, TelemetryLogger
 # ---------------------------------------------------------------------------
 
 
-def test_event_types_contains_all_23() -> None:
-    assert len(EVENT_TYPES) == 23
+def test_event_types_contains_all_24() -> None:
+    assert len(EVENT_TYPES) == 24
 
 
 def test_event_types_includes_expected_values() -> None:
@@ -40,6 +40,7 @@ def test_event_types_includes_expected_values() -> None:
         "RECONCILE_RESOLVED",
         "RECONCILE_FAILED",
         "TOKEN_USAGE",
+        "POSITIONS_ABANDONED",
     }
     assert EVENT_TYPES == expected
 

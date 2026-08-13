@@ -10,11 +10,13 @@ import json
 import logging
 import math
 import os
+import signal
 import sys
 import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from types import FrameType
 from typing import Any
 
 import typer
@@ -36,6 +38,52 @@ _logger = logging.getLogger(__name__)
 _INVESTIGATION_BUDGET_FRACTION = 0.87
 _EXECUTE_BUDGET_FRACTION = 0.13
 _HEARTBEAT_INTERVAL_SECS = 5 * 60
+
+# SIGBREAK is Windows-only; SIGINT and SIGTERM exist everywhere.
+_TERMINATION_SIGNALS = ("SIGINT", "SIGTERM", "SIGBREAK")
+
+
+class RunTerminatedError(Exception):
+    """The process was asked to stop. Raised from a termination signal handler."""
+
+
+def _install_termination_signals() -> "dict[Any, Any]":
+    """Make termination signals raise :class:`RunTerminatedError`; return the old handlers.
+
+    Without this, SIGTERM kills the process outright, ``run()``'s finally block
+    never executes, and an open position is left with no stop-loss, no window
+    enforcement, and nothing anywhere recording that it happened. That is how
+    the 2026-08-13 run stranded 16 shares of XLE past its exit deadline; the
+    run before it died the same way and only escaped because it was flat.
+
+    A hard kill - SIGKILL, or TerminateProcess on Windows - cannot be caught by
+    this or by anything else in-process. Startup reconciliation (#177) remains
+    the only net for that case.
+
+    Handlers are restored on exit so importing or embedding the scheduler does
+    not permanently redirect the host process's signals.
+    """
+    def _raise(signum: int, _frame: "FrameType | None") -> None:
+        raise RunTerminatedError(signal.Signals(signum).name)
+
+    installed: dict[Any, Any] = {}
+    for name in _TERMINATION_SIGNALS:
+        sig = getattr(signal, name, None)
+        if sig is None:
+            continue  # not this platform
+        try:
+            installed[sig] = signal.signal(sig, _raise)
+        except ValueError:
+            # Only the main thread may install handlers. A scheduler running in
+            # a worker thread simply keeps the default behaviour.
+            pass
+    return installed
+
+
+def _restore_termination_signals(installed: "dict[Any, Any]") -> None:
+    """Put back whatever handlers were in place before, so embedding is safe."""
+    for sig, previous in installed.items():
+        signal.signal(sig, previous)
 
 
 @dataclass(frozen=True)
@@ -721,6 +769,8 @@ class Scheduler:
         sessions_completed = 0
         session_ordinal = 1
         self._start_monitor()
+        terminated_by: str | None = None
+        previous_handlers = _install_termination_signals()
 
         try:
             while sessions_completed < self._cfg.session_count:
@@ -761,11 +811,76 @@ class Scheduler:
                     run_id, candle_close_at, next_close, session_ordinal
                 )
                 self.wait_for_candle_close(next_close, _sleep=_sleep)
+        except RunTerminatedError as exc:
+            terminated_by = str(exc)
+            typer.echo(
+                f"Terminated by {terminated_by}. Shutting down without trading.",
+                err=True,
+            )
         finally:
+            _restore_termination_signals(previous_handlers)
             self._bank.end_run(run_id)
-            self._drain_open_positions(_sleep=_sleep)
+            if terminated_by is None:
+                self._drain_open_positions(_sleep=_sleep)
+            else:
+                self._report_abandoned_positions(terminated_by)
             self._stop_monitor()
             self._report_token_usage()
+
+    def _report_abandoned_positions(self, signal_name: str) -> None:
+        """Record every position the shutdown is leaving open, loudly.
+
+        A terminated run does not trade on its way out - closing positions on a
+        signal would realise them at whatever price the reaper happened to pick.
+        But it must not exit quietly either. From the moment the process goes
+        away these positions have no stop-loss and no window enforcement, and
+        the gap until some later run reconciles them is unbounded.
+
+        So the exit is fast and the record is complete: whoever reads this needs
+        enough to act by hand. On 2026-08-13 that meant knowing XLE 16 @ 60.93
+        was already past its window - a fact that existed nowhere until someone
+        thought to query the broker.
+        """
+        open_positions = self._bank.load_open_positions()
+        if not open_positions:
+            typer.echo("Nothing was left open.")
+            return
+
+        typer.echo(
+            f"WARNING: {len(open_positions)} position(s) left OPEN and UNMONITORED:",
+            err=True,
+        )
+        for p in open_positions:
+            typer.echo(
+                f"  {p.ticker} {p.lot_size} @ {p.entry_price}"
+                f"  stop {p.stop_loss_price}"
+                f"  window closes {p.evaluation_window_close_at}",
+                err=True,
+            )
+        typer.echo(
+            "These have no stop-loss until a later run reconciles them. "
+            "Close them at the broker, or start the next run with --reconcile.",
+            err=True,
+        )
+        if self._logger is not None:
+            self._logger.emit(
+                "POSITIONS_ABANDONED",
+                "scheduler",
+                {
+                    "signal": signal_name,
+                    "count": len(open_positions),
+                    "positions": [
+                        {
+                            "ticker": p.ticker,
+                            "lot_size": p.lot_size,
+                            "entry_price": p.entry_price,
+                            "stop_loss_price": p.stop_loss_price,
+                            "window_closes_at": str(p.evaluation_window_close_at),
+                        }
+                        for p in open_positions
+                    ],
+                },
+            )
 
     def _report_token_usage(self) -> None:
         """Print what this run spent on the model, per agent and in total.
